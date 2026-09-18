@@ -8,7 +8,8 @@ A simple agent builder for creating and managing HR, payroll, and time-off assis
 docker compose up --build
 ```
 
-- UI: http://localhost:5173/agents
+- Agent Studio (templates + registry): http://localhost:5173/ai-studio
+- Raw agent list: http://localhost:5173/agents
 - API: http://localhost:8000/api/agents/
 
 Stop the application with:
