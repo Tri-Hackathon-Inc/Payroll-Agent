@@ -2,6 +2,12 @@
 
 A simple agent builder for creating and managing HR, payroll, and time-off assistants.
 
+## Screenshots
+
+![Agent Studio home](docs/screenshots/agent-studio-home.png)
+![HR templates](docs/screenshots/hr-templates.png)
+![My agents](docs/screenshots/my-agents.png)
+
 ## Run with Docker
 
 The images are published to GitHub Container Registry, so you don't need Python or Node installed.
