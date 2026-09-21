@@ -8,6 +8,7 @@ class AgentBuilder(models.Model):
     domain=models.CharField(max_length=255)
     description=models.TextField()
     Instructions=models.TextField()
+    model=models.CharField(max_length=255, blank=True, default='')
 
 
 class AgentBuilderHelperQuestion(models.Model):

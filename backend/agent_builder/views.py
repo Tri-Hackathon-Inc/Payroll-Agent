@@ -32,6 +32,7 @@ def create_agent_builder(request):
     agent_builder.domain = data['domain']
     agent_builder.description = data['description'].strip()
     agent_builder.Instructions = data['instructions'].strip()
+    agent_builder.model = str(data.get('model') or '').strip()
     agent_builder.save()
 
     if agent_id:
@@ -60,6 +61,7 @@ def serialize_agent(agent):
         'domain': agent.domain,
         'description': agent.description,
         'instructions': agent.Instructions,
+        'model': agent.model,
         'questions': [
             item.question
             for item in AgentBuilderHelperQuestion.objects.filter(agent_builder=agent)
