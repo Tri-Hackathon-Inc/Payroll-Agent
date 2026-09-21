@@ -2,33 +2,26 @@ services:
   backend:
     container_name: payroll-agent-backend
     image: ghcr.io/tri-hackathon-inc/payroll-agent-backend:${IMAGE_TAG:-latest}
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
-    volumes:
-      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/agents/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   ui:
     container_name: payroll-agent-ui
     image: ghcr.io/tri-hackathon-inc/payroll-agent-ui:${IMAGE_TAG:-latest}
-    build:
-      context: ./ui-payroll-agent
-      dockerfile: Dockerfile
     environment:
       API_PROXY_TARGET: http://backend:8000
     ports:
       - "5173:5173"
-    volumes:
-      - ./ui-payroll-agent:/app
-      - ui_node_modules:/app/node_modules
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  ui_node_modules:
