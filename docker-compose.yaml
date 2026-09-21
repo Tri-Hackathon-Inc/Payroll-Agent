@@ -1,6 +1,7 @@
 services:
   backend:
     container_name: payroll-agent-backend
+    image: ghcr.io/tri-hackathon-inc/payroll-agent-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -14,6 +15,7 @@ services:
 
   ui:
     container_name: payroll-agent-ui
+    image: ghcr.io/tri-hackathon-inc/payroll-agent-ui:${IMAGE_TAG:-latest}
     build:
       context: ./ui-payroll-agent
       dockerfile: Dockerfile
