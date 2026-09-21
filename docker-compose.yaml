@@ -4,8 +4,13 @@ services:
     image: ghcr.io/tri-hackathon-inc/payroll-agent-backend:${IMAGE_TAG:-latest}
     ports:
       - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
     environment:
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      SQLITE_PATH: /data/db.sqlite3
+    volumes:
+      - backend_data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/agents/')"]
       interval: 5s
@@ -25,3 +30,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  backend_data:

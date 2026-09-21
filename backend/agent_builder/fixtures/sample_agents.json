@@ -1,0 +1,86 @@
+[
+  {
+    "model": "agent_builder.agentbuilder",
+    "pk": 1,
+    "fields": {
+      "name": "Anomaly Detection Agent",
+      "domain": "Payroll",
+      "description": "Watches payrun changes in real time and flags amounts that look off versus history.",
+      "Instructions": "On every payrun change, compare the new amount against the employee's historical payruns. Flag any change greater than the configured threshold (default 2000) and summarize what changed and why it looks unusual.",
+      "model": "qwen-2.5-72b"
+    }
+  },
+  {
+    "model": "agent_builder.agentbuilder",
+    "pk": 2,
+    "fields": {
+      "name": "Summarizer Agent",
+      "domain": "Payroll",
+      "description": "Summarizes a payrun or employee record so admins get the key numbers at a glance.",
+      "Instructions": "Fetch the employee and payrun details for the selected record and produce a short summary covering rate changes, hours, earnings, and taxes. Keep it to a few bullet points.",
+      "model": "llama-3.1-70b"
+    }
+  },
+  {
+    "model": "agent_builder.agentbuilder",
+    "pk": 3,
+    "fields": {
+      "name": "General Query Agent",
+      "domain": "Payroll",
+      "description": "Answers everyday payroll questions like pay dates, rates, and hours.",
+      "Instructions": "Answer employee and admin questions about payroll using the current payrun data. Be concise, cite the specific payrun or employee record you used, and say when you are not sure.",
+      "model": "qwen-2.5-72b"
+    }
+  },
+  {
+    "model": "agent_builder.agentbuilder",
+    "pk": 4,
+    "fields": {
+      "name": "HR Policy Agent",
+      "domain": "HR",
+      "description": "Answers HR policy questions like leave, conduct, and onboarding.",
+      "Instructions": "Answer employee questions about HR policies using the company handbook. Be concise and say when a question needs to go to HR directly.",
+      "model": "qwen-2.5-72b"
+    }
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 1,
+    "fields": {"agent_builder": 1, "question": "Why did this payrun amount change?"}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 2,
+    "fields": {"agent_builder": 1, "question": "Show me the flagged changes for this payrun."}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 3,
+    "fields": {"agent_builder": 2, "question": "Summarize this payrun."}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 4,
+    "fields": {"agent_builder": 2, "question": "Summarize this employee's earnings and taxes."}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 5,
+    "fields": {"agent_builder": 3, "question": "When is the next payroll date?"}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 6,
+    "fields": {"agent_builder": 3, "question": "What is the overall payrun amount this cycle?"}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 7,
+    "fields": {"agent_builder": 4, "question": "What is the company dress code?"}
+  },
+  {
+    "model": "agent_builder.agentbuilderhelperquestion",
+    "pk": 8,
+    "fields": {"agent_builder": 4, "question": "How do I report a workplace issue?"}
+  }
+]

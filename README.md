@@ -16,7 +16,17 @@ docker login ghcr.io -u <your-github-username>
 
 Paste the token when prompted for a password.
 
-### 2. Run the published images
+### 2. Configure (optional)
+
+Copy the example settings file. Every value is optional and the defaults work for local development:
+
+```bash
+cp .env.example .env
+```
+
+`.env` is gitignored. The example turns on `SEED_SAMPLE_AGENTS`, which loads four starter agents into an empty database so everyone starts with the same registry. It never touches a database that already has agents.
+
+### 3. Run the published images
 
 ```bash
 docker compose pull
@@ -39,6 +49,8 @@ Stop the application with:
 docker compose down
 ```
 
+Your agents live in a Docker volume (`backend_data`), so they survive `docker compose down` and restarts. To wipe them and start fresh, run `docker compose down -v`.
+
 ## Development
 
 The frontend is built with React and Vite. The backend uses Django REST Framework and SQLite.
@@ -49,7 +61,7 @@ To build from your local source and hot-reload changes, add the dev override fil
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build
 ```
 
-Local builds are tagged `:dev`, so they never overwrite the published images.
+Local builds are tagged `:dev`, so they never overwrite the published images. Dev mode uses the same `backend_data` volume for the database, so a `backend/db.sqlite3` file from earlier local runs is no longer read.
 
 ## Publishing images
 
