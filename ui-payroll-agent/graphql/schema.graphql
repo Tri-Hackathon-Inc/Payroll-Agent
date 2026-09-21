@@ -1,0 +1,62 @@
+type Query {
+  domains: [Domain!]!
+  templates(domain: String): [AgentTemplate!]!
+  template(id: ID!): AgentTemplate
+  models: [ModelOption!]!
+  tools: [Tool!]!
+  agents: [Agent!]!
+  agent(id: ID!): Agent
+}
+
+type Mutation {
+  saveAgent(input: SaveAgentInput!): Agent!
+}
+
+type Domain {
+  id: ID!
+  label: String!
+  description: String!
+  icon: String
+}
+
+type AgentTemplate {
+  id: ID!
+  name: String!
+  domain: String!
+  description: String!
+  instructions: String!
+  questions: [String!]!
+  model: String!
+  runtime: String
+  icon: String
+}
+
+type ModelOption {
+  id: ID!
+  label: String!
+}
+
+type Tool {
+  id: ID!
+  name: String!
+}
+
+type Agent {
+  id: ID!
+  name: String!
+  domain: String!
+  description: String!
+  instructions: String!
+  model: String!
+  questions: [String!]!
+}
+
+input SaveAgentInput {
+  id: ID
+  name: String!
+  domain: String!
+  description: String!
+  instructions: String!
+  model: String
+  questions: [String!]
+}

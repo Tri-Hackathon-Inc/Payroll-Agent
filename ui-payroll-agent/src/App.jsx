@@ -1,159 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
-
-const DOMAINS = [
-  { id: 'hr', label: 'HR', icon: 'bi-people', description: 'Policies, onboarding, and general people questions.' },
-  { id: 'payroll', label: 'Payroll', icon: 'bi-cash-coin', description: 'Payrun anomalies, summaries, and payroll questions.' },
-  { id: 'insurance', label: 'Insurance', icon: 'bi-shield-check', description: 'Coverage, claims, and policy questions.' },
-  { id: 'benefits', label: 'Benefits', icon: 'bi-heart-pulse', description: 'Stock matching, HSA, and other benefits questions.' },
-  { id: 'time-off', label: 'Time off', icon: 'bi-calendar-week', description: 'PTO balances, requests, and time-off policy.' },
-]
-
-const domains = DOMAINS.map((domain) => domain.label)
-
-const TEMPLATES = [
-  {
-    id: 'anomaly-detection',
-    name: 'Anomaly Detection Agent',
-    domain: 'Payroll',
-    icon: 'bi-activity',
-    runtime: 'REAL-TIME',
-    description: 'Watches payrun changes in real time and flags amounts that look off versus history.',
-    instructions: "On every payrun change, compare the new amount against the employee's historical payruns. Flag any change greater than the configured threshold (default 2000) and summarize what changed and why it looks unusual.",
-    questions: ['Why did this payrun amount change?', 'Show me the flagged changes for this payrun.'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'summarizer',
-    name: 'Summarizer Agent',
-    domain: 'Payroll',
-    icon: 'bi-file-earmark-text',
-    runtime: 'OFFLINE',
-    description: 'Summarizes a payrun or employee record so admins get the key numbers at a glance.',
-    instructions: 'Fetch the employee and payrun details for the selected record and produce a short summary covering rate changes, hours, earnings, and taxes. Keep it to a few bullet points.',
-    questions: ['Summarize this payrun.', "Summarize this employee's earnings and taxes."],
-    model: 'llama-3.1-70b',
-  },
-  {
-    id: 'general-query',
-    name: 'General Query Agent',
-    domain: 'Payroll',
-    icon: 'bi-chat-dots',
-    runtime: 'INTERACTIVE',
-    description: 'Answers everyday payroll questions like pay dates, rates, and hours.',
-    instructions: 'Answer employee and admin questions about payroll using the current payrun data. Be concise, cite the specific payrun or employee record you used, and say when you are not sure.',
-    questions: ['When is the next payroll date?', 'What is the overall payrun amount this cycle?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'custom',
-    name: 'Custom Agent',
-    domain: 'Payroll',
-    icon: 'bi-sliders',
-    runtime: 'CONFIGURABLE',
-    description: 'Start from a blank agent and write your own instructions.',
-    instructions: '',
-    questions: [''],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'hr-policy',
-    name: 'HR Policy Agent',
-    domain: 'HR',
-    icon: 'bi-people',
-    runtime: 'INTERACTIVE',
-    description: 'Answers HR policy questions like leave, conduct, and onboarding.',
-    instructions: 'Answer employee questions about HR policies using the company handbook. Be concise and say when a question needs to go to HR directly.',
-    questions: ['What is the company dress code?', 'How do I report a workplace issue?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'hr-general',
-    name: 'General Agent',
-    domain: 'HR',
-    icon: 'bi-chat-dots',
-    runtime: 'INTERACTIVE',
-    description: 'Answers general questions using public knowledge, for anything outside HR policy.',
-    instructions: 'Answer general questions as helpfully as possible using public knowledge. Say clearly when a question is really an HR policy question that the HR Policy Agent should handle instead.',
-    questions: ['What is a typical PTO policy?', "What's a 401k?"],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'insurance-policy',
-    name: 'Policy Agent',
-    domain: 'Insurance',
-    icon: 'bi-shield-check',
-    runtime: 'INTERACTIVE',
-    description: 'Answers questions about coverage, claims, and policy terms.',
-    instructions: 'Answer employee questions about their insurance policy, coverage, and claims using the plan documents. Be concise and cite the relevant plan section when possible.',
-    questions: ['What does my plan cover?', 'How do I file a claim?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'insurance-general',
-    name: 'General Agent',
-    domain: 'Insurance',
-    icon: 'bi-chat-dots',
-    runtime: 'INTERACTIVE',
-    description: 'Answers general insurance questions using public knowledge.',
-    instructions: 'Answer general insurance questions as helpfully as possible using public knowledge. Say clearly when a question is plan-specific and should go to the Policy Agent instead.',
-    questions: ['What is a deductible?', 'What is the difference between HMO and PPO?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'benefits-agent',
-    name: 'Benefits Agent',
-    domain: 'Benefits',
-    icon: 'bi-heart-pulse',
-    runtime: 'INTERACTIVE',
-    description: 'Answers questions about stock matching, HSA, and other benefits.',
-    instructions: 'Answer employee questions about benefits such as stock purchase matching, HSA/FSA accounts, and caregiving policies using the benefits guide. Be concise and cite the relevant section.',
-    questions: ['How does stock matching work?', 'What can I use my HSA for?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'benefits-general',
-    name: 'General Agent',
-    domain: 'Benefits',
-    icon: 'bi-chat-dots',
-    runtime: 'INTERACTIVE',
-    description: 'Answers general benefits questions using public knowledge.',
-    instructions: 'Answer general benefits questions as helpfully as possible using public knowledge. Say clearly when a question is plan-specific and should go to the Benefits Agent instead.',
-    questions: ['What is an HSA?', 'What is typical employer stock matching?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'timeoff-agent',
-    name: 'Time Off Agent',
-    domain: 'Time off',
-    icon: 'bi-calendar-week',
-    runtime: 'INTERACTIVE',
-    description: 'Answers questions about PTO balances, requests, and time-off policy.',
-    instructions: "Answer employee questions about their PTO balance, how to request time off, and the company's time-off policy. Be concise and cite the relevant policy section.",
-    questions: ['How much PTO do I have left?', 'How do I request time off?'],
-    model: 'qwen-2.5-72b',
-  },
-  {
-    id: 'timeoff-general',
-    name: 'General Agent',
-    domain: 'Time off',
-    icon: 'bi-chat-dots',
-    runtime: 'INTERACTIVE',
-    description: 'Answers general time-off questions using public knowledge.',
-    instructions: 'Answer general time-off questions as helpfully as possible using public knowledge. Say clearly when a question is policy-specific and should go to the Time Off Agent instead.',
-    questions: ['What is a typical PTO accrual rate?', 'What is the difference between PTO and sick leave?'],
-    model: 'qwen-2.5-72b',
-  },
-]
-
-const MODEL_OPTIONS = [
-  { id: 'qwen-2.5-72b', label: 'Qwen 2.5 · 72B (open source)' },
-  { id: 'llama-3.1-70b', label: 'Llama 3.1 · 70B (open source)' },
-  { id: 'mistral-large', label: 'Mistral Large' },
-  { id: 'bedrock-claude', label: 'AWS Bedrock · Claude' },
-]
-
-const TOOL_OPTIONS = ['Payrun API', 'Employee Directory API', 'Benefits API']
+import { graphqlRequest } from './graphql/client'
+import { SAVE_AGENT_MUTATION, STUDIO_QUERY } from './graphql/operations'
 
 const NAV_GROUPS = [
   {
@@ -238,7 +86,7 @@ function AppShell({ activeKey, onNavigate, notice, onDismissNotice, children }) 
   )
 }
 
-function AgentFields({ form, updateField, questions, updateQuestion, setQuestions }) {
+function AgentFields({ domains, form, updateField, questions, updateQuestion, setQuestions }) {
   return (
     <>
       <div className="row g-3 mb-3">
@@ -250,7 +98,7 @@ function AgentFields({ form, updateField, questions, updateQuestion, setQuestion
           <label className="form-label fw-semibold">Domain <span className="text-danger">*</span></label>
           <select className="form-select" name="domain" value={form.domain} onChange={updateField} required>
             <option value="" disabled>Select a domain</option>
-            {domains.map((domain) => <option key={domain}>{domain}</option>)}
+            {domains.map(({ id, label }) => <option key={id}>{label}</option>)}
           </select>
         </div>
       </div>
@@ -296,26 +144,32 @@ function App() {
   const [questions, setQuestions] = useState([''])
   const [status, setStatus] = useState(() => window.location.pathname === '/agents/new' ? 'form' : 'list')
   const [agents, setAgents] = useState([])
+  const [catalog, setCatalog] = useState({ domains: [], templates: [], models: [], tools: [] })
   const [dataLoaded, setDataLoaded] = useState(false)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
   const [selectedDomain, setSelectedDomain] = useState(null)
   const [selectedTemplate, setSelectedTemplate] = useState(null)
-  const [selectedModel, setSelectedModel] = useState(MODEL_OPTIONS[0].id)
-  const [attachedTools, setAttachedTools] = useState(TOOL_OPTIONS)
+  const [selectedModel, setSelectedModel] = useState('')
+  const [attachedTools, setAttachedTools] = useState([])
   const [templateSearch, setTemplateSearch] = useState('')
   const [agentSearch, setAgentSearch] = useState('')
   const [domainSearch, setDomainSearch] = useState('')
   const [notice, setNotice] = useState(null)
 
+  const { domains, templates, models } = catalog
+  const toolNames = useMemo(() => catalog.tools.map(({ name }) => name), [catalog.tools])
+  const defaultModel = models[0]?.id ?? ''
+
   useEffect(() => {
-    fetch('/api/agents/')
-      .then(async (response) => {
-        if (!response.ok) throw new Error('Could not load agents.')
-        return response.json()
+    graphqlRequest(STUDIO_QUERY)
+      .then(({ agents: loadedAgents, ...loadedCatalog }) => {
+        setCatalog(loadedCatalog)
+        setAgents(loadedAgents)
+        setSelectedModel(loadedCatalog.models[0]?.id ?? '')
+        setAttachedTools(loadedCatalog.tools.map(({ name }) => name))
       })
-      .then((data) => setAgents(data))
-      .catch((requestError) => setError(`${requestError.message} Make sure Django is running on port 8000.`))
+      .catch((requestError) => setError(`${requestError.message} Could not reach the GraphQL endpoint at /graphql.`))
       .finally(() => setDataLoaded(true))
   }, [])
 
@@ -340,14 +194,14 @@ function App() {
           setQuestions(agent.questions?.length ? agent.questions : [''])
           setEditingId(agent.id)
           setSelectedTemplate(null)
-          setSelectedModel(agent.model || MODEL_OPTIONS[0].id)
+          setSelectedModel(agent.model || defaultModel)
           setStatus('form')
         } else {
           window.history.replaceState({}, '', '/agents')
           setStatus('list')
         }
       } else if (configMatch) {
-        const template = TEMPLATES.find(({ id }) => id === configMatch[1])
+        const template = templates.find(({ id }) => id === configMatch[1])
         if (template) {
           setForm({ name: template.name, domain: template.domain, description: template.description, prompt: template.instructions })
           setQuestions(template.questions.length ? template.questions : [''])
@@ -355,7 +209,7 @@ function App() {
           setSelectedDomain(template.domain)
           setSelectedTemplate(template)
           setSelectedModel(template.model)
-          setAttachedTools(TOOL_OPTIONS)
+          setAttachedTools(toolNames)
           setStatus('studio-config')
         } else {
           window.history.replaceState({}, '', '/ai-studio')
@@ -364,7 +218,7 @@ function App() {
           setStatus('studio-domains')
         }
       } else if (domainMatch) {
-        const domain = DOMAINS.find(({ id }) => id === domainMatch[1])
+        const domain = domains.find(({ id }) => id === domainMatch[1])
         if (domain) {
           setSelectedDomain(domain.label)
           setSelectedTemplate(null)
@@ -387,7 +241,7 @@ function App() {
     loadRoute()
     window.addEventListener('popstate', loadRoute)
     return () => window.removeEventListener('popstate', loadRoute)
-  }, [agents, dataLoaded])
+  }, [agents, dataLoaded, domains, templates, defaultModel, toolNames])
 
   const goTo = (path) => {
     window.history.pushState({}, '', path)
@@ -411,10 +265,8 @@ function App() {
     setStatus('loading')
 
     try {
-      const response = await fetch('/api/agents/save/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { saveAgent: saved } = await graphqlRequest(SAVE_AGENT_MUTATION, {
+        input: {
           ...(editingId ? { id: editingId } : {}),
           name: form.name,
           domain: form.domain,
@@ -422,14 +274,12 @@ function App() {
           instructions: form.prompt,
           model: selectedModel,
           questions: questions.filter((question) => question.trim()),
-        }),
+        },
       })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || 'Unable to save the agent.')
 
       setAgents((current) => editingId
-        ? current.map((agent) => agent.id === editingId ? data : agent)
-        : [data, ...current])
+        ? current.map((agent) => agent.id === editingId ? saved : agent)
+        : [saved, ...current])
       if (selectedTemplate) {
         const domain = selectedTemplate.domain
         setSelectedTemplate(null)
@@ -441,7 +291,7 @@ function App() {
         setStatus('list')
       }
     } catch (requestError) {
-      setError(`${requestError.message} Make sure Django is running on port 8000.`)
+      setError(requestError.message)
       setStatus('form')
     }
   }
@@ -465,7 +315,7 @@ function App() {
     setQuestions(agent.questions?.length ? agent.questions : [''])
     setEditingId(agent.id)
     setSelectedTemplate(null)
-    setSelectedModel(agent.model || MODEL_OPTIONS[0].id)
+    setSelectedModel(agent.model || defaultModel)
     goTo(`/agents/${encodeURIComponent(agent.id)}`)
     setStatus('form')
   }
@@ -492,7 +342,7 @@ function App() {
     setSelectedDomain(template.domain)
     setSelectedTemplate(template)
     setSelectedModel(template.model)
-    setAttachedTools(TOOL_OPTIONS)
+    setAttachedTools(toolNames)
     goTo(`/ai-studio/templates/${template.id}/config`)
     setStatus('studio-config')
   }
@@ -570,7 +420,7 @@ function App() {
 
   if (status === 'studio-domains') {
     const domainQuery = domainSearch.trim().toLowerCase()
-    const filteredDomains = DOMAINS.filter((domain) => !domainQuery
+    const filteredDomains = domains.filter((domain) => !domainQuery
       || domain.label.toLowerCase().includes(domainQuery)
       || domain.description.toLowerCase().includes(domainQuery))
 
@@ -640,7 +490,7 @@ function App() {
 
   if (status === 'studio') {
     const query = templateSearch.trim().toLowerCase()
-    const domainTemplates = TEMPLATES.filter((template) => template.domain === selectedDomain)
+    const domainTemplates = templates.filter((template) => template.domain === selectedDomain)
     const filteredTemplates = domainTemplates.filter((template) => !query
       || template.name.toLowerCase().includes(query)
       || template.description.toLowerCase().includes(query))
@@ -712,7 +562,7 @@ function App() {
                     <div className="col-md-6">
                       <label className="form-label fw-semibold">Model</label>
                       <select className="form-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
-                        {MODEL_OPTIONS.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
+                        {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
                       </select>
                     </div>
                   </div>
@@ -765,7 +615,7 @@ function App() {
                     </fieldset>
                   )}
 
-                  <AgentFields form={form} updateField={updateField} questions={questions} updateQuestion={updateQuestion} setQuestions={setQuestions} />
+                  <AgentFields domains={domains} form={form} updateField={updateField} questions={questions} updateQuestion={updateQuestion} setQuestions={setQuestions} />
 
                   <fieldset className="border-top pt-3 mb-3">
                     <div className="d-flex align-items-center gap-2 mb-1">
@@ -774,7 +624,7 @@ function App() {
                     </div>
                     <p className="text-muted small mb-2">Choose which tools this agent can use. Full read/write access control is coming later — for now, an attached tool is fully accessible.</p>
                     <div className="d-flex flex-column gap-2">
-                      {TOOL_OPTIONS.map((tool) => (
+                      {toolNames.map((tool) => (
                         <div className="form-check" key={tool}>
                           <input
                             className="form-check-input"
@@ -888,7 +738,7 @@ function App() {
               <form onSubmit={createAgent}>
                 {error && <div className="alert alert-danger py-2 small">{error}</div>}
 
-                <AgentFields form={form} updateField={updateField} questions={questions} updateQuestion={updateQuestion} setQuestions={setQuestions} />
+                <AgentFields domains={domains} form={form} updateField={updateField} questions={questions} updateQuestion={updateQuestion} setQuestions={setQuestions} />
 
                 <div className="d-flex justify-content-end gap-2 pt-4 mt-2 border-top">
                   <button className="btn btn-outline-secondary" type="button" onClick={cancelForm}>Cancel</button>

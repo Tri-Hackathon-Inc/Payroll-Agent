@@ -24,6 +24,7 @@ services:
     image: ghcr.io/tri-hackathon-inc/payroll-agent-ui:${IMAGE_TAG:-latest}
     environment:
       API_PROXY_TARGET: http://backend:8000
+      GRAPHQL_MODE: ${GRAPHQL_MODE:-mock}
     ports:
       - "5173:5173"
     depends_on:

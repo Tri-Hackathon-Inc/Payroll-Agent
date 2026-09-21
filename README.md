@@ -63,6 +63,20 @@ docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build
 
 Local builds are tagged `:dev`, so they never overwrite the published images. Dev mode uses the same `backend_data` volume for the database, so a `backend/db.sqlite3` file from earlier local runs is no longer read.
 
+## GraphQL and mock data
+
+The UI talks to a single GraphQL endpoint, `/graphql`, and no longer hardcodes templates, domains, models or tools.
+
+- `ui-payroll-agent/graphql/schema.graphql` is the contract. The backend should implement this schema.
+- `ui-payroll-agent/src/graphql/operations.js` holds the queries and the `saveAgent` mutation the UI runs.
+- `ui-payroll-agent/mock/data.json` is the mock data (domains, templates, models, tools, starter agents).
+
+By default (`GRAPHQL_MODE=mock`) the Vite dev server answers `/graphql` from `mock/data.json`, so the UI works with no backend. Agents you save in this mode are kept in memory and reset when the UI container restarts. They are not written to the Django database.
+
+To use a real backend instead, set `GRAPHQL_MODE=backend` in `.env`. Vite then proxies `/graphql` to `API_PROXY_TARGET` (`http://backend:8000` in Docker).
+
+If you rebuild the dev image and see `Cannot find package 'graphql'`, the `ui_node_modules` volume is stale. Run `docker compose -f docker-compose.yaml -f docker-compose.dev.yaml down -v` once, then start again.
+
 ## Publishing images
 
 Log in with a token that has the `write:packages` scope, commit your changes, then run:
