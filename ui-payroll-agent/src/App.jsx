@@ -3,6 +3,7 @@ import './App.css'
 import { graphqlRequest } from './graphql/client'
 import { BUSINESS_AGENTS_QUERY, STUDIO_QUERY } from './graphql/operations'
 import AgentEditor from './AgentEditor'
+import ChatWindow from './ChatWindow'
 
 const NAV_GROUPS = [
   {
@@ -107,6 +108,7 @@ function App() {
   const agentMatch = path.match(/^\/agents\/([^/]+)$/)
   const editId = agentMatch && agentMatch[1] !== 'new' ? decodeURIComponent(agentMatch[1]) : null
   const listPage = path === '/agents'
+  const chatPage = path === '/chat'
   const agents = agentResult && agentResult.businessName === businessName ? agentResult.items : []
   const agentsLoading = business && (agentResult?.businessName !== businessName || agentResult.loading)
   const agentsError = agentResult && agentResult.businessName === businessName ? agentResult.error : ''
@@ -121,15 +123,17 @@ function App() {
   }, [])
 
   useEffect(() => {
+    if (chatPage) return undefined
     let active = true
     setCatalogError('')
     graphqlRequest(STUDIO_QUERY)
       .then(data => { if (active) setCatalog({ businesses: data.listBusinesses, templates: data.listTemplates }) })
       .catch(error => { if (active) setCatalogError(error.message) })
     return () => { active = false }
-  }, [reload])
+  }, [reload, chatPage])
 
   useEffect(() => {
+    if (chatPage) return undefined
     if (!business) return
     let active = true
     setAgentResult({ businessName: business.name, items: [], loading: true, error: '' })
@@ -137,7 +141,7 @@ function App() {
       .then(data => { if (active) setAgentResult({ businessName: business.name, items: data.getBusinessAgents, loading: false, error: '' }) })
       .catch(error => { if (active) setAgentResult({ businessName: business.name, items: [], loading: false, error: error.message }) })
     return () => { active = false }
-  }, [business, refreshAgents])
+  }, [business, refreshAgents, chatPage])
 
   function navigate(next) {
     window.history.pushState({}, '', next)
@@ -153,6 +157,12 @@ function App() {
   }
   const query = search.trim().toLowerCase()
   const matches = (...values) => values.some(value => String(value || '').toLowerCase().includes(query))
+
+  if (chatPage) {
+    return <main className="chat-app-shell">
+      <ChatWindow businessName={url.searchParams.get('business')} />
+    </main>
+  }
 
   let content
   if (catalogError) {

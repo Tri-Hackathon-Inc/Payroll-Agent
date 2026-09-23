@@ -5,6 +5,12 @@ export const STUDIO_QUERY = `
   }
 `
 
+export const BUSINESSES_QUERY = `
+  query ListBusinesses {
+    listBusinesses { name label domain }
+  }
+`
+
 export const TEMPLATE_QUERY = `
   query GetTemplate($id: ID!) {
     getTemplate(id: $id) {
