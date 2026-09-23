@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       proxy: useBackend ? {
         '/graphql': { target, changeOrigin: true, rewrite: () => '/' },
+        '/webhook': { target, changeOrigin: true },
       } : {},
     },
   }

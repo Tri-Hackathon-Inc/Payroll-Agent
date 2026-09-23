@@ -21,7 +21,7 @@ function readWebhookReply(body) {
 }
 
 async function callWebhook({ business, agent, question }) {
-  const webhookUrl=location.origin+"/"+business.name+"/"+agent.name
+  const webhookUrl = `/webhook/${business.name}/${agent.id}`
   const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
