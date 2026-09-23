@@ -9,4 +9,5 @@ COPY graphql/*.js ./
 COPY registry/proto/templates.proto /app/registry/proto/templates.proto
 
 EXPOSE 4000
-CMD ["node", "server.js"]
+# Mount local_server at runtime; local settings are excluded from this image.
+CMD ["node", "../local_server/apollo.js"]

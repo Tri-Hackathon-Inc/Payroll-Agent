@@ -1,58 +1,90 @@
-# Template authoring POC
+# Business agents backend
 
-Templates are editable JSON files. For local API testing, the gRPC servicer reads
-a synchronized SQLite catalog and a temporary Apollo server exposes GraphQL.
-There are no REST endpoints, agent creation APIs, authentication, or agent execution.
+A gRPC service with GraphQL adapters for listing templates, reading configurable
+template properties, creating/updating agents, listing businesses, and listing
+agents within a business. There are no REST endpoints or Django HTTP routes.
 
-## Setup and validation
+See [AGENTS.md](AGENTS.md) for the backend overview and flow diagrams, and
+[graphql/README.md](graphql/README.md) for GraphQL request examples.
 
-From the repository root, using Python 3.11+:
+## Local settings
+
+All Django server settings and the Apollo host live in `backend/local_server/`:
+
+```text
+local_server/
+  __init__.py
+  studio/
+    __init__.py
+    settings.py
+    asgi.py
+    wsgi.py
+  apollo.js
+  apollo-settings.json
+```
+
+This folder is ignored by Git and excluded from Docker build contexts. Docker
+files remain outside it. Each checkout must supply its own local folder; it will
+not be available from a clone. Django defaults to `local_server.studio.settings`,
+or uses an explicit `DJANGO_SETTINGS_MODULE`. The integration tests require
+these settings too. Apollo defaults are in `apollo-settings.json`; `GRPC_ADDRESS`,
+`HOST`, and `PORT` override them.
+
+## Setup
+
+With local settings provisioned, run from the repository root using Python 3.11+:
 
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.lock
 python backend/manage.py validate_templates
+python backend/manage.py migrate
+python backend/manage.py sync_templates
+python backend/manage.py rungrpc
 ```
 
-To inspect the complete validated catalog:
+Migrations seed `payroll-services` (Payroll Services). The gRPC server defaults to
+`127.0.0.1:50051`. `DATABASE_PATH` controls the SQLite file used for the catalog,
+businesses, and agents. `TEMPLATE_CONFIG_DIR` controls the source catalog directory.
+
+Template JSON remains authoritative for reusable defaults. Saved agents persist
+independently, retaining the user's effective configuration and source template
+version. See the [template authoring guide](templates/README.md).
+
+For the temporary Apollo/gRPC stack:
 
 ```bash
-python backend/manage.py validate_templates --dump
+docker compose -f docker-compose.test.yaml up --build
 ```
 
-Or run `docker compose run --build --rm backend`. This validates files and exits;
-it does not start an HTTP server.
+Open <http://localhost:4000/> for GraphQL queries and mutations. This test stack
+uses a temporary database discarded when the backend container stops. Restart
+the backend after template edits to synchronize again; rebuild after code edits.
+The default backend Docker target only validates templates and exits; the
+`api-test` target serves gRPC. The test stack mounts `backend/local_server/`
+read-only into both containers at runtime. Settings are not baked into images.
+To run the validation image directly, also mount the local settings directory:
 
-For the temporary API stack, run `docker compose -f docker-compose.test.yaml up --build`
-from the repository root, then open <http://localhost:4000/>. The backend applies
-migrations and synchronizes the template files before starting gRPC. The database
-is temporary and resets when the backend container stops. After editing template
-JSON, restart the backend to synchronize it again. See the
-[Apollo setup and queries](graphql/README.md#temporary-apollo-server).
-
-## Build a template
-
-1. Copy a JSON file from `templates/` and assign a unique ID.
-2. Set its name, version, description, instructions, and questions.
-3. Set out-of-the-box alerts, webhooks, and service attachment defaults.
-4. Reference model IDs from `templates/Model_config/` and service IDs from `templates/services.json`.
-5. Run `validate_templates` to check the result.
-
-Included use cases: Anomaly Detection, Summarizer, General Query, and Failure
-Investigation. The demo model and service definitions are configuration examples;
-no external calls are made. See the [configuration guide](templates/README.md).
-
-`registry.catalog.load_catalog()` is a local Python loader returning `templates`,
-`model_configs`, and `services`. Invalid files raise `CatalogError`; the management
-command exits with an error. Files are reread on each invocation.
+```bash
+docker build -t payroll-backend-validator backend
+docker run --rm --mount type=bind,source="$PWD/backend/local_server",target=/app/local_server,readonly payroll-backend-validator
+```
 
 ## Checks
 
 ```bash
 python backend/manage.py check
 python backend/manage.py test registry
+cd backend/graphql
+npm ci
+npm test
 ```
 
-Tests cover defaults, new/edited templates, invalid files, CLI validation, and the
-absence of HTTP routes. Old database files and archived source are preserved but unused.
+The GraphQL integration test launches a real gRPC service against a temporary
+SQLite database. Set `PYTHON` if your interpreter is not `.venv/bin/python` at the
+repository root. The Apollo host requires Node 22+.
+
+This backend stores configuration; it does not execute agents, call external
+APIs/models, or deliver alerts/webhooks. Authentication and authorization are
+not implemented.

@@ -6,3 +6,4 @@ node_modules
 .not_include
 .env
 .DS_Store
+local_server

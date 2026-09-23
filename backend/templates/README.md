@@ -59,8 +59,11 @@ out of these files. All included service routes are examples to replace with you
 actual service contracts. `enabled` means selectable configuration, not a successful
 connectivity check.
 
-File changes are reflected the next time you load or validate the catalog. This step only defines
-reusable templates; there is no agent creation, persistence, or execution.
+File changes are reflected the next time you load or validate the catalog. Run
+`sync_templates` to update the catalog served by gRPC/GraphQL. These files define
+reusable defaults; `CreateAgent` saves user-configured instances separately under
+a business. Template changes do not overwrite saved agent configuration. Agent
+execution is not implemented.
 
 You can point `TEMPLATE_CONFIG_DIR` at another directory with this same structure.
 Invalid JSON, duplicate IDs, invalid defaults, or broken model/service references

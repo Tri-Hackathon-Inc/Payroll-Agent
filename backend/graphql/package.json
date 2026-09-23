@@ -3,8 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "main": "schema.js",
-  "engines": { "node": ">=22" },
-  "scripts": { "start": "node server.js" },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node ../local_server/apollo.js",
+    "test": "node --test schema.test.js"
+  },
   "dependencies": {
     "@apollo/server": "^5.0.0",
     "@grpc/grpc-js": "^1.12.0",

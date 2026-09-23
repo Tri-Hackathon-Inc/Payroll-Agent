@@ -89,6 +89,7 @@ const resolvers = {
           catalogRpc.packageName,
           catalogRpc.serviceName,
           'ListTemplates',
+          
           {},
           getGrpcMetadata(context),
         );

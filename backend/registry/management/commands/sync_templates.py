@@ -1,14 +1,17 @@
 from django.core.management.base import BaseCommand, CommandError
+
 from registry.catalog import CatalogError
 from registry.services import sync_templates
 
 
 class Command(BaseCommand):
-    help = 'Validate JSON files and atomically synchronize the template catalog database.'
+    help = (
+        "Validate JSON files and atomically synchronize the template catalog database."
+    )
 
     def handle(self, *args, **options):
         try:
             counts = sync_templates()
         except CatalogError as error:
             raise CommandError(str(error)) from error
-        self.stdout.write(self.style.SUCCESS(f'Synchronized catalog: {counts}'))
+        self.stdout.write(self.style.SUCCESS(f"Synchronized catalog: {counts}"))

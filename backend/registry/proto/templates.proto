@@ -6,8 +6,10 @@ import "google/protobuf/struct.proto";
 service TemplateCatalog {
   rpc ListTemplates(google.protobuf.Empty) returns (TemplateList);
   rpc GetTemplate(TemplateId) returns (Template);
-  rpc ListModelConfigs(google.protobuf.Empty) returns (ConfigurationList);
-  rpc ListServices(google.protobuf.Empty) returns (ConfigurationList);
+  rpc ListBusinesses(google.protobuf.Empty) returns (BusinessList);
+  rpc GetBusinessAgents(BusinessName) returns (AgentList);
+  rpc CreateAgent(CreateAgentRequest) returns (Agent);
+  rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
 }
 message TemplateId { string id = 1; }
 message Template {
@@ -19,6 +21,33 @@ message Template {
   google.protobuf.Struct model_config = 6;
   google.protobuf.Struct service = 7;
   repeated google.protobuf.Struct attached_services = 8;
+  repeated google.protobuf.Struct model_options = 9;
+  repeated google.protobuf.Struct service_options = 10;
 }
 message TemplateList { repeated Template templates = 1; }
-message ConfigurationList { repeated google.protobuf.Struct items = 1; }
+message BusinessName { string business_name = 1; }
+message Business { string name = 1; string label = 2; string domain = 3; }
+message BusinessList { repeated Business businesses = 1; }
+message Agent {
+  string id = 1;
+  string name = 2;
+  string business_name = 3;
+  string template_id = 4;
+  uint32 template_version = 5;
+  google.protobuf.Struct config = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+message AgentList { repeated Agent agents = 1; }
+message CreateAgentRequest {
+  string business_name = 1;
+  string template_id = 2;
+  string name = 3;
+  google.protobuf.Struct config = 4;
+}
+message UpdateAgentRequest {
+  string id = 1;
+  string business_name = 2;
+  string name = 3;
+  google.protobuf.Struct config = 4;
+}
