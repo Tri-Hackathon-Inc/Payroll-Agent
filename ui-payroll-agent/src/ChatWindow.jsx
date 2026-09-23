@@ -12,7 +12,6 @@ function toChatAgents(agents = []) {
     initials: agent.name.split(/\s+/).slice(0, 2).map(word => word[0]).join('').toUpperCase(),
     tone: AVATAR_TONES[index % AVATAR_TONES.length],
     questions: agent.config?.questions || [],
-    webhookUrl: agent.config?.capabilities?.webhooks?.url || '',
   }))
 }
 
@@ -22,9 +21,8 @@ function readWebhookReply(body) {
 }
 
 async function callWebhook({ business, agent, question }) {
-  if (!agent.webhookUrl) throw new Error(`${agent.name} does not have a webhook URL configured.`)
-
-  const response = await fetch(agent.webhookUrl, {
+  const webhookUrl=location.origin+"/"+business.name+"/"+agent.name
+  const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -168,7 +166,6 @@ export default function ChatWindow({ businessName }) {
   return <section className="chat-workspace">
     <header className="chat-header">
       <div><p className="eyebrow mb-2">{business?.label || 'Select a business'} · Connected workspace</p><h1>Talk to your agents</h1><p className="chat-subtitle mb-0">Choose a specialist, ask a question, and route it to your connected tools.</p></div>
-      <div className="webhook-status"><span className="status-dot" />Webhook delivery enabled</div>
     </header>
     <div className="chat-panel">
       <div className="chat-thread" aria-live="polite">
@@ -176,7 +173,7 @@ export default function ChatWindow({ businessName }) {
         {sending && <div className="chat-message agent"><AgentAvatar agent={selectedAgent} /><div><div className="message-author">{selectedAgent.name}</div><div className="message-bubble typing-indicator"><span /><span /><span /></div></div></div>}
       </div>
       <div className="chat-composer-wrap">
-        {selectedAgent && <div className="selected-agent-bar"><div className="d-flex align-items-center gap-2"><AgentAvatar agent={selectedAgent} /><span><strong>{selectedAgent.name}</strong><small>{selectedAgent.webhookUrl || 'Webhook URL not configured'}</small></span></div><button type="button" className="agent-clear" onClick={() => setSelectedAgent(null)} aria-label={`Remove ${selectedAgent.name}`}><i className="bi bi-x-lg" /></button></div>}
+        {selectedAgent && <div className="selected-agent-bar"><div className="d-flex align-items-center gap-2"><AgentAvatar agent={selectedAgent} /><span><strong>{selectedAgent.name}</strong></span></div><button type="button" className="agent-clear" onClick={() => setSelectedAgent(null)} aria-label={`Remove ${selectedAgent.name}`}><i className="bi bi-x-lg" /></button></div>}
         {selectedAgent?.questions.length > 0 && <div className="question-pills" aria-label={`${selectedAgent.name} suggested questions`}>{selectedAgent.questions.map(question => <button type="button" className="question-pill" key={question} onClick={() => setMessage(question)}>{question}</button>)}</div>}
         <form className="chat-composer" onSubmit={sendMessage}>
           <div className="composer-main">{selectedAgent && <span className="composer-mention">@{selectedAgent.name.replace(/\s+/g, '')}</span>}<input ref={inputRef} value={message} onChange={handleMessageChange} placeholder={selectedAgent ? `Message ${selectedAgent.name}…` : 'Type @ to choose a business and agent…'} aria-label="Message an agent" /><button type="submit" className="send-button" disabled={!message.trim() || !selectedAgent || sending} aria-label="Send message"><i className="bi bi-arrow-up" /></button></div>
