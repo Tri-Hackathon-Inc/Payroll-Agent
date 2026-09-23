@@ -41,13 +41,42 @@ const typeDefs = `
     modelConfig: ModelConfig!
     service: Service!
     attachedServices: [Service!]!
+    modelOptions: [ModelConfig!]!
+    serviceOptions: [Service!]!
   }
 
+  type Business { name: String!, label: String!, domain: String! }
+  type Agent {
+    id: ID!
+    name: String!
+    businessName: String!
+    templateId: String!
+    templateVersion: Int!
+    config: JSON!
+    createdAt: String!
+    updatedAt: String!
+  }
+  input CreateAgentInput {
+    businessName: String!
+    templateId: String!
+    name: String!
+    config: JSON!
+  }
+  input UpdateAgentInput {
+    id: ID!
+    businessName: String!
+    name: String!
+    config: JSON!
+  }
+  type Mutation {
+    createAgent(input: CreateAgentInput!): Agent!
+    updateAgent(input: UpdateAgentInput!): Agent!
+  }
   type Query {
-    templates: [Template!]!
-    template(id: ID!): Template!
-    modelConfigs: [ModelConfig!]!
-    services: [Service!]!
+    getTemplates: [Template!]!
+    getTemplate(id: ID!): Template!
+    getBusinesses: [Business!]!
+    getBusinessAgents(businessName: String!): [Agent!]!
   }
 `;
 
@@ -68,10 +97,39 @@ function decodeStruct(struct) {
   ));
 }
 
+function encodeValue(value) {
+  if (value === null) return { nullValue: 0 };
+  if (typeof value === 'boolean') return { boolValue: value };
+  if (typeof value === 'number' && Number.isFinite(value)) return { numberValue: value };
+  if (typeof value === 'string') return { stringValue: value };
+  if (Array.isArray(value)) return { listValue: { values: value.map(encodeValue) } };
+  return { structValue: encodeStruct(value) };
+}
+
+function encodeStruct(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GraphQLError('config must be a JSON object.', { extensions: { code: 'BAD_USER_INPUT' } });
+  }
+  return { fields: Object.fromEntries(Object.entries(value).map(([key, item]) => [key, encodeValue(item)])) };
+}
+
 function grpcError(error) {
-  return new GraphQLError(error.code === 5 ? error.details : 'Template catalog unavailable.', {
-    extensions: { code: error.code === 5 ? 'NOT_FOUND' : 'INTERNAL_SERVER_ERROR' },
+  const code = { 3: 'BAD_USER_INPUT', 5: 'NOT_FOUND' }[error.code];
+  return new GraphQLError(code ? error.details : 'Backend service unavailable.', {
+    extensions: { code: code || 'INTERNAL_SERVER_ERROR' },
   });
+}
+
+function rpcResolver(method, request, response = value => value) {
+  return async (root, args, { dataSources, context }) => {
+    const input = request(args);
+    try {
+      return response(await dataSources.grpc.call(
+        catalogRpc.protoPath, catalogRpc.packageName, catalogRpc.serviceName,
+        method, input, getGrpcMetadata(context),
+      ));
+    } catch (error) { throw grpcError(error); }
+  };
 }
 
 const resolvers = {
@@ -82,69 +140,33 @@ const resolvers = {
     parseLiteral: valueFromASTUntyped,
   }),
   Query: {
-    templates: async (root, args, { dataSources, context }) => {
-      try {
-        const protoResponse = await dataSources.grpc.call(
-          catalogRpc.protoPath,
-          catalogRpc.packageName,
-          catalogRpc.serviceName,
-          'ListTemplates',
-          
-          {},
-          getGrpcMetadata(context),
-        );
-        return protoResponse.templates || [];
-      } catch (error) {
-        throw grpcError(error);
-      }
-    },
-    template: async (root, { id }, { dataSources, context }) => {
-      try {
-        const protoResponse = await dataSources.grpc.call(
-          catalogRpc.protoPath,
-          catalogRpc.packageName,
-          catalogRpc.serviceName,
-          'GetTemplate',
-          { id },
-          getGrpcMetadata(context),
-        );
-        return protoResponse;
-      } catch (error) {
-        throw grpcError(error);
-      }
-    },
-    modelConfigs: async (root, args, { dataSources, context }) => {
-      try {
-        const protoResponse = await dataSources.grpc.call(
-          catalogRpc.protoPath,
-          catalogRpc.packageName,
-          catalogRpc.serviceName,
-          'ListModelConfigs',
-          {},
-          getGrpcMetadata(context),
-        );
-        return (protoResponse.items || []).map(decodeStruct);
-      } catch (error) {
-        throw grpcError(error);
-      }
-    },
-    services: async (root, args, { dataSources, context }) => {
-      try {
-        const protoResponse = await dataSources.grpc.call(
-          catalogRpc.protoPath,
-          catalogRpc.packageName,
-          catalogRpc.serviceName,
-          'ListServices',
-          {},
-          getGrpcMetadata(context),
-        );
-        return (protoResponse.items || []).map(decodeStruct);
-      } catch (error) {
-        throw grpcError(error);
-      }
-    },
+    getTemplates: rpcResolver('ListTemplates', () => ({}), value => value.templates || []),
+    getTemplate: rpcResolver('GetTemplate', ({ id }) => ({ id })),
+    getBusinesses: rpcResolver('ListBusinesses', () => ({}), value => value.businesses || []),
+    getBusinessAgents: rpcResolver('GetBusinessAgents', ({ businessName }) => ({ business_name: businessName }),
+      value => value.agents || []),
+  },
+  Mutation: {
+    createAgent: rpcResolver('CreateAgent', ({ input }) => ({
+      business_name: input.businessName, template_id: input.templateId,
+      name: input.name, config: encodeStruct(input.config),
+    })),
+    updateAgent: rpcResolver('UpdateAgent', ({ input }) => ({
+      id: input.id, business_name: input.businessName,
+      name: input.name, config: encodeStruct(input.config),
+    })),
+  },
+  Agent: {
+    businessName: agent => agent.business_name,
+    templateId: agent => agent.template_id,
+    templateVersion: agent => agent.template_version,
+    config: agent => decodeStruct(agent.config),
+    createdAt: agent => agent.created_at,
+    updatedAt: agent => agent.updated_at,
   },
   Template: {
+    modelOptions: template => (template.model_options || []).map(decodeStruct),
+    serviceOptions: template => (template.service_options || []).map(decodeStruct),
     config: template => decodeStruct(template.config),
     modelConfig: template => decodeStruct(template.model_config),
     service: template => decodeStruct(template.service),

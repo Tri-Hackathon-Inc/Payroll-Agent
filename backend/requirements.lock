@@ -1,13 +1,7 @@
 asgiref==3.12.1
-cross-web==0.7.0
 Django==5.2.17
-graphql-core==3.2.12
 grpcio==1.78.0
 grpcio-tools==1.78.0
-packaging==26.3
 protobuf==6.33.6
-python-dateutil==2.9.0.post0
-six==1.17.0
 sqlparse==0.6.0
-strawberry-graphql==0.324.5
 typing_extensions==4.16.0

@@ -1,7 +1,6 @@
 import json
 
 from django.core.management.base import BaseCommand, CommandError
-
 from registry.catalog import CatalogError, load_catalog
 
 

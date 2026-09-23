@@ -3,7 +3,6 @@ from pathlib import Path
 
 import grpc
 from django.core.management.base import BaseCommand, CommandError
-
 from registry.proto.templates_pb2_grpc import \
     add_TemplateCatalogServicer_to_server
 from registry.servicers import TemplateCatalogServicer

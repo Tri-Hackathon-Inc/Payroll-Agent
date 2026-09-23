@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { graphqlRequest } from './graphql/client'
-import { SAVE_AGENT_MUTATION, STUDIO_QUERY } from './graphql/operations'
+import { BUSINESS_AGENTS_QUERY, STUDIO_QUERY } from './graphql/operations'
+import AgentEditor from './AgentEditor'
 
 const NAV_GROUPS = [
   {
@@ -21,8 +22,6 @@ const NAV_GROUPS = [
     ],
   },
 ]
-
-const NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items)
 
 function domainSlug(domain) {
   return domain.toLowerCase().replace(' ', '-')
@@ -86,685 +85,166 @@ function AppShell({ activeKey, onNavigate, notice, onDismissNotice, children }) 
   )
 }
 
-function AgentFields({ domains, form, updateField, questions, updateQuestion, setQuestions }) {
-  return (
-    <>
-      <div className="row g-3 mb-3">
-        <div className="col-md-6">
-          <label className="form-label fw-semibold">Agent name <span className="text-danger">*</span></label>
-          <input className="form-control" name="name" value={form.name} onChange={updateField} placeholder="e.g. Payroll Assistant" required />
-        </div>
-        <div className="col-md-6">
-          <label className="form-label fw-semibold">Domain <span className="text-danger">*</span></label>
-          <select className="form-select" name="domain" value={form.domain} onChange={updateField} required>
-            <option value="" disabled>Select a domain</option>
-            {domains.map(({ id, label }) => <option key={id}>{label}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <div className="mb-3">
-        <label className="form-label fw-semibold">Description <span className="text-danger">*</span></label>
-        <textarea className="form-control" name="description" value={form.description} onChange={updateField} placeholder="What does this agent help with?" rows="3" maxLength="240" required />
-        <div className="form-text text-end">{form.description.length}/240</div>
-      </div>
-
-      <div className="mb-3">
-        <label className="form-label fw-semibold">Instructions <span className="text-danger">*</span></label>
-        <textarea className="form-control" name="prompt" value={form.prompt} onChange={updateField} placeholder="Describe how the agent should respond, what it should know, and any rules it should follow." rows="7" required />
-        <div className="form-text">Be specific about the agent’s role, tone, and boundaries.</div>
-      </div>
-
-      <fieldset className="border-top pt-3 mb-3">
-        <div className="d-flex align-items-center gap-2 mb-1">
-          <legend className="h6 fw-bold mb-0 float-none w-auto p-0">Starting questions</legend>
-          <span className="badge rounded-pill text-bg-light border text-secondary fw-normal">Optional</span>
-        </div>
-        <div className="d-flex flex-column gap-2 mb-2 mt-2">
-          {questions.map((question, index) => (
-            <div className="d-flex align-items-center gap-2" key={index}>
-              <span className="question-number">{index + 1}</span>
-              <input className="form-control" value={question} onChange={(event) => updateQuestion(index, event.target.value)} placeholder="e.g. When is the next payroll date?" aria-label={`Starting question ${index + 1}`} />
-              {questions.length > 1 && (
-                <button className="btn btn-outline-secondary btn-sm" type="button" onClick={() => setQuestions((current) => current.filter((_, i) => i !== index))} aria-label={`Remove question ${index + 1}`}>
-                  <i className="bi bi-x-lg" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        <button className="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold" type="button" onClick={() => setQuestions((current) => [...current, ''])}>+ Add another question</button>
-      </fieldset>
-    </>
-  )
+function Loading({ children = 'Loading…' }) {
+  return <p role="status" className="text-muted py-4"><span className="spinner-border spinner-border-sm me-2" />{children}</p>
 }
 
 function App() {
-  const [form, setForm] = useState({ name: '', domain: '', description: '', prompt: '' })
-  const [questions, setQuestions] = useState([''])
-  const [status, setStatus] = useState(() => window.location.pathname === '/agents/new' ? 'form' : 'list')
-  const [agents, setAgents] = useState([])
-  const [catalog, setCatalog] = useState({ domains: [], templates: [], models: [], tools: [] })
-  const [dataLoaded, setDataLoaded] = useState(false)
-  const [error, setError] = useState('')
-  const [editingId, setEditingId] = useState(null)
-  const [selectedDomain, setSelectedDomain] = useState(null)
-  const [selectedTemplate, setSelectedTemplate] = useState(null)
-  const [selectedModel, setSelectedModel] = useState('')
-  const [attachedTools, setAttachedTools] = useState([])
-  const [templateSearch, setTemplateSearch] = useState('')
-  const [agentSearch, setAgentSearch] = useState('')
-  const [domainSearch, setDomainSearch] = useState('')
-  const [notice, setNotice] = useState(null)
-
-  const { domains, templates, models } = catalog
-  const toolNames = useMemo(() => catalog.tools.map(({ name }) => name), [catalog.tools])
-  const defaultModel = models[0]?.id ?? ''
+  const [route, setRoute] = useState(() => window.location.pathname + window.location.search)
+  const [catalog, setCatalog] = useState(null)
+  const [catalogError, setCatalogError] = useState('')
+  const [reload, setReload] = useState(0)
+  const [agentResult, setAgentResult] = useState(null)
+  const [refreshAgents, setRefreshAgents] = useState(0)
+  const [search, setSearch] = useState('')
+  const [notice, setNotice] = useState('')
+  const url = new URL(route, window.location.origin)
+  const path = url.pathname
+  const businessName = url.searchParams.get('business') || catalog?.businesses[0]?.name
+  const business = catalog?.businesses.find(item => item.name === businessName)
+  const businessHome = path === '/' || (path === '/ai-studio' && !url.searchParams.has('business'))
+  const templateMatch = path.match(/^\/ai-studio\/templates\/([^/]+)\/config$/)
+  const agentMatch = path.match(/^\/agents\/([^/]+)$/)
+  const editId = agentMatch && agentMatch[1] !== 'new' ? decodeURIComponent(agentMatch[1]) : null
+  const listPage = path === '/agents'
+  const agents = agentResult && agentResult.businessName === businessName ? agentResult.items : []
+  const agentsLoading = business && (agentResult?.businessName !== businessName || agentResult.loading)
+  const agentsError = agentResult && agentResult.businessName === businessName ? agentResult.error : ''
 
   useEffect(() => {
-    graphqlRequest(STUDIO_QUERY)
-      .then(({ agents: loadedAgents, ...loadedCatalog }) => {
-        setCatalog(loadedCatalog)
-        setAgents(loadedAgents)
-        setSelectedModel(loadedCatalog.models[0]?.id ?? '')
-        setAttachedTools(loadedCatalog.tools.map(({ name }) => name))
-      })
-      .catch((requestError) => setError(`${requestError.message} Could not reach the GraphQL endpoint at /graphql.`))
-      .finally(() => setDataLoaded(true))
+    const onPopState = () => {
+      setRoute(window.location.pathname + window.location.search)
+      setSearch('')
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
   useEffect(() => {
-    const loadRoute = () => {
-      if (!dataLoaded) return
-      const path = window.location.pathname
-      const match = path.match(/^\/agents\/([^/]+)$/)
-      const configMatch = path.match(/^\/ai-studio\/templates\/([^/]+)\/config$/)
-      const domainMatch = path.match(/^\/ai-studio\/domains\/([^/]+)$/)
+    let active = true
+    setCatalogError('')
+    graphqlRequest(STUDIO_QUERY)
+      .then(data => { if (active) setCatalog({ businesses: data.getBusinesses, templates: data.getTemplates }) })
+      .catch(error => { if (active) setCatalogError(error.message) })
+    return () => { active = false }
+  }, [reload])
 
-      if (path === '/agents/new') {
-        setEditingId(null)
-        setSelectedTemplate(null)
-        setForm({ name: '', domain: '', description: '', prompt: '' })
-        setQuestions([''])
-        setStatus('form')
-      } else if (match && match[1] !== 'new') {
-        const agent = agents.find(({ id }) => String(id) === decodeURIComponent(match[1]))
-        if (agent) {
-          setForm({ name: agent.name, domain: agent.domain, description: agent.description, prompt: agent.instructions || '' })
-          setQuestions(agent.questions?.length ? agent.questions : [''])
-          setEditingId(agent.id)
-          setSelectedTemplate(null)
-          setSelectedModel(agent.model || defaultModel)
-          setStatus('form')
-        } else {
-          window.history.replaceState({}, '', '/agents')
-          setStatus('list')
-        }
-      } else if (configMatch) {
-        const template = templates.find(({ id }) => id === configMatch[1])
-        if (template) {
-          setForm({ name: template.name, domain: template.domain, description: template.description, prompt: template.instructions })
-          setQuestions(template.questions.length ? template.questions : [''])
-          setEditingId(null)
-          setSelectedDomain(template.domain)
-          setSelectedTemplate(template)
-          setSelectedModel(template.model)
-          setAttachedTools(toolNames)
-          setStatus('studio-config')
-        } else {
-          window.history.replaceState({}, '', '/ai-studio')
-          setSelectedDomain(null)
-          setSelectedTemplate(null)
-          setStatus('studio-domains')
-        }
-      } else if (domainMatch) {
-        const domain = domains.find(({ id }) => id === domainMatch[1])
-        if (domain) {
-          setSelectedDomain(domain.label)
-          setSelectedTemplate(null)
-          setStatus('studio')
-        } else {
-          window.history.replaceState({}, '', '/ai-studio')
-          setSelectedDomain(null)
-          setStatus('studio-domains')
-        }
-      } else if (path === '/agents') {
-        setStatus('list')
-      } else {
-        if (path !== '/ai-studio') window.history.replaceState({}, '', '/ai-studio')
-        setSelectedDomain(null)
-        setSelectedTemplate(null)
-        setStatus('studio-domains')
-      }
-    }
+  useEffect(() => {
+    if (!business) return
+    let active = true
+    setAgentResult({ businessName: business.name, items: [], loading: true, error: '' })
+    graphqlRequest(BUSINESS_AGENTS_QUERY, { businessName: business.name })
+      .then(data => { if (active) setAgentResult({ businessName: business.name, items: data.getBusinessAgents, loading: false, error: '' }) })
+      .catch(error => { if (active) setAgentResult({ businessName: business.name, items: [], loading: false, error: error.message }) })
+    return () => { active = false }
+  }, [business, refreshAgents])
 
-    loadRoute()
-    window.addEventListener('popstate', loadRoute)
-    return () => window.removeEventListener('popstate', loadRoute)
-  }, [agents, dataLoaded, domains, templates, defaultModel, toolNames])
-
-  const goTo = (path) => {
-    window.history.pushState({}, '', path)
+  function navigate(next) {
+    window.history.pushState({}, '', next)
+    setRoute(next)
+    setSearch('')
   }
-
-  const updateField = ({ target: { name, value } }) => {
-    setForm((current) => ({ ...current, [name]: value }))
+  const scoped = (next, name = businessName) => `${next}?business=${encodeURIComponent(name || '')}`
+  const handleNav = item => item.soon ? setNotice(`${item.label} is coming soon.`) : navigate(scoped(item.path))
+  const saved = agent => {
+    setNotice(`${agent.name} saved for ${business.label}.`)
+    setRefreshAgents(value => value + 1)
+    navigate(scoped('/agents'))
   }
-  const updateQuestion = (index, value) => {
-    setQuestions((current) => current.map((question, i) => (i === index ? value : question)))
-  }
-  const toggleTool = (tool) => {
-    setAttachedTools((current) => current.includes(tool)
-      ? current.filter((attached) => attached !== tool)
-      : [...current, tool])
-  }
+  const query = search.trim().toLowerCase()
+  const matches = (...values) => values.some(value => String(value || '').toLowerCase().includes(query))
 
-  const createAgent = async (event) => {
-    event.preventDefault()
-    setError('')
-    setStatus('loading')
-
-    try {
-      const { saveAgent: saved } = await graphqlRequest(SAVE_AGENT_MUTATION, {
-        input: {
-          ...(editingId ? { id: editingId } : {}),
-          name: form.name,
-          domain: form.domain,
-          description: form.description,
-          instructions: form.prompt,
-          model: selectedModel,
-          questions: questions.filter((question) => question.trim()),
-        },
-      })
-
-      setAgents((current) => editingId
-        ? current.map((agent) => agent.id === editingId ? saved : agent)
-        : [saved, ...current])
-      if (selectedTemplate) {
-        const domain = selectedTemplate.domain
-        setSelectedTemplate(null)
-        setSelectedDomain(domain)
-        goTo(`/ai-studio/domains/${domainSlug(domain)}`)
-        setStatus('studio')
-      } else {
-        goTo('/agents')
-        setStatus('list')
-      }
-    } catch (requestError) {
-      setError(requestError.message)
-      setStatus('form')
-    }
-  }
-
-  const startNewAgent = () => {
-    setForm({ name: '', domain: '', description: '', prompt: '' })
-    setQuestions([''])
-    setEditingId(null)
-    setSelectedTemplate(null)
-    goTo('/agents/new')
-    setStatus('form')
-  }
-
-  const openAgent = (agent) => {
-    setForm({
-      name: agent.name,
-      domain: agent.domain,
-      description: agent.description,
-      prompt: agent.instructions || '',
-    })
-    setQuestions(agent.questions?.length ? agent.questions : [''])
-    setEditingId(agent.id)
-    setSelectedTemplate(null)
-    setSelectedModel(agent.model || defaultModel)
-    goTo(`/agents/${encodeURIComponent(agent.id)}`)
-    setStatus('form')
-  }
-
-  const openDomain = (domain) => {
-    setSelectedDomain(domain.label)
-    setSelectedTemplate(null)
-    setTemplateSearch('')
-    goTo(`/ai-studio/domains/${domain.id}`)
-    setStatus('studio')
-  }
-
-  const backToDomains = () => {
-    setSelectedDomain(null)
-    setSelectedTemplate(null)
-    goTo('/ai-studio')
-    setStatus('studio-domains')
-  }
-
-  const openTemplate = (template) => {
-    setForm({ name: template.name, domain: template.domain, description: template.description, prompt: template.instructions })
-    setQuestions(template.questions.length ? template.questions : [''])
-    setEditingId(null)
-    setSelectedDomain(template.domain)
-    setSelectedTemplate(template)
-    setSelectedModel(template.model)
-    setAttachedTools(toolNames)
-    goTo(`/ai-studio/templates/${template.id}/config`)
-    setStatus('studio-config')
-  }
-
-  const cancelStudioConfig = () => {
-    const domain = selectedTemplate?.domain
-    setSelectedTemplate(null)
-    if (domain) {
-      setSelectedDomain(domain)
-      goTo(`/ai-studio/domains/${domainSlug(domain)}`)
-      setStatus('studio')
-    } else {
-      goTo('/ai-studio')
-      setStatus('studio-domains')
-    }
-  }
-
-  const cancelForm = () => {
-    if (editingId) {
-      goTo('/agents')
-      setStatus('list')
-    } else if (window.history.length > 1) {
-      window.history.back()
-    } else {
-      goTo('/agents')
-      setStatus('list')
-    }
-  }
-
-  const handleNav = (item) => {
-    if (item.soon) {
-      setNotice(`${item.label} is coming soon.`)
-      return
-    }
-    if (item.path === '/ai-studio') {
-      setSelectedDomain(null)
-      setSelectedTemplate(null)
-      goTo(item.path)
-      setStatus('studio-domains')
-      return
-    }
-    goTo(item.path)
-    setStatus(item.path === '/agents' ? 'list' : 'studio-domains')
-  }
-
-  const activeNavKey = status === 'list' || (status === 'form' && !selectedTemplate)
-    ? 'my-agents'
-    : (status === 'studio-domains' || status === 'studio' || status === 'studio-config')
-      ? 'templates'
-      : null
-
-  if (status === 'loading') {
-    return (
-      <main className="d-flex flex-column align-items-center justify-content-center vh-100 text-center px-3" aria-live="polite" aria-busy="true">
-        <div className="spinner-border text-dark mb-3" role="status" style={{ width: 48, height: 48 }}>
-          <span className="visually-hidden">Loading</span>
-        </div>
-        <h2 className="h5 fw-bold mb-1">{editingId ? 'Updating your agent' : 'Creating your agent'}</h2>
-        <p className="text-muted mb-0">{editingId ? 'Saving the latest agent details…' : selectedTemplate ? `Setting up your ${selectedTemplate.name}…` : 'Preparing its instructions and starting questions…'}</p>
-      </main>
-    )
-  }
-
-  if (!dataLoaded && status !== 'form') {
-    return (
-      <main className="d-flex flex-column align-items-center justify-content-center vh-100 text-center px-3" aria-live="polite" aria-busy="true">
-        <div className="spinner-border text-dark mb-3" role="status" style={{ width: 48, height: 48 }}>
-          <span className="visually-hidden">Loading</span>
-        </div>
-        <h2 className="h5 fw-bold mb-1">Loading agents</h2>
-        <p className="text-muted mb-0">Fetching the available agents…</p>
-      </main>
-    )
-  }
-
-  if (status === 'studio-domains') {
-    const domainQuery = domainSearch.trim().toLowerCase()
-    const filteredDomains = domains.filter((domain) => !domainQuery
-      || domain.label.toLowerCase().includes(domainQuery)
-      || domain.description.toLowerCase().includes(domainQuery))
-
-    return (
-      <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice(null)} breadcrumb={['Agent Studio', 'Templates']}>
-        <div className="d-flex flex-wrap align-items-center gap-3 mb-4">
-          <div className="input-group flex-grow-1">
-            <span className="input-group-text bg-white"><i className="bi bi-search text-secondary" /></span>
-            <input
-              type="search"
-              className="form-control"
-              value={domainSearch}
-              onChange={(event) => setDomainSearch(event.target.value)}
-              placeholder="Search domains…"
-              aria-label="Search domains"
-            />
-          </div>
-        </div>
-
-        <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3 mb-4" aria-label="Domains">
-          {filteredDomains.length === 0 && <div className="col-12"><p className="text-muted mb-0">No domains match “{domainSearch}”.</p></div>}
-          {filteredDomains.map((domain) => (
-            <div className="col" key={domain.id}>
-              <div
-                className="card h-100 border-0 shadow-sm template-card domain-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => openDomain(domain)}
-                onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') openDomain(domain) }}
-              >
-                <div className="card-body d-flex flex-column">
-                  <div className="template-icon accent-neutral mb-3"><i className={`bi ${domain.icon}`} /></div>
-                  <h3 className="h6 fw-bold mb-1">{domain.label}</h3>
-                  <p className="text-muted small flex-grow-1 mb-3">{domain.description}</p>
-                  <span className="fw-semibold small d-inline-flex align-items-center gap-1">Browse agents <i className="bi bi-arrow-right" /></span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="card border-0 shadow-sm" id="agent-registry" aria-label="Agent registry">
-          <div className="card-body">
-            <h2 className="h6 fw-bold mb-3">Agent registry</h2>
-            {error && <div className="alert alert-danger py-2 small" role="alert">{error}</div>}
-            {agents.length === 0 ? (
-              <p className="text-muted small mb-0">No agents yet — pick a domain above to create your first one.</p>
-            ) : (
-              <div className="list-group list-group-flush">
-                {agents.map((agent) => (
-                  <button type="button" className="list-group-item list-group-item-action d-flex align-items-center gap-3 px-0" key={agent.id} onClick={() => openAgent(agent)}>
-                    <span className="registry-icon"><i className="bi bi-stars" /></span>
-                    <span className="flex-grow-1 text-start text-truncate">
-                      <span className="d-block fw-semibold">{agent.name}</span>
-                      <span className="d-block text-muted small text-truncate">{agent.description}</span>
-                    </span>
-                    <span className={`badge ${domainClass(agent.domain)}`}>{agent.domain}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      </AppShell>
-    )
-  }
-
-  if (status === 'studio') {
-    const query = templateSearch.trim().toLowerCase()
-    const domainTemplates = templates.filter((template) => template.domain === selectedDomain)
-    const filteredTemplates = domainTemplates.filter((template) => !query
-      || template.name.toLowerCase().includes(query)
-      || template.description.toLowerCase().includes(query))
-
-    return (
-      <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice(null)} breadcrumb={['Agent Studio', selectedDomain || 'Templates']}>
-        <button type="button" className="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold mb-2" onClick={backToDomains}>
-          <i className="bi bi-arrow-left me-1" /> All domains
-        </button>
-        <div className="d-flex flex-wrap align-items-center gap-3 mb-4">
-          <div className="d-flex align-items-center gap-2">
-            <div className="input-group">
-              <span className="input-group-text bg-white"><i className="bi bi-search text-secondary" /></span>
-              <input
-                type="search"
-                className="form-control"
-                style={{ width: 900 }}
-                value={templateSearch}
-                onChange={(event) => setTemplateSearch(event.target.value)}
-                placeholder="Search templates…"
-                aria-label="Search templates"
-              />
-            </div>
-            <button
-              type="button"
-              className="btn btn-outline-secondary text-nowrap"
-              onClick={() => setNotice('Creating custom templates is coming soon — use the “Custom Agent” template below to start from scratch.')}
-            >
-              <i className="bi bi-plus-lg me-1" /> Create template
-            </button>
-          </div>
-        </div>
-
-        <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3" aria-label="Agent templates">
-          {filteredTemplates.map((template) => (
-            <div className="col" key={template.id}>
-              <div className="card h-100 border-0 shadow-sm template-card accent-neutral">
-                <div className="card-body d-flex flex-column">
-                  <div className="template-icon mb-3"><i className={`bi ${template.icon}`} /></div>
-                  <h3 className="h6 fw-bold mb-1">{template.name}</h3>
-                  <span className="template-runtime badge rounded-pill align-self-start mb-3">{template.runtime}</span>
-                  <p className="text-secondary small flex-grow-1 mb-3">{template.description}</p>
-                  <button type="button" className="btn btn-dark fw-semibold" onClick={() => openTemplate(template)}>Use Template</button>
-                </div>
-              </div>
-            </div>
-          ))}
-          {filteredTemplates.length === 0 && <div className="col-12"><p className="text-muted mb-0">No templates match “{templateSearch}”.</p></div>}
-        </div>
-      </AppShell>
-    )
-  }
-
-  if (status === 'studio-config' && selectedTemplate) {
-    return (
-      <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice(null)} breadcrumb={['Agent Studio', `Configure · ${selectedTemplate.name}`]}>
-        <div className="row g-4">
-          <div className="col-lg-8">
-            <div className="card border-0 shadow-sm">
-              <div className="card-body p-4 p-xl-5">
-                <form onSubmit={createAgent}>
-                  {error && <div className="alert alert-danger py-2 small">{error}</div>}
-
-                  <div className="row g-3 mb-3 pb-3 border-bottom">
-                    <div className="col-md-6">
-                      <label className="form-label fw-semibold">Template ID</label>
-                      <input className="form-control" value={selectedTemplate.id} disabled />
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label fw-semibold">Model</label>
-                      <select className="form-select" value={selectedModel} onChange={(event) => setSelectedModel(event.target.value)}>
-                        {models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="row g-3 mb-3 pb-3 border-bottom">
-                    <div className="col-md-4">
-                      <label className="form-label fw-semibold">Service visibility</label>
-                      <select className="form-select" defaultValue="internal">
-                        <option value="internal">Internal only</option>
-                        <option value="team">Team</option>
-                        <option value="public">Public</option>
-                      </select>
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label fw-semibold">Rules access</label>
-                      <input className="form-control" defaultValue="Read only" placeholder="e.g. Read only" />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label fw-semibold">Created at</label>
-                      <input className="form-control" value={new Date().toLocaleDateString()} disabled />
-                    </div>
-                  </div>
-
-                  {selectedTemplate.id === 'anomaly-detection' && (
-                    <fieldset className="border-bottom pb-3 mb-3">
-                      <legend className="h6 fw-bold mb-1 float-none w-auto p-0">Detection settings</legend>
-                      <p className="text-muted small mb-3">Anomaly Detection runs automatically in the background instead of waiting for a question — configure what it watches.</p>
-                      <div className="row g-3">
-                        <div className="col-md-6">
-                          <label className="form-label fw-semibold">Watches</label>
-                          <input className="form-control" defaultValue="Payrun changes" />
-                        </div>
-                        <div className="col-md-6">
-                          <label className="form-label fw-semibold">Detection threshold</label>
-                          <input className="form-control" defaultValue="2000" />
-                        </div>
-                        <div className="col-md-6">
-                          <label className="form-label fw-semibold">Check frequency</label>
-                          <select className="form-select" defaultValue="real-time">
-                            <option value="real-time">Real-time</option>
-                            <option value="hourly">Hourly</option>
-                            <option value="daily">Daily</option>
-                          </select>
-                        </div>
-                        <div className="col-md-6">
-                          <label className="form-label fw-semibold">Notify</label>
-                          <input className="form-control" defaultValue="payroll-admins@company.com" />
-                        </div>
-                      </div>
-                    </fieldset>
-                  )}
-
-                  <AgentFields domains={domains} form={form} updateField={updateField} questions={questions} updateQuestion={updateQuestion} setQuestions={setQuestions} />
-
-                  <fieldset className="border-top pt-3 mb-3">
-                    <div className="d-flex align-items-center gap-2 mb-1">
-                      <legend className="h6 fw-bold mb-0 float-none w-auto p-0">Attach tools & APIs</legend>
-                      <span className="badge rounded-pill text-bg-light border text-secondary fw-normal">{attachedTools.length} attached</span>
-                    </div>
-                    <p className="text-muted small mb-2">Choose which tools this agent can use. Full read/write access control is coming later — for now, an attached tool is fully accessible.</p>
-                    <div className="d-flex flex-column gap-2">
-                      {toolNames.map((tool) => (
-                        <div className="form-check" key={tool}>
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            checked={attachedTools.includes(tool)}
-                            onChange={() => toggleTool(tool)}
-                            id={`tool-${tool}`}
-                          />
-                          <label className="form-check-label small" htmlFor={`tool-${tool}`}>{tool}</label>
-                        </div>
-                      ))}
-                    </div>
-                  </fieldset>
-
-                  <fieldset className="border-top pt-3 mb-3">
-                    <legend className="h6 fw-bold mb-1 float-none w-auto p-0">Out-of-the-box capabilities</legend>
-                    <div className="form-check">
-                      <input className="form-check-input" type="checkbox" defaultChecked id="email-alerts" />
-                      <label className="form-check-label small" htmlFor="email-alerts">Send email alerts</label>
-                    </div>
-                    <p className="text-muted small mb-0">Other channels (Teams, Slack, SMS) are coming soon.</p>
-                  </fieldset>
-
-                  <div className="d-flex justify-content-end gap-2 pt-4 mt-2 border-top">
-                    <button className="btn btn-outline-secondary" type="button" onClick={cancelStudioConfig}>Cancel</button>
-                    <button className="btn btn-dark d-inline-flex align-items-center gap-2" type="submit">Create agent <i className="bi bi-arrow-right" /></button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-lg-4">
-            <div className="card border-0 shadow-sm accent-neutral" style={{ position: 'sticky', top: 24 }}>
-              <div className="card-body">
-                <div className="template-icon mb-3"><i className={`bi ${selectedTemplate.icon}`} /></div>
-                <div className="text-uppercase small fw-bold text-secondary mb-1">Your agent</div>
-                <h2 className="h5 fw-bold mb-2">{form.name || selectedTemplate.name}</h2>
-                <p className="text-muted small mb-3">{form.description || selectedTemplate.description}</p>
-                <span className={`badge ${domainClass(form.domain || selectedTemplate.domain)}`}>{form.domain || selectedTemplate.domain}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </AppShell>
-    )
-  }
-
-  if (status === 'list') {
-    const query = agentSearch.trim().toLowerCase()
-    const filteredAgents = agents.filter((agent) => !query
-      || agent.name.toLowerCase().includes(query)
-      || agent.description.toLowerCase().includes(query))
-
-    return (
-      <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice(null)} breadcrumb={['Agent Studio', 'My Agents']}>
-        <div className="d-flex flex-wrap align-items-center gap-2 mb-4">
-          <div className="input-group" style={{ maxWidth: 1000 }}>
-            <span className="input-group-text bg-white"><i className="bi bi-search text-secondary" /></span>
-            <input
-              type="search"
-              className="form-control"
-              value={agentSearch}
-              onChange={(event) => setAgentSearch(event.target.value)}
-              placeholder="Search agents…"
-              aria-label="Search agents"
-            />
-          </div>
-          <button className="btn btn-dark d-inline-flex align-items-center gap-2 text-nowrap" type="button" onClick={startNewAgent}>
-            <i className="bi bi-plus-lg" /> Create agent
+  let content
+  if (catalogError) {
+    content = <div className="alert alert-danger" role="alert">Could not load Agent Studio: {catalogError}
+      <button className="btn btn-outline-danger btn-sm ms-3" onClick={() => setReload(value => value + 1)}>Retry</button>
+    </div>
+  } else if (!catalog) {
+    content = <Loading>Loading businesses and templates…</Loading>
+  } else if (!catalog.businesses.length) {
+    content = <p>No businesses are available yet. Ask your administrator to create one.</p>
+  } else if (!business) {
+    content = <div className="alert alert-warning" role="alert">Business not found.
+      <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose a business</button>
+    </div>
+  } else if (templateMatch || editId) {
+    const agent = editId && agents.find(item => item.id === editId)
+    if (editId && agentsLoading) content = <Loading>Loading agent…</Loading>
+    else if (editId && agentsError) content = <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents(value => value + 1)}>Retry</button></div>
+    else if (editId && !agent) content = <p role="alert">This agent was not found in {business.label}.</p>
+    else content = <AgentEditor key={`${business.name}:${editId || templateMatch[1]}`}
+      business={business} agent={agent || null} templateId={agent?.templateId || decodeURIComponent(templateMatch[1])}
+      onSaved={saved} onCancel={() => navigate(scoped(editId ? '/agents' : '/ai-studio'))} />
+  } else if (businessHome) {
+    content = <>
+      <h1 className="h3 fw-bold">Choose a business</h1>
+      <p className="text-muted">Create and manage agents for a specific business.</p>
+      <input className="form-control mb-4" type="search" aria-label="Search businesses" placeholder="Search businesses…" value={search} onChange={event => setSearch(event.target.value)} />
+      <div className="row row-cols-1 row-cols-md-3 g-3">
+        {catalog.businesses.filter(item => matches(item.label, item.domain)).map(item => <div className="col" key={item.name}>
+          <button className="card border-0 shadow-sm template-card accent-neutral h-100 w-100 text-start" onClick={() => navigate(scoped('/ai-studio', item.name))}>
+            <span className="card-body"><span className="template-icon mb-3"><i className="bi bi-building" /></span>
+              <span className="h5 d-block">{item.label}</span><span className="text-muted d-block">{item.domain}</span>
+              <span className="d-block mt-3 fw-semibold">Browse templates →</span>
+            </span>
           </button>
+        </div>)}
+      </div>
+      {!catalog.businesses.some(item => matches(item.label, item.domain)) && <p>No businesses match your search.</p>}
+    </>
+  } else if (listPage) {
+    content = <>
+      <div className="d-flex justify-content-between align-items-center mb-4 gap-3">
+        <div><h1 className="h3 fw-bold">My agents</h1><p className="text-muted mb-0">{business.label}</p></div>
+        <button className="btn btn-dark" onClick={() => navigate(scoped('/ai-studio'))}>Create agent</button>
+      </div>
+      <input className="form-control mb-4" type="search" aria-label="Search agents" placeholder="Search agents…" value={search} onChange={event => setSearch(event.target.value)} />
+      {agentsLoading ? <Loading>Loading agents…</Loading> : agentsError ? <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents(value => value + 1)}>Retry</button></div> : <>
+        <div className="row row-cols-1 row-cols-md-3 g-3">
+          {agents.filter(item => matches(item.name, item.config.description)).map(agent => <div className="col" key={agent.id}>
+            <div className="card h-100 border-0 shadow-sm"><div className="card-body d-flex flex-column">
+              <h2 className="h5">{agent.name}</h2><span className={`badge align-self-start mb-3 ${domainClass(agent.config.domain)}`}>{agent.config.domain}</span>
+              <p className="text-muted flex-grow-1">{agent.config.description}</p>
+              <button className="btn btn-outline-secondary" onClick={() => navigate(scoped(`/agents/${encodeURIComponent(agent.id)}`))}>Edit agent</button>
+            </div></div>
+          </div>)}
         </div>
-        <div className="card border-0 shadow-sm">
-          <div className="card-body">
-            {error && <div className="alert alert-danger py-2 small" role="alert">{error}</div>}
-            {filteredAgents.length === 0 && (
-              <p className="text-muted small mb-0">{query ? `No agents match “${agentSearch}”.` : 'No agents yet — create one to get started.'}</p>
-            )}
-            <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3" aria-label="Available agents">
-              {filteredAgents.map((agent) => (
-                <div className="col" key={agent.id}>
-                  <div className="card h-100 border-0 shadow-sm position-relative">
-                    {agent.id === agents[0]?.id && <span className="badge text-bg-success position-absolute top-0 end-0 m-2">Just created</span>}
-                    <div className="card-body d-flex flex-column">
-                      <div className="d-flex align-items-center justify-content-between mb-3">
-                        <div className="template-icon accent-neutral"><i className="bi bi-stars" /></div>
-                        <span className={`badge ${domainClass(agent.domain)}`}>{agent.domain}</span>
-                      </div>
-                      <h2 className="h6 fw-bold mb-2">{agent.name}</h2>
-                      <p className="text-muted small flex-grow-1">{agent.description}</p>
-                      <button type="button" className="btn btn-link btn-sm ps-0 text-decoration-none fw-semibold align-self-start" onClick={() => openAgent(agent)}>
-                        Open agent <i className="bi bi-arrow-right ms-1" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </AppShell>
-    )
+        {!agents.length && <p>No agents yet for {business.label}. Choose a template to create your first agent.</p>}
+        {!!agents.length && !agents.some(item => matches(item.name, item.config.description)) && <p>No agents match your search.</p>}
+      </>}
+    </>
+  } else {
+    const templates = catalog.templates.filter(item => item.config.domain === business.domain && matches(item.name, item.description))
+    content = <>
+      <button className="btn btn-link ps-0 mb-3" onClick={() => navigate('/ai-studio')}>← All businesses</button>
+      <h1 className="h3 fw-bold">{business.label} templates</h1>
+      <p className="text-muted">Choose a template and customize its configuration for your business.</p>
+      <input className="form-control mb-4" type="search" aria-label="Search templates" placeholder="Search templates…" value={search} onChange={event => setSearch(event.target.value)} />
+      <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
+        {templates.map(template => <div className="col" key={template.id}>
+          <div className="card h-100 border-0 shadow-sm template-card accent-neutral"><div className="card-body d-flex flex-column">
+            <div className="template-icon mb-3"><i className="bi bi-stars" /></div>
+            <h2 className="h6 fw-bold">{template.name}</h2><span className="small text-muted mb-2">Version {template.version}</span>
+            <p className="text-muted flex-grow-1">{template.description}</p>
+            <button className="btn btn-dark" onClick={() => navigate(scoped(`/ai-studio/templates/${encodeURIComponent(template.id)}/config`))}>Use Template</button>
+          </div></div>
+        </div>)}
+      </div>
+      {!templates.length && <p>No templates match this business and search.</p>}
+    </>
   }
 
-  return (
-    <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice(null)} breadcrumb={['Agent Studio', editingId ? 'Edit agent' : 'New agent']}>
-      <div className="row g-4">
-        <div className="col-lg-8">
-          <div className="card border-0 shadow-sm">
-            <div className="card-body p-4 p-xl-5">
-              <form onSubmit={createAgent}>
-                {error && <div className="alert alert-danger py-2 small">{error}</div>}
-
-                <AgentFields domains={domains} form={form} updateField={updateField} questions={questions} updateQuestion={updateQuestion} setQuestions={setQuestions} />
-
-                <div className="d-flex justify-content-end gap-2 pt-4 mt-2 border-top">
-                  <button className="btn btn-outline-secondary" type="button" onClick={cancelForm}>Cancel</button>
-                  <button className="btn btn-dark d-inline-flex align-items-center gap-2" type="submit">
-                    {editingId ? 'Save changes' : 'Create agent'} <i className="bi bi-arrow-right" />
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-
-        <div className="col-lg-4">
-          <div className="card border-0 shadow-sm accent-neutral" style={{ position: 'sticky', top: 24 }}>
-            <div className="card-body">
-              <div className="template-icon mb-3"><i className="bi bi-stars" /></div>
-              <div className="text-uppercase small fw-bold text-secondary mb-1">Your agent</div>
-              <h2 className="h5 fw-bold mb-2">{form.name || 'Payroll Assistant'}</h2>
-              <p className="text-muted small mb-3">{form.description || 'A helpful expert, ready to support your team.'}</p>
-              {form.domain && <span className={`badge ${domainClass(form.domain)}`}>{form.domain}</span>}
-            </div>
-          </div>
-        </div>
-      </div>
-    </AppShell>
-  )
+  return <AppShell activeKey={listPage || editId ? 'my-agents' : 'templates'} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
+    {!!catalog?.businesses.length && <div className="d-flex justify-content-end align-items-center gap-2 mb-4">
+      <label htmlFor="business" className="fw-semibold">Business</label>
+      <select id="business" className="form-select w-auto" value={business?.name || ''}
+        onChange={event => navigate(scoped(listPage || editId ? '/agents' : '/ai-studio', event.target.value))}>
+        {!business && <option value="">Choose a business</option>}
+        {catalog.businesses.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
+      </select>
+    </div>}
+    {content}
+  </AppShell>
 }
 
 export default App

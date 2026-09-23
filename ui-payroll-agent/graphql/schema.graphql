@@ -1,62 +1,69 @@
-type Query {
-  domains: [Domain!]!
-  templates(domain: String): [AgentTemplate!]!
-  template(id: ID!): AgentTemplate
-  models: [ModelOption!]!
-  tools: [Tool!]!
-  agents: [Agent!]!
-  agent(id: ID!): Agent
-}
+scalar JSON
 
-type Mutation {
-  saveAgent(input: SaveAgentInput!): Agent!
-}
+  type ModelConfig {
+    id: ID!
+    name: String!
+    provider: String!
+    modelId: String!
+    enabled: Boolean!
+    endpointEnv: String!
+    credentialEnv: String!
+    parameters: JSON!
+  }
 
-type Domain {
-  id: ID!
-  label: String!
-  description: String!
-  icon: String
-}
+  type Service {
+    id: ID!
+    name: String!
+    domain: String!
+    enabled: Boolean!
+    baseUrlEnv: String!
+    method: String!
+    path: String!
+  }
 
-type AgentTemplate {
-  id: ID!
-  name: String!
-  domain: String!
-  description: String!
-  instructions: String!
-  questions: [String!]!
-  model: String!
-  runtime: String
-  icon: String
-}
+  type Template {
+    id: ID!
+    name: String!
+    description: String!
+    version: Int!
+    config: JSON!
+    modelConfig: ModelConfig!
+    service: Service!
+    attachedServices: [Service!]!
+    modelOptions: [ModelConfig!]!
+    serviceOptions: [Service!]!
+  }
 
-type ModelOption {
-  id: ID!
-  label: String!
-}
-
-type Tool {
-  id: ID!
-  name: String!
-}
-
-type Agent {
-  id: ID!
-  name: String!
-  domain: String!
-  description: String!
-  instructions: String!
-  model: String!
-  questions: [String!]!
-}
-
-input SaveAgentInput {
-  id: ID
-  name: String!
-  domain: String!
-  description: String!
-  instructions: String!
-  model: String
-  questions: [String!]
-}
+  type Business { name: String!, label: String!, domain: String! }
+  type Agent {
+    id: ID!
+    name: String!
+    businessName: String!
+    templateId: String!
+    templateVersion: Int!
+    config: JSON!
+    createdAt: String!
+    updatedAt: String!
+  }
+  input CreateAgentInput {
+    businessName: String!
+    templateId: String!
+    name: String!
+    config: JSON!
+  }
+  input UpdateAgentInput {
+    id: ID!
+    businessName: String!
+    name: String!
+    config: JSON!
+  }
+  type Mutation {
+    createAgent(input: CreateAgentInput!): Agent!
+    updateAgent(input: UpdateAgentInput!): Agent!
+  }
+  type Query {
+    getTemplates: [Template!]!
+    getTemplate(id: ID!): Template!
+    getBusinesses: [Business!]!
+    getBusinessAgents(businessName: String!): [Agent!]!
+  }

@@ -1,285 +1,481 @@
 {
-  "domains": [
+  "businesses": [
     {
-      "id": "hr",
-      "label": "HR",
-      "icon": "bi-people",
-      "description": "Policies, onboarding, and general people questions."
+      "name": "payroll-services",
+      "label": "Payroll Services",
+      "domain": "Payroll"
     },
     {
-      "id": "payroll",
-      "label": "Payroll",
-      "icon": "bi-cash-coin",
-      "description": "Payrun anomalies, summaries, and payroll questions."
-    },
-    {
-      "id": "insurance",
-      "label": "Insurance",
-      "icon": "bi-shield-check",
-      "description": "Coverage, claims, and policy questions."
-    },
-    {
-      "id": "benefits",
-      "label": "Benefits",
-      "icon": "bi-heart-pulse",
-      "description": "Stock matching, HSA, and other benefits questions."
-    },
-    {
-      "id": "time-off",
-      "label": "Time off",
-      "icon": "bi-calendar-week",
-      "description": "PTO balances, requests, and time-off policy."
+      "name": "payroll-demo",
+      "label": "Payroll Demo",
+      "domain": "Payroll"
     }
   ],
   "templates": [
     {
       "id": "anomaly-detection",
-      "name": "Anomaly Detection Agent",
-      "domain": "Payroll",
-      "icon": "bi-activity",
-      "runtime": "REAL-TIME",
-      "description": "Watches payrun changes in real time and flags amounts that look off versus history.",
-      "instructions": "On every payrun change, compare the new amount against the employee's historical payruns. Flag any change greater than the configured threshold (default 2000) and summarize what changed and why it looks unusual.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "Why did this payrun amount change?",
-        "Show me the flagged changes for this payrun."
+      "name": "Anomaly Detection",
+      "version": 1,
+      "description": "Flag unusual payments against historical payrun data.",
+      "config": {
+        "description": "Flag unusual payments against historical payrun data.",
+        "instructions": "Compare payrun inputs against history. Explain unusual values and evidence. Do not change payroll.",
+        "questions": [
+          "Which payments need review?"
+        ],
+        "domain": "Payroll",
+        "model": "poc-demo",
+        "service": "payrun",
+        "page": "payrun",
+        "attached_services": [
+          "payrun-history"
+        ],
+        "created_by": "poc-user",
+        "roles": [],
+        "capabilities": {
+          "alerts": {
+            "enabled": true,
+            "severity": "warning"
+          },
+          "webhooks": {
+            "enabled": false,
+            "url": ""
+          }
+        }
+      },
+      "modelConfig": {
+        "id": "poc-demo",
+        "name": "POC demo model (configuration only)",
+        "provider": "demo",
+        "modelId": "demo/no-runtime",
+        "enabled": true,
+        "endpointEnv": "",
+        "parameters": {
+          "temperature": 0.2,
+          "max_tokens": 1024
+        }
+      },
+      "service": {
+        "id": "payrun",
+        "name": "Payrun service",
+        "domain": "Payroll",
+        "enabled": true,
+        "baseUrlEnv": "PAYRUN_API_BASE_URL",
+        "method": "GET",
+        "path": "/payruns"
+      },
+      "attachedServices": [
+        {
+          "id": "payrun-history",
+          "name": "Payrun history",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns/history"
+        }
+      ],
+      "modelOptions": [
+        {
+          "id": "poc-demo",
+          "name": "POC demo model (configuration only)",
+          "provider": "demo",
+          "modelId": "demo/no-runtime",
+          "enabled": true,
+          "endpointEnv": "",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          }
+        }
+      ],
+      "serviceOptions": [
+        {
+          "id": "payrun",
+          "name": "Payrun service",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns"
+        },
+        {
+          "id": "payrun-history",
+          "name": "Payrun history",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns/history"
+        },
+        {
+          "id": "employee-details",
+          "name": "Employee details",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMPLOYEE_API_BASE_URL",
+          "method": "GET",
+          "path": "/employees/{employee_id}/payrun"
+        },
+        {
+          "id": "diagnostics",
+          "name": "Service diagnostics",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
+          "method": "GET",
+          "path": "/diagnostics/logs"
+        }
       ]
     },
     {
-      "id": "summarizer",
-      "name": "Summarizer Agent",
-      "domain": "Payroll",
-      "icon": "bi-file-earmark-text",
-      "runtime": "OFFLINE",
-      "description": "Summarizes a payrun or employee record so admins get the key numbers at a glance.",
-      "instructions": "Fetch the employee and payrun details for the selected record and produce a short summary covering rate changes, hours, earnings, and taxes. Keep it to a few bullet points.",
-      "model": "llama-3.1-70b",
-      "questions": [
-        "Summarize this payrun.",
-        "Summarize this employee's earnings and taxes."
+      "id": "failure-investigation",
+      "name": "Failure Investigation",
+      "version": 1,
+      "description": "Prepare diagnostic evidence for engineering review.",
+      "config": {
+        "description": "Prepare diagnostic evidence for engineering review.",
+        "instructions": "Collect diagnostic evidence from approved service logs. Do not modify code or retry production payments.",
+        "questions": [
+          "What explains this failure?"
+        ],
+        "domain": "Payroll",
+        "model": "poc-demo",
+        "service": "payrun",
+        "page": "payrun",
+        "attached_services": [
+          "diagnostics"
+        ],
+        "created_by": "poc-user",
+        "roles": [],
+        "capabilities": {
+          "alerts": {
+            "enabled": true,
+            "severity": "warning"
+          },
+          "webhooks": {
+            "enabled": false,
+            "url": ""
+          }
+        }
+      },
+      "modelConfig": {
+        "id": "poc-demo",
+        "name": "POC demo model (configuration only)",
+        "provider": "demo",
+        "modelId": "demo/no-runtime",
+        "enabled": true,
+        "endpointEnv": "",
+        "parameters": {
+          "temperature": 0.2,
+          "max_tokens": 1024
+        }
+      },
+      "service": {
+        "id": "payrun",
+        "name": "Payrun service",
+        "domain": "Payroll",
+        "enabled": true,
+        "baseUrlEnv": "PAYRUN_API_BASE_URL",
+        "method": "GET",
+        "path": "/payruns"
+      },
+      "attachedServices": [
+        {
+          "id": "diagnostics",
+          "name": "Service diagnostics",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
+          "method": "GET",
+          "path": "/diagnostics/logs"
+        }
+      ],
+      "modelOptions": [
+        {
+          "id": "poc-demo",
+          "name": "POC demo model (configuration only)",
+          "provider": "demo",
+          "modelId": "demo/no-runtime",
+          "enabled": true,
+          "endpointEnv": "",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          }
+        }
+      ],
+      "serviceOptions": [
+        {
+          "id": "payrun",
+          "name": "Payrun service",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns"
+        },
+        {
+          "id": "payrun-history",
+          "name": "Payrun history",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns/history"
+        },
+        {
+          "id": "employee-details",
+          "name": "Employee details",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMPLOYEE_API_BASE_URL",
+          "method": "GET",
+          "path": "/employees/{employee_id}/payrun"
+        },
+        {
+          "id": "diagnostics",
+          "name": "Service diagnostics",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
+          "method": "GET",
+          "path": "/diagnostics/logs"
+        }
       ]
     },
     {
       "id": "general-query",
-      "name": "General Query Agent",
-      "domain": "Payroll",
-      "icon": "bi-chat-dots",
-      "runtime": "INTERACTIVE",
-      "description": "Answers everyday payroll questions like pay dates, rates, and hours.",
-      "instructions": "Answer employee and admin questions about payroll using the current payrun data. Be concise, cite the specific payrun or employee record you used, and say when you are not sure.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "When is the next payroll date?",
-        "What is the overall payrun amount this cycle?"
+      "name": "General Query",
+      "version": 1,
+      "description": "Answer questions using attached payroll services.",
+      "config": {
+        "description": "Answer questions using attached payroll services.",
+        "instructions": "Answer from available payroll context and attached service data. State when information is missing.",
+        "questions": [
+          "What is the status of this payrun?"
+        ],
+        "domain": "Payroll",
+        "model": "poc-demo",
+        "service": "payrun",
+        "page": "payrun",
+        "attached_services": [
+          "payrun-history"
+        ],
+        "created_by": "poc-user",
+        "roles": [],
+        "capabilities": {
+          "alerts": {
+            "enabled": false,
+            "severity": "warning"
+          },
+          "webhooks": {
+            "enabled": false,
+            "url": ""
+          }
+        }
+      },
+      "modelConfig": {
+        "id": "poc-demo",
+        "name": "POC demo model (configuration only)",
+        "provider": "demo",
+        "modelId": "demo/no-runtime",
+        "enabled": true,
+        "endpointEnv": "",
+        "parameters": {
+          "temperature": 0.2,
+          "max_tokens": 1024
+        }
+      },
+      "service": {
+        "id": "payrun",
+        "name": "Payrun service",
+        "domain": "Payroll",
+        "enabled": true,
+        "baseUrlEnv": "PAYRUN_API_BASE_URL",
+        "method": "GET",
+        "path": "/payruns"
+      },
+      "attachedServices": [
+        {
+          "id": "payrun-history",
+          "name": "Payrun history",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns/history"
+        }
+      ],
+      "modelOptions": [
+        {
+          "id": "poc-demo",
+          "name": "POC demo model (configuration only)",
+          "provider": "demo",
+          "modelId": "demo/no-runtime",
+          "enabled": true,
+          "endpointEnv": "",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          }
+        }
+      ],
+      "serviceOptions": [
+        {
+          "id": "payrun",
+          "name": "Payrun service",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns"
+        },
+        {
+          "id": "payrun-history",
+          "name": "Payrun history",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns/history"
+        },
+        {
+          "id": "employee-details",
+          "name": "Employee details",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMPLOYEE_API_BASE_URL",
+          "method": "GET",
+          "path": "/employees/{employee_id}/payrun"
+        },
+        {
+          "id": "diagnostics",
+          "name": "Service diagnostics",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
+          "method": "GET",
+          "path": "/diagnostics/logs"
+        }
       ]
     },
     {
-      "id": "custom",
-      "name": "Custom Agent",
-      "domain": "Payroll",
-      "icon": "bi-sliders",
-      "runtime": "CONFIGURABLE",
-      "description": "Start from a blank agent and write your own instructions.",
-      "instructions": "",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        ""
-      ]
-    },
-    {
-      "id": "hr-policy",
-      "name": "HR Policy Agent",
-      "domain": "HR",
-      "icon": "bi-people",
-      "runtime": "INTERACTIVE",
-      "description": "Answers HR policy questions like leave, conduct, and onboarding.",
-      "instructions": "Answer employee questions about HR policies using the company handbook. Be concise and say when a question needs to go to HR directly.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What is the company dress code?",
-        "How do I report a workplace issue?"
-      ]
-    },
-    {
-      "id": "hr-general",
-      "name": "General Agent",
-      "domain": "HR",
-      "icon": "bi-chat-dots",
-      "runtime": "INTERACTIVE",
-      "description": "Answers general questions using public knowledge, for anything outside HR policy.",
-      "instructions": "Answer general questions as helpfully as possible using public knowledge. Say clearly when a question is really an HR policy question that the HR Policy Agent should handle instead.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What is a typical PTO policy?",
-        "What's a 401k?"
-      ]
-    },
-    {
-      "id": "insurance-policy",
-      "name": "Policy Agent",
-      "domain": "Insurance",
-      "icon": "bi-shield-check",
-      "runtime": "INTERACTIVE",
-      "description": "Answers questions about coverage, claims, and policy terms.",
-      "instructions": "Answer employee questions about their insurance policy, coverage, and claims using the plan documents. Be concise and cite the relevant plan section when possible.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What does my plan cover?",
-        "How do I file a claim?"
-      ]
-    },
-    {
-      "id": "insurance-general",
-      "name": "General Agent",
-      "domain": "Insurance",
-      "icon": "bi-chat-dots",
-      "runtime": "INTERACTIVE",
-      "description": "Answers general insurance questions using public knowledge.",
-      "instructions": "Answer general insurance questions as helpfully as possible using public knowledge. Say clearly when a question is plan-specific and should go to the Policy Agent instead.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What is a deductible?",
-        "What is the difference between HMO and PPO?"
-      ]
-    },
-    {
-      "id": "benefits-agent",
-      "name": "Benefits Agent",
-      "domain": "Benefits",
-      "icon": "bi-heart-pulse",
-      "runtime": "INTERACTIVE",
-      "description": "Answers questions about stock matching, HSA, and other benefits.",
-      "instructions": "Answer employee questions about benefits such as stock purchase matching, HSA/FSA accounts, and caregiving policies using the benefits guide. Be concise and cite the relevant section.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "How does stock matching work?",
-        "What can I use my HSA for?"
-      ]
-    },
-    {
-      "id": "benefits-general",
-      "name": "General Agent",
-      "domain": "Benefits",
-      "icon": "bi-chat-dots",
-      "runtime": "INTERACTIVE",
-      "description": "Answers general benefits questions using public knowledge.",
-      "instructions": "Answer general benefits questions as helpfully as possible using public knowledge. Say clearly when a question is plan-specific and should go to the Benefits Agent instead.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What is an HSA?",
-        "What is typical employer stock matching?"
-      ]
-    },
-    {
-      "id": "timeoff-agent",
-      "name": "Time Off Agent",
-      "domain": "Time off",
-      "icon": "bi-calendar-week",
-      "runtime": "INTERACTIVE",
-      "description": "Answers questions about PTO balances, requests, and time-off policy.",
-      "instructions": "Answer employee questions about their PTO balance, how to request time off, and the company's time-off policy. Be concise and cite the relevant policy section.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "How much PTO do I have left?",
-        "How do I request time off?"
-      ]
-    },
-    {
-      "id": "timeoff-general",
-      "name": "General Agent",
-      "domain": "Time off",
-      "icon": "bi-chat-dots",
-      "runtime": "INTERACTIVE",
-      "description": "Answers general time-off questions using public knowledge.",
-      "instructions": "Answer general time-off questions as helpfully as possible using public knowledge. Say clearly when a question is policy-specific and should go to the Time Off Agent instead.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What is a typical PTO accrual rate?",
-        "What is the difference between PTO and sick leave?"
+      "id": "summarizer",
+      "name": "Summarizer",
+      "version": 1,
+      "description": "Produce a structured employee or payrun summary.",
+      "config": {
+        "description": "Produce a structured employee or payrun summary.",
+        "instructions": "Summarize the supplied payroll data, highlighting totals, changes, and unresolved items.",
+        "questions": [
+          "Summarize this payrun."
+        ],
+        "domain": "Payroll",
+        "model": "poc-demo",
+        "service": "payrun",
+        "page": "payrun",
+        "attached_services": [
+          "employee-details"
+        ],
+        "created_by": "poc-user",
+        "roles": [],
+        "capabilities": {
+          "alerts": {
+            "enabled": false,
+            "severity": "warning"
+          },
+          "webhooks": {
+            "enabled": false,
+            "url": ""
+          }
+        }
+      },
+      "modelConfig": {
+        "id": "poc-demo",
+        "name": "POC demo model (configuration only)",
+        "provider": "demo",
+        "modelId": "demo/no-runtime",
+        "enabled": true,
+        "endpointEnv": "",
+        "parameters": {
+          "temperature": 0.2,
+          "max_tokens": 1024
+        }
+      },
+      "service": {
+        "id": "payrun",
+        "name": "Payrun service",
+        "domain": "Payroll",
+        "enabled": true,
+        "baseUrlEnv": "PAYRUN_API_BASE_URL",
+        "method": "GET",
+        "path": "/payruns"
+      },
+      "attachedServices": [
+        {
+          "id": "employee-details",
+          "name": "Employee details",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMPLOYEE_API_BASE_URL",
+          "method": "GET",
+          "path": "/employees/{employee_id}/payrun"
+        }
+      ],
+      "modelOptions": [
+        {
+          "id": "poc-demo",
+          "name": "POC demo model (configuration only)",
+          "provider": "demo",
+          "modelId": "demo/no-runtime",
+          "enabled": true,
+          "endpointEnv": "",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          }
+        }
+      ],
+      "serviceOptions": [
+        {
+          "id": "payrun",
+          "name": "Payrun service",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns"
+        },
+        {
+          "id": "payrun-history",
+          "name": "Payrun history",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "PAYRUN_API_BASE_URL",
+          "method": "GET",
+          "path": "/payruns/history"
+        },
+        {
+          "id": "employee-details",
+          "name": "Employee details",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMPLOYEE_API_BASE_URL",
+          "method": "GET",
+          "path": "/employees/{employee_id}/payrun"
+        },
+        {
+          "id": "diagnostics",
+          "name": "Service diagnostics",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
+          "method": "GET",
+          "path": "/diagnostics/logs"
+        }
       ]
     }
   ],
-  "models": [
-    {
-      "id": "qwen-2.5-72b",
-      "label": "Qwen 2.5 · 72B (open source)"
-    },
-    {
-      "id": "llama-3.1-70b",
-      "label": "Llama 3.1 · 70B (open source)"
-    },
-    {
-      "id": "mistral-large",
-      "label": "Mistral Large"
-    },
-    {
-      "id": "bedrock-claude",
-      "label": "AWS Bedrock · Claude"
-    }
-  ],
-  "tools": [
-    {
-      "id": "payrun-api",
-      "name": "Payrun API"
-    },
-    {
-      "id": "employee-directory-api",
-      "name": "Employee Directory API"
-    },
-    {
-      "id": "benefits-api",
-      "name": "Benefits API"
-    }
-  ],
-  "agents": [
-    {
-      "id": "1",
-      "name": "Anomaly Detection Agent",
-      "domain": "Payroll",
-      "description": "Watches payrun changes in real time and flags amounts that look off versus history.",
-      "instructions": "On every payrun change, compare the new amount against the employee's historical payruns. Flag any change greater than the configured threshold (default 2000) and summarize what changed and why it looks unusual.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "Why did this payrun amount change?",
-        "Show me the flagged changes for this payrun."
-      ]
-    },
-    {
-      "id": "2",
-      "name": "Summarizer Agent",
-      "domain": "Payroll",
-      "description": "Summarizes a payrun or employee record so admins get the key numbers at a glance.",
-      "instructions": "Fetch the employee and payrun details for the selected record and produce a short summary covering rate changes, hours, earnings, and taxes. Keep it to a few bullet points.",
-      "model": "llama-3.1-70b",
-      "questions": [
-        "Summarize this payrun.",
-        "Summarize this employee's earnings and taxes."
-      ]
-    },
-    {
-      "id": "3",
-      "name": "General Query Agent",
-      "domain": "Payroll",
-      "description": "Answers everyday payroll questions like pay dates, rates, and hours.",
-      "instructions": "Answer employee and admin questions about payroll using the current payrun data. Be concise, cite the specific payrun or employee record you used, and say when you are not sure.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "When is the next payroll date?",
-        "What is the overall payrun amount this cycle?"
-      ]
-    },
-    {
-      "id": "4",
-      "name": "HR Policy Agent",
-      "domain": "HR",
-      "description": "Answers HR policy questions like leave, conduct, and onboarding.",
-      "instructions": "Answer employee questions about HR policies using the company handbook. Be concise and say when a question needs to go to HR directly.",
-      "model": "qwen-2.5-72b",
-      "questions": [
-        "What is the company dress code?",
-        "How do I report a workplace issue?"
-      ]
-    }
-  ]
+  "agents": []
 }

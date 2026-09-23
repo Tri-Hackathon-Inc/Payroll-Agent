@@ -1,14 +1,15 @@
 import json
 import shutil
+from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from django.conf import settings
+from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
 from . import services
 from .models import Agent, Business, Template
-from .schema import schema
 
 
 class AgentWorkflowTests(TestCase):
@@ -28,6 +29,32 @@ class AgentWorkflowTests(TestCase):
         return services.create_agent(
             business, "anomaly-detection", " Payroll review ", config or {}
         )
+
+    def test_business_provisioning_is_repeatable_and_preserves_domain(self):
+        output = StringIO()
+        for _ in range(2):
+            call_command(
+                "create_business",
+                "new-payroll",
+                label="New Payroll",
+                domain="Payroll",
+                stdout=output,
+            )
+        self.assertEqual(Business.objects.filter(name="new-payroll").count(), 1)
+        self.assertIn("Created business", output.getvalue())
+        self.assertIn("Existing business", output.getvalue())
+        with self.assertRaises(CommandError):
+            call_command(
+                "create_business", "new-payroll", label="HR", domain="HR", stdout=output
+            )
+        self.assertEqual(Business.objects.get(pk="new-payroll").domain, "Payroll")
+
+    def test_business_provisioning_rejects_invalid_slug(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "create_business", "invalid business", label="Invalid", domain="Payroll"
+            )
+        self.assertFalse(Business.objects.filter(name="invalid business").exists())
 
     def test_template_details_contain_form_defaults_and_options(self):
         template = services.get_template("anomaly-detection")
@@ -145,42 +172,6 @@ class AgentWorkflowTests(TestCase):
         saved = Agent.objects.get(pk=agent["id"])
         self.assertEqual(saved.template_version, 1)
         self.assertEqual(saved.config, agent["config"])
-
-    def test_strawberry_exposes_only_six_operations_and_supports_mutations(self):
-        graphql_schema = schema._schema
-        self.assertEqual(
-            set(graphql_schema.query_type.fields),
-            {"templates", "template", "businesses", "businessAgents"},
-        )
-        self.assertEqual(
-            set(graphql_schema.mutation_type.fields), {"createAgent", "updateAgent"}
-        )
-        result = schema.execute_sync(
-            """mutation {
-          createAgent(input: {businessName: "payroll-services", templateId: "summarizer",
-                             name: "Summary", config: {instructions: "Summarize payruns"}}) {
-            id businessName templateId config
-          }
-        }"""
-        )
-        self.assertIsNone(result.errors)
-        agent = result.data["createAgent"]
-        result = schema.execute_sync(
-            """mutation Update($input: UpdateAgentInput!) {
-          updateAgent(input: $input) { id name config }
-        }""",
-            variable_values={
-                "input": {
-                    "id": agent["id"],
-                    "businessName": "payroll-services",
-                    "name": "Updated summary",
-                    "config": {"questions": []},
-                }
-            },
-        )
-        self.assertIsNone(result.errors)
-        self.assertEqual(result.data["updateAgent"]["config"]["questions"], [])
-        self.assertEqual(result.data["updateAgent"]["name"], "Updated summary")
 
     def test_no_django_http_routes(self):
         self.assertFalse(hasattr(settings, "ROOT_URLCONF"))

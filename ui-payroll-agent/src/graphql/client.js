@@ -5,7 +5,12 @@ export async function graphqlRequest(query, variables) {
     body: JSON.stringify({ query, variables }),
   })
   const payload = await response.json().catch(() => ({}))
-  if (payload.errors?.length) throw new Error(payload.errors[0].message)
+  if (payload.errors?.length) {
+    const error = new Error(payload.errors[0].message)
+    error.code = payload.errors[0].extensions?.code
+    throw error
+  }
   if (!response.ok) throw new Error(`Request failed (${response.status}).`)
+  if (!payload.data) throw new Error('The server did not return GraphQL data.')
   return payload.data
 }

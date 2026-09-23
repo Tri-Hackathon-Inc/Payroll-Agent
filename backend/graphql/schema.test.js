@@ -69,21 +69,21 @@ server.wait_for_termination()
     contextValue: { dataSources: { grpc }, context: {} } });
 
   assert.deepEqual(Object.keys(schema.getQueryType().getFields()).sort(),
-    ['businessAgents', 'businesses', 'template', 'templates']);
+    ['getBusinessAgents', 'getBusinesses', 'getTemplate', 'getTemplates']);
   assert.deepEqual(Object.keys(schema.getMutationType().getFields()).sort(), ['createAgent', 'updateAgent']);
 
-  const catalog = await execute(`{ businesses { name label domain }
-    templates { id config }
-    template(id: "anomaly-detection") {
+  const catalog = await execute(`{ getBusinesses { name label domain }
+    getTemplates { id config }
+    getTemplate(id: "anomaly-detection") {
       config modelConfig { id modelId } service { id baseUrlEnv }
       modelOptions { id enabled } serviceOptions { id domain }
     }
   }`);
   assert.equal(catalog.errors, undefined);
-  assert.equal(catalog.data.templates.length, 4);
-  assert.ok(catalog.data.businesses.some(item => item.name === 'payroll-services'));
-  assert.ok(catalog.data.template.modelOptions.length);
-  assert.ok(catalog.data.template.serviceOptions.length);
+  assert.equal(catalog.data.getTemplates.length, 4);
+  assert.ok(catalog.data.getBusinesses.some(item => item.name === 'payroll-services'));
+  assert.ok(catalog.data.getTemplate.modelOptions.length);
+  assert.ok(catalog.data.getTemplate.serviceOptions.length);
 
   const create = `mutation Create($input: CreateAgentInput!) {
     createAgent(input: $input) { id name businessName templateId templateVersion config createdAt }
@@ -112,20 +112,20 @@ server.wait_for_termination()
   assert.deepEqual(updated.data.updateAgent.config.questions, []);
 
   const listed = await execute(`{
-    businessAgents(businessName: "payroll-services") { id name config }
-    other: businessAgents(businessName: "other-payroll") { id }
+    getBusinessAgents(businessName: "payroll-services") { id name config }
+    other: getBusinessAgents(businessName: "other-payroll") { id }
   }`);
   assert.equal(listed.errors, undefined);
-  assert.equal(listed.data.businessAgents[0].name, 'Updated review');
+  assert.equal(listed.data.getBusinessAgents[0].name, 'Updated review');
   assert.deepEqual(listed.data.other, []);
 
   for (const config of [[], { model: 'missing' }, { capabilities: { webhooks: { url: 'http://example.com' } } }]) {
     const invalid = await execute(create, { input: { ...input, config } });
     assert.equal(invalid.errors[0].extensions.code, 'BAD_USER_INPUT');
   }
-  const missing = await execute('{ businessAgents(businessName: "missing") { id } }');
+  const missing = await execute('{ getBusinessAgents(businessName: "missing") { id } }');
   assert.equal(missing.errors[0].extensions.code, 'NOT_FOUND');
-  const missingTemplate = await execute('{ template(id: "missing") { id } }');
+  const missingTemplate = await execute('{ getTemplate(id: "missing") { id } }');
   assert.equal(missingTemplate.errors[0].extensions.code, 'NOT_FOUND');
   const wrongBusiness = await execute(`mutation Update($input: UpdateAgentInput!) {
     updateAgent(input: $input) { id }

@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir -r requirements.lock
 
 COPY . .
 
-# Selected only by docker-compose.test.yaml.
+# gRPC runtime selected by the local and temporary test Compose stacks.
 FROM base AS api-test
 EXPOSE 50051
 ENTRYPOINT ["sh", "/app/docker-entrypoint.test.sh"]

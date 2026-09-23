@@ -4,16 +4,17 @@ import { graphqlMock } from './mock/graphqlMock.js'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '')
-  const target = env.API_PROXY_TARGET || 'http://127.0.0.1:8000'
-  const useBackend = env.GRAPHQL_MODE === 'backend'
-  const proxy = (path) => ({ [path]: { target, changeOrigin: true } })
+  const target = env.API_PROXY_TARGET || 'http://127.0.0.1:4000'
+  const useBackend = env.GRAPHQL_MODE !== 'mock'
 
   return {
     plugins: [react(), ...(useBackend ? [] : [graphqlMock()])],
     server: {
       host: '0.0.0.0',
       port: 5173,
-      proxy: { ...proxy('/api'), ...(useBackend && proxy('/graphql')) },
+      proxy: useBackend ? {
+        '/graphql': { target, changeOrigin: true, rewrite: () => '/' },
+      } : {},
     },
   }
 })

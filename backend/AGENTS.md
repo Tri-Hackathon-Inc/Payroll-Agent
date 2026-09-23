@@ -9,12 +9,12 @@ routes; names such as “list-template” refer to service operations.
 
 | Capability | gRPC operation | GraphQL operation |
 | --- | --- | --- |
-| List available templates | `ListTemplates` | `templates` |
-| Get template properties and configuration choices | `GetTemplate` | `template(id)` |
+| List available templates | `ListTemplates` | `getTemplates` |
+| Get template properties and configuration choices | `GetTemplate` | `getTemplate(id)` |
 | Create a configured agent for a business | `CreateAgent` | `createAgent(input)` |
 | Update a configured agent within its business | `UpdateAgent` | `updateAgent(input)` |
-| List businesses | `ListBusinesses` | `businesses` |
-| List saved agents for one business | `GetBusinessAgents` | `businessAgents(businessName)` |
+| List businesses | `ListBusinesses` | `getBusinesses` |
+| List saved agents for one business | `GetBusinessAgents` | `getBusinessAgents(businessName)` |
 
 These are the six public operations. Model and external API choices are included
 in template details rather than exposed as separate list operations.
@@ -23,7 +23,7 @@ in template details rather than exposed as separate list operations.
 
 - **Business:** a named group of agents with a domain. Migrations seed Payroll
   Services with the `Payroll` domain. Additional businesses can be provisioned
-  through Django's ORM or data migrations; there is no business creation API.
+  with the `create_business` management command; there is no business creation API.
 - **Template:** reusable defaults, such as Anomaly Detection, Summarizer, General
   Query, or Failure Investigation. A template contains instructions, starting
   questions, model configuration, primary and attached external APIs, page
@@ -35,24 +35,25 @@ in template details rather than exposed as separate list operations.
 `GetTemplate` supplies `config` defaults, resolved `model_config`, `service`,
 `attached_services`, and enabled `model_options` and `service_options`. Service
 options match the template's domain. The UI can use these properties to populate
-its configurable form. The existing UI mock is not yet wired to this contract.
+its configurable form. The React UI uses this contract in both backend and mock modes;
+see [README.md](README.md) for the business/agent walkthrough.
 
 ## Backend flow
 
 ```mermaid
 flowchart TD
-    UI["UI: select business"] --> Businesses["ListBusinesses / businesses"]
+    UI["UI: select business"] --> Businesses["ListBusinesses / getBusinesses"]
     Businesses --> Business["Payroll Services"]
-    Business --> List["ListTemplates / templates"]
+    Business --> List["ListTemplates / getTemplates"]
     List --> Choose["Choose template: Anomaly Detection"]
-    Choose --> Detail["GetTemplate / template(id)"]
+    Choose --> Detail["GetTemplate / getTemplate(id)"]
     Config["Template defaults: model, external APIs, alerts, webhooks"] --> Detail
     Detail --> Form["UI: configurable form with defaults and choices"]
     Form --> Input["User edits name and configuration"]
     Input --> Create["CreateAgent / createAgent(input)"]
     Create --> Validate["Merge configuration and validate business domain and references"]
     Validate --> DB[("SQLite: businesses and saved agents")]
-    Business --> Agents["GetBusinessAgents / businessAgents(businessName)"]
+    Business --> Agents["GetBusinessAgents / getBusinessAgents(businessName)"]
     Agents -->|Read agents for selected business| DB
     Agents --> Edit["UI: edit a saved agent"]
     Edit --> Update["UpdateAgent / updateAgent(input)"]
@@ -73,9 +74,8 @@ flowchart LR
     Sync --> DB
 ```
 
-`registry/schema.py` also provides a Python Strawberry schema calling the same
-service functions directly. It is not mounted on an HTTP route. Apollo is the
-local GraphQL host; it does not add REST operations.
+Apollo hosts the GraphQL schema in `graphql/schema.js` and forwards operations
+to gRPC. Django provides persistence and shared service logic, with no HTTP routes.
 
 ## Configuration and persistence rules
 
@@ -142,7 +142,6 @@ also need a runtime settings mount (or an externally supplied settings module).
 | `registry/catalog.py`, `registry/configuration.py` | JSON loading and validation |
 | `registry/proto/templates.proto`, `registry/servicers.py` | gRPC contract and implementation |
 | `graphql/schema.js`, `graphql/client.js` | GraphQL contract and gRPC adapter |
-| `registry/schema.py` | Python GraphQL adapter |
 | `registry/test_agents.py`, `graphql/schema.test.js` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
 
 From the repository root, after installing `backend/requirements.lock` into a
@@ -170,6 +169,6 @@ npm test
 
 The integration test starts its own gRPC service and temporary database. It uses
 `.venv/bin/python` by default; set `PYTHON` to use another interpreter. Node 22+
-is required for the Apollo host. See `graphql/README.md` for request examples and
-the temporary Docker stack. That stack discards its database when stopped;
+is required for the Apollo host. See [README.md](README.md) for request examples and
+container setup, including the temporary Docker stack. That stack discards its database when stopped;
 normal file-backed SQLite retains agents across service restarts.

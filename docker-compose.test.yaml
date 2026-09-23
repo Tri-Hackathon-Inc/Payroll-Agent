@@ -1,0 +1,33 @@
+# Temporary local API testing only. Run explicitly with -f docker-compose.test.yaml.
+name: payroll-api-test
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: api-test
+    environment:
+      DATABASE_PATH: /tmp/template_catalog.sqlite3
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./backend/templates:/app/templates:ro
+      - ./backend/local_server:/app/local_server:ro
+
+  apollo:
+    build:
+      context: ./backend
+      dockerfile: graphql/Dockerfile.test
+    environment:
+      API_TEST_MODE: "true"
+      NODE_ENV: development
+      GRPC_ADDRESS: backend:50051
+      HOST: 0.0.0.0
+      PORT: "4000"
+    ports:
+      - "127.0.0.1:4000:4000"
+    volumes:
+      - ./backend/local_server:/app/local_server:ro
+    depends_on:
+      - backend
