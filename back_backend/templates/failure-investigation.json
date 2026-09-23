@@ -1,0 +1,32 @@
+{
+  "id": "failure-investigation",
+  "name": "Failure Investigation",
+  "version": 1,
+  "description": "Prepare diagnostic evidence for engineering review.",
+  "config": {
+    "description": "Prepare diagnostic evidence for engineering review.",
+    "instructions": "Collect diagnostic evidence from approved service logs. Do not modify code or retry production payments.",
+    "questions": [
+      "What explains this failure?"
+    ],
+    "domain": "Payroll",
+    "model": "poc-demo",
+    "service": "payrun",
+    "page": "payrun",
+    "attached_services": [
+      "diagnostics"
+    ],
+    "created_by": "poc-user",
+    "roles": [],
+    "capabilities": {
+      "alerts": {
+        "enabled": true,
+        "severity": "warning"
+      },
+      "webhooks": {
+        "enabled": false,
+        "url": ""
+      }
+    }
+  }
+}

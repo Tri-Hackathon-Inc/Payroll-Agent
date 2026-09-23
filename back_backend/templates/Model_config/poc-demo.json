@@ -1,0 +1,12 @@
+{
+  "id": "poc-demo",
+  "name": "POC demo model (configuration only)",
+  "provider": "demo",
+  "model_id": "demo/no-runtime",
+  "enabled": true,
+  "endpoint_env": "",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 1024
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "payrun",
+    "name": "Payrun service",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "PAYRUN_API_BASE_URL",
+    "method": "GET",
+    "path": "/payruns"
+  },
+  {
+    "id": "payrun-history",
+    "name": "Payrun history",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "PAYRUN_API_BASE_URL",
+    "method": "GET",
+    "path": "/payruns/history"
+  },
+  {
+    "id": "employee-details",
+    "name": "Employee details",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "EMPLOYEE_API_BASE_URL",
+    "method": "GET",
+    "path": "/employees/{employee_id}/payrun"
+  },
+  {
+    "id": "diagnostics",
+    "name": "Service diagnostics",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "DIAGNOSTICS_API_BASE_URL",
+    "method": "GET",
+    "path": "/diagnostics/logs"
+  }
+]

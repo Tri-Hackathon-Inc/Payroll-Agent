@@ -1,0 +1,32 @@
+{
+  "id": "general-query",
+  "name": "General Query",
+  "version": 1,
+  "description": "Answer questions using attached payroll services.",
+  "config": {
+    "description": "Answer questions using attached payroll services.",
+    "instructions": "Answer from available payroll context and attached service data. State when information is missing.",
+    "questions": [
+      "What is the status of this payrun?"
+    ],
+    "domain": "Payroll",
+    "model": "poc-demo",
+    "service": "payrun",
+    "page": "payrun",
+    "attached_services": [
+      "payrun-history"
+    ],
+    "created_by": "poc-user",
+    "roles": [],
+    "capabilities": {
+      "alerts": {
+        "enabled": false,
+        "severity": "warning"
+      },
+      "webhooks": {
+        "enabled": false,
+        "url": ""
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "summarizer",
+  "name": "Summarizer",
+  "version": 1,
+  "description": "Produce a structured employee or payrun summary.",
+  "config": {
+    "description": "Produce a structured employee or payrun summary.",
+    "instructions": "Summarize the supplied payroll data, highlighting totals, changes, and unresolved items.",
+    "questions": [
+      "Summarize this payrun."
+    ],
+    "domain": "Payroll",
+    "model": "poc-demo",
+    "service": "payrun",
+    "page": "payrun",
+    "attached_services": [
+      "employee-details"
+    ],
+    "created_by": "poc-user",
+    "roles": [],
+    "capabilities": {
+      "alerts": {
+        "enabled": false,
+        "severity": "warning"
+      },
+      "webhooks": {
+        "enabled": false,
+        "url": ""
+      }
+    }
+  }
+}

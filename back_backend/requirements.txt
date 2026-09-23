@@ -1,0 +1,4 @@
+Django>=5.2,<5.3
+strawberry-graphql>=0.324,<0.325
+grpcio>=1.78,<1.79
+grpcio-tools>=1.78,<1.79

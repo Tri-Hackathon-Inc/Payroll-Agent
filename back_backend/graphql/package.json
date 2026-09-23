@@ -1,0 +1,14 @@
+{
+  "name": "payroll-catalog-graphql",
+  "private": true,
+  "version": "0.1.0",
+  "main": "schema.js",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "@apollo/server": "^5.0.0",
+    "@grpc/grpc-js": "^1.12.0",
+    "@grpc/proto-loader": "^0.7.13",
+    "graphql": "^16.11.0"
+  }
+}

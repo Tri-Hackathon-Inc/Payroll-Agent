@@ -1,0 +1,32 @@
+{
+  "id": "anomaly-detection",
+  "name": "Anomaly Detection",
+  "version": 1,
+  "description": "Flag unusual payments against historical payrun data.",
+  "config": {
+    "description": "Flag unusual payments against historical payrun data.",
+    "instructions": "Compare payrun inputs against history. Explain unusual values and evidence. Do not change payroll.",
+    "questions": [
+      "Which payments need review?"
+    ],
+    "domain": "Payroll",
+    "model": "poc-demo",
+    "service": "payrun",
+    "page": "payrun",
+    "attached_services": [
+      "payrun-history"
+    ],
+    "created_by": "poc-user",
+    "roles": [],
+    "capabilities": {
+      "alerts": {
+        "enabled": true,
+        "severity": "warning"
+      },
+      "webhooks": {
+        "enabled": false,
+        "url": ""
+      }
+    }
+  }
+}

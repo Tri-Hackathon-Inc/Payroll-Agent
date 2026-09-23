@@ -1,0 +1,24 @@
+syntax = "proto3";
+package payroll.templates.v1;
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+service TemplateCatalog {
+  rpc ListTemplates(google.protobuf.Empty) returns (TemplateList);
+  rpc GetTemplate(TemplateId) returns (Template);
+  rpc ListModelConfigs(google.protobuf.Empty) returns (ConfigurationList);
+  rpc ListServices(google.protobuf.Empty) returns (ConfigurationList);
+}
+message TemplateId { string id = 1; }
+message Template {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  uint32 version = 4;
+  google.protobuf.Struct config = 5;
+  google.protobuf.Struct model_config = 6;
+  google.protobuf.Struct service = 7;
+  repeated google.protobuf.Struct attached_services = 8;
+}
+message TemplateList { repeated Template templates = 1; }
+message ConfigurationList { repeated google.protobuf.Struct items = 1; }
