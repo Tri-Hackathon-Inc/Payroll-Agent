@@ -34,9 +34,7 @@ local_server/
   apollo-settings.json
 ```
 
-This folder is ignored by Git and excluded from Docker build contexts. Docker
-files remain outside it. Each checkout must supply its own local folder; it will
-not be available from a clone. Django defaults to `local_server.studio.settings`,
+This folder is tracked in Git and included in fresh clones. It remains excluded from Docker build contexts and is mounted read-only at runtime. Keep credentials in environment variables; the committed settings contain local development defaults only. Django defaults to `local_server.studio.settings`,
 or uses an explicit `DJANGO_SETTINGS_MODULE`. The integration tests require
 these settings too. Apollo defaults are in `apollo-settings.json`; `GRPC_ADDRESS`,
 `HOST`, and `PORT` override them.
@@ -47,7 +45,7 @@ the default catalog directory. The supplied local setup already does this.
 ## Run in containers
 
 Install Docker with Compose v2 and start the Docker engine. Host Python and Node
-are not required. Provision the local settings above, then run these commands
+are not required. The local settings are included in the checkout. Run these commands
 from the **repository root**:
 
 ```bash
@@ -378,7 +376,7 @@ docker compose -f docker-compose.local.yaml exec backend python manage.py test r
 
 ## Troubleshooting
 
-- **Missing local settings:** provision `backend/local_server/` first. Compose
+- **Missing local settings:** pull the latest branch containing `backend/local_server/`. Compose
   refuses to create a missing settings directory.
 - **`docker: 'compose' is not a docker command` on WSL:** start Docker Desktop
   on Windows. In **Settings → General**, enable the WSL 2 engine if the option

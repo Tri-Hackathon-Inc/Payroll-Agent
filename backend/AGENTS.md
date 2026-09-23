@@ -110,10 +110,10 @@ The backend saves configuration. Model execution, external API calls, alert
 sending, and webhook delivery are not implemented. Business filtering and role
 metadata do not provide authentication or authorization.
 
-## Local server setup (not committed)
+## Local server setup (tracked development defaults)
 
 `backend/local_server/` contains all local Django server settings and the Apollo
-host. It is excluded by both `backend/.gitignore` and `backend/.dockerignore`.
+host. It is tracked in Git but excluded by `backend/.dockerignore`. Keep credentials in environment variables.
 Dockerfiles and Compose files stay outside this folder.
 
 - `local_server/studio/settings.py`: Django settings and database/catalog paths.
@@ -123,9 +123,7 @@ Dockerfiles and Compose files stay outside this folder.
 
 `manage.py` and the integration test default to
 `local_server.studio.settings`; `DJANGO_SETTINGS_MODULE` can select another
-provided settings module. A fresh checkout must provision local settings before
-running commands or tests. The ignored folder is intentionally not distributed
-with the source. `npm start` in `backend/graphql/` uses the local Apollo host;
+provided settings module. A fresh checkout includes the development settings needed to run commands and tests. `npm start` in `backend/graphql/` uses the local Apollo host;
 set `API_TEST_MODE=true`. Apollo's environment variables override its JSON
 settings.
 
@@ -145,7 +143,7 @@ also need a runtime settings mount (or an externally supplied settings module).
 | `registry/test_agents.py`, `graphql/schema.test.js` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
 
 From the repository root, after installing `backend/requirements.lock` into a
-Python 3.11+ environment and provisioning the local settings above:
+Python 3.11+ environment:
 
 ```bash
 python backend/manage.py check

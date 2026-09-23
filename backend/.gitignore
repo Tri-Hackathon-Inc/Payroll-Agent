@@ -3,6 +3,3 @@ __pycache__/
 *.py[cod]
 db.sqlite3
 .DS_Store
-
-# Local Django settings and Apollo host are never committed.
-/local_server/
