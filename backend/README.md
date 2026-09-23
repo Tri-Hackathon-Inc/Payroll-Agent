@@ -7,9 +7,9 @@ REST endpoints. See [AGENTS.md](AGENTS.md) for architecture and flow diagrams an
 
 | GraphQL operation | gRPC operation |
 | --- | --- |
-| `getTemplates` | `ListTemplates` |
+| `listTemplates` | `ListTemplates` |
 | `getTemplate(id)` | `GetTemplate` |
-| `getBusinesses` | `ListBusinesses` |
+| `listBusinesses` | `ListBusinesses` |
 | `getBusinessAgents(businessName)` | `GetBusinessAgents` |
 | `createAgent(input)` | `CreateAgent` |
 | `updateAgent(input)` | `UpdateAgent` |
@@ -184,8 +184,8 @@ http://localhost:4000/.
 
 ```graphql
 query GetAgentConfiguration {
-  getBusinesses { name label domain }
-  getTemplates { id name description version }
+  listBusinesses { name label domain }
+  listTemplates { id name description version }
   getTemplate(id: "anomaly-detection") {
     id
     name
@@ -202,7 +202,7 @@ query GetAgentConfiguration {
 The UI uses `config` as form defaults and `modelOptions`/`serviceOptions` as
 selectable values. `modelConfig`, `service`, and `attachedServices` describe the
 currently selected defaults. Option arrays are populated by `getTemplate(id)`;
-`getTemplates` lists catalog entries without those option arrays.
+`listTemplates` lists catalog entries without those option arrays.
 
 ### Create an agent
 

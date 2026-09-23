@@ -124,7 +124,7 @@ function App() {
     let active = true
     setCatalogError('')
     graphqlRequest(STUDIO_QUERY)
-      .then(data => { if (active) setCatalog({ businesses: data.getBusinesses, templates: data.getTemplates }) })
+      .then(data => { if (active) setCatalog({ businesses: data.listBusinesses, templates: data.listTemplates }) })
       .catch(error => { if (active) setCatalogError(error.message) })
     return () => { active = false }
   }, [reload])

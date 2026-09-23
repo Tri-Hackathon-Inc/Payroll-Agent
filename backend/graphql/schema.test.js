@@ -69,19 +69,19 @@ server.wait_for_termination()
     contextValue: { dataSources: { grpc }, context: {} } });
 
   assert.deepEqual(Object.keys(schema.getQueryType().getFields()).sort(),
-    ['getBusinessAgents', 'getBusinesses', 'getTemplate', 'getTemplates']);
+    ['getBusinessAgents', 'getTemplate', 'listBusinesses', 'listTemplates']);
   assert.deepEqual(Object.keys(schema.getMutationType().getFields()).sort(), ['createAgent', 'updateAgent']);
 
-  const catalog = await execute(`{ getBusinesses { name label domain }
-    getTemplates { id config }
+  const catalog = await execute(`{ listBusinesses { name label domain }
+    listTemplates { id config }
     getTemplate(id: "anomaly-detection") {
       config modelConfig { id modelId } service { id baseUrlEnv }
       modelOptions { id enabled } serviceOptions { id domain }
     }
   }`);
   assert.equal(catalog.errors, undefined);
-  assert.equal(catalog.data.getTemplates.length, 4);
-  assert.ok(catalog.data.getBusinesses.some(item => item.name === 'payroll-services'));
+  assert.equal(catalog.data.listTemplates.length, 4);
+  assert.ok(catalog.data.listBusinesses.some(item => item.name === 'payroll-services'));
   assert.ok(catalog.data.getTemplate.modelOptions.length);
   assert.ok(catalog.data.getTemplate.serviceOptions.length);
 

@@ -59,7 +59,7 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:4000/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ getBusinesses { name } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
+        - "fetch('http://127.0.0.1:4000/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ listBusinesses { name } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
       interval: 5s
       timeout: 5s
       retries: 12

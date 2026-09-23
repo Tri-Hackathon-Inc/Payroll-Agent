@@ -9,11 +9,11 @@ routes; names such as “list-template” refer to service operations.
 
 | Capability | gRPC operation | GraphQL operation |
 | --- | --- | --- |
-| List available templates | `ListTemplates` | `getTemplates` |
+| List available templates | `ListTemplates` | `listTemplates` |
 | Get template properties and configuration choices | `GetTemplate` | `getTemplate(id)` |
 | Create a configured agent for a business | `CreateAgent` | `createAgent(input)` |
 | Update a configured agent within its business | `UpdateAgent` | `updateAgent(input)` |
-| List businesses | `ListBusinesses` | `getBusinesses` |
+| List businesses | `ListBusinesses` | `listBusinesses` |
 | List saved agents for one business | `GetBusinessAgents` | `getBusinessAgents(businessName)` |
 
 These are the six public operations. Model and external API choices are included
@@ -42,9 +42,9 @@ see [README.md](README.md) for the business/agent walkthrough.
 
 ```mermaid
 flowchart TD
-    UI["UI: select business"] --> Businesses["ListBusinesses / getBusinesses"]
+    UI["UI: select business"] --> Businesses["ListBusinesses / listBusinesses"]
     Businesses --> Business["Payroll Services"]
-    Business --> List["ListTemplates / getTemplates"]
+    Business --> List["ListTemplates / listTemplates"]
     List --> Choose["Choose template: Anomaly Detection"]
     Choose --> Detail["GetTemplate / getTemplate(id)"]
     Config["Template defaults: model, external APIs, alerts, webhooks"] --> Detail

@@ -62,8 +62,8 @@ scalar JSON
     updateAgent(input: UpdateAgentInput!): Agent!
   }
   type Query {
-    getTemplates: [Template!]!
+    listTemplates: [Template!]!
     getTemplate(id: ID!): Template!
-    getBusinesses: [Business!]!
+    listBusinesses: [Business!]!
     getBusinessAgents(businessName: String!): [Agent!]!
   }

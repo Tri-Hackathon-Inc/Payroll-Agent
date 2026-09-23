@@ -54,8 +54,8 @@ export function createMockExecutor() {
   }
 
   const rootValue = {
-    getBusinesses: () => businesses,
-    getTemplates: () => templates,
+    listBusinesses: () => businesses,
+    listTemplates: () => templates,
     getTemplate: ({ id }) => template(id),
     getBusinessAgents: ({ businessName }) => { business(businessName); return agents.filter(item => item.businessName === businessName) },
     createAgent: ({ input }) => save(input),

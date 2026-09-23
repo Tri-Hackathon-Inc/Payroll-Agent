@@ -73,9 +73,9 @@ const typeDefs = `
     updateAgent(input: UpdateAgentInput!): Agent!
   }
   type Query {
-    getTemplates: [Template!]!
+    listTemplates: [Template!]!
     getTemplate(id: ID!): Template!
-    getBusinesses: [Business!]!
+    listBusinesses: [Business!]!
     getBusinessAgents(businessName: String!): [Agent!]!
   }
 `;
@@ -140,9 +140,9 @@ const resolvers = {
     parseLiteral: valueFromASTUntyped,
   }),
   Query: {
-    getTemplates: rpcResolver('ListTemplates', () => ({}), value => value.templates || []),
+    listTemplates: rpcResolver('ListTemplates', () => ({}), value => value.templates || []),
     getTemplate: rpcResolver('GetTemplate', ({ id }) => ({ id })),
-    getBusinesses: rpcResolver('ListBusinesses', () => ({}), value => value.businesses || []),
+    listBusinesses: rpcResolver('ListBusinesses', () => ({}), value => value.businesses || []),
     getBusinessAgents: rpcResolver('GetBusinessAgents', ({ businessName }) => ({ business_name: businessName }),
       value => value.agents || []),
   },

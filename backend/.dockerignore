@@ -2,7 +2,7 @@
 __pycache__
 *.py[cod]
 *.sqlite3*
-node_modules
+**/node_modules
 .not_include
 .env
 .DS_Store

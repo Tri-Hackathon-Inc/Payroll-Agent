@@ -1,7 +1,7 @@
 export const STUDIO_QUERY = `
   query GetStudio {
-    getBusinesses { name label domain }
-    getTemplates { id name description version config }
+    listBusinesses { name label domain }
+    listTemplates { id name description version config }
   }
 `
 
