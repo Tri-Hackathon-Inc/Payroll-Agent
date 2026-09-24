@@ -4,6 +4,53 @@ import { graphqlRequest } from './graphql/client'
 import { BUSINESS_AGENTS_QUERY, STUDIO_QUERY } from './graphql/operations'
 import AgentEditor from './AgentEditor'
 
+const MODEL_OPTIONS = [
+  {
+    id: 'qwen-2.5-72b',
+    label: 'Qwen 2.5 · 72B',
+    provider: 'Alibaba Cloud',
+    openSource: true,
+    contextWindow: '128K tokens',
+    accent: 'green',
+    description: 'Highly capable open-source model with strong instruction following and multilingual support. Good balance of performance and speed for payroll Q&A.',
+    strengths: ['Fast inference', 'Multilingual', 'Strong reasoning'],
+    bestFor: ['General Query', 'Summarizer'],
+  },
+  {
+    id: 'llama-3.1-70b',
+    label: 'Llama 3.1 · 70B',
+    provider: 'Meta',
+    openSource: true,
+    contextWindow: '128K tokens',
+    accent: 'blue',
+    description: "Meta's flagship open-source model. Excellent at reasoning and tool use, making it well-suited for agentic payroll workflows.",
+    strengths: ['Tool calling', 'Reasoning', 'Code generation'],
+    bestFor: ['Anomaly Detection', 'General Query'],
+  },
+  {
+    id: 'mistral-large',
+    label: 'Mistral Large',
+    provider: 'Mistral AI',
+    openSource: false,
+    contextWindow: '32K tokens',
+    accent: 'orange',
+    description: 'Top-tier commercial model from Mistral. Excellent at structured output and function calling, ideal for incident generation and anomaly reporting.',
+    strengths: ['Structured output', 'Function calling', 'Low latency'],
+    bestFor: ['Incident Generator', 'Anomaly Detection'],
+  },
+  {
+    id: 'bedrock-claude',
+    label: 'AWS Bedrock · Claude',
+    provider: 'Anthropic / AWS',
+    openSource: false,
+    contextWindow: '200K tokens',
+    accent: 'purple',
+    description: 'Claude via AWS Bedrock. Industry-leading at following complex instructions, analysis, and safe operation in production payroll environments.',
+    strengths: ['Long context', 'Safety', 'Instruction following'],
+    bestFor: ['All agent types'],
+  },
+]
+
 const NAV_GROUPS = [
   {
     label: 'Build',
@@ -11,13 +58,13 @@ const NAV_GROUPS = [
       { key: 'templates', label: 'Templates', icon: 'bi-grid-1x2', path: '/ai-studio' },
       { key: 'my-agents', label: 'My Agents', icon: 'bi-robot', path: '/agents' },
       { key: 'tools', label: 'Tools & APIs', icon: 'bi-plug', soon: true },
-      { key: 'models', label: 'Models', icon: 'bi-cpu', soon: true },
+      { key: 'models', label: 'Models', icon: 'bi-cpu', path: '/ai-studio/models' },
     ],
   },
   {
     label: 'Manage',
     items: [
-      { key: 'registry', label: 'Agent Registry', icon: 'bi-collection', soon: true },
+      { key: 'registry', label: 'Agent Registry', icon: 'bi-collection', path: '/ai-studio/registry' },
       { key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up', soon: true },
     ],
   },
@@ -29,6 +76,18 @@ function domainSlug(domain = '') {
 
 function domainClass(domain) {
   return `domain-badge domain-${domainSlug(domain)}`
+}
+
+const RUNTIME_BY_NAME = [
+  { pattern: /anomaly/i, label: 'REAL-TIME', cls: 'runtime-real-time' },
+  { pattern: /summar/i, label: 'OFFLINE', cls: 'runtime-offline' },
+  { pattern: /query|general/i, label: 'INTERACTIVE', cls: 'runtime-interactive' },
+  { pattern: /incident/i, label: 'EVENT-DRIVEN', cls: 'runtime-event-driven' },
+]
+
+function agentRuntime(agent) {
+  const match = RUNTIME_BY_NAME.find(({ pattern }) => pattern.test(agent.name || ''))
+  return match || { label: 'CONFIGURABLE', cls: 'runtime-offline' }
 }
 
 function Sidebar({ activeKey, onNavigate }) {
@@ -103,11 +162,12 @@ function App() {
   const path = url.pathname
   const businessName = url.searchParams.get('business') || catalog?.businesses[0]?.name
   const business = catalog?.businesses.find((item) => item.name === businessName)
-  const businessHome = path === '/' || (path === '/ai-studio' && !url.searchParams.has('business'))
   const templateMatch = path.match(/^\/ai-studio\/templates\/([^/]+)\/config$/)
   const agentMatch = path.match(/^\/agents\/([^/]+)$/)
   const editId = agentMatch && agentMatch[1] !== 'new' ? decodeURIComponent(agentMatch[1]) : null
   const listPage = path === '/agents'
+  const modelsPage = path === '/ai-studio/models'
+  const registryPage = path === '/ai-studio/registry'
   const agents = agentResult && agentResult.businessName === businessName ? agentResult.items : []
   const agentsLoading = business && (agentResult?.businessName !== businessName || agentResult.loading)
   const agentsError = agentResult && agentResult.businessName === businessName ? agentResult.error : ''
@@ -160,6 +220,10 @@ function App() {
       setNotice(`${item.label} is coming soon.`)
       return
     }
+    if (item.key === 'models') {
+      navigate(item.path)
+      return
+    }
     navigate(scoped(item.path))
   }
 
@@ -169,8 +233,186 @@ function App() {
     navigate(scoped('/agents'))
   }
 
+  const activeNavKey = modelsPage ? 'models'
+    : registryPage ? 'registry'
+    : listPage || editId ? 'my-agents'
+    : 'templates'
+
   const query = search.trim().toLowerCase()
   const matches = (...values) => values.some((value) => String(value || '').toLowerCase().includes(query))
+
+  // Models page — static, no business context needed
+  if (modelsPage) {
+    return (
+      <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
+        <div className="mb-4">
+          <h1 className="h4 fw-bold mb-1">Model Library</h1>
+          <p className="text-muted mb-0">Select a model when configuring an agent template. Each agent stores its own model preference — you can change it at any time.</p>
+        </div>
+        <div className="row row-cols-1 row-cols-md-2 g-3 mb-4">
+          {MODEL_OPTIONS.map((model) => (
+            <div className="col" key={model.id}>
+              <div className={`card h-100 border-0 shadow-sm model-card accent-${model.accent}`}>
+                <div className="card-body p-4">
+                  <div className="d-flex align-items-start justify-content-between mb-3">
+                    <div className={`template-icon accent-${model.accent}`}><i className="bi bi-cpu-fill" /></div>
+                    {model.openSource
+                      ? <span className="badge model-badge-oss">Open source</span>
+                      : <span className="badge model-badge-commercial">Commercial</span>
+                    }
+                  </div>
+                  <h3 className="h6 fw-bold mb-0">{model.label}</h3>
+                  <div className="text-muted small mb-2">{model.provider}</div>
+                  <p className="text-muted small mb-3" style={{ lineHeight: 1.6 }}>{model.description}</p>
+                  <div className="d-flex flex-wrap gap-2 mb-3">
+                    {model.strengths.map((s) => (
+                      <span key={s} className="badge model-strength-chip">{s}</span>
+                    ))}
+                  </div>
+                  <div className="d-flex align-items-center justify-content-between pt-2 border-top">
+                    <div className="d-flex align-items-center gap-1 text-muted small">
+                      <i className="bi bi-window me-1" />{model.contextWindow}
+                    </div>
+                    <div className="d-flex flex-wrap gap-1 justify-content-end">
+                      {model.bestFor.map((type) => (
+                        <span key={type} className="badge text-bg-light border model-bestfor-badge">{type}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="card border-0 shadow-sm">
+          <div className="card-body d-flex align-items-start gap-3">
+            <i className="bi bi-info-circle text-muted mt-1" style={{ fontSize: 18 }} />
+            <div>
+              <h2 className="h6 fw-bold mb-1">Choosing a model</h2>
+              <p className="text-muted small mb-0">Real-time agents benefit from low-latency models. Offline summarizer tasks work well with high-context models. Interactive agents need strong instruction following and tool use.</p>
+            </div>
+          </div>
+        </div>
+      </AppShell>
+    )
+  }
+
+  // Registry page — scoped to selected business
+  if (registryPage) {
+    const registryAgents = agentResult && agentResult.businessName === businessName ? agentResult.items : []
+    const registryLoading = business && (agentResult?.businessName !== businessName || agentResult.loading)
+    const registryError = agentResult && agentResult.businessName === businessName ? agentResult.error : ''
+
+    return (
+      <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
+        <div className="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
+          <div>
+            <h1 className="h4 fw-bold mb-1">Agent Registry</h1>
+            <p className="text-muted mb-0">All agents built and published in this studio, discoverable by payroll services via the discovery API.</p>
+          </div>
+          <div className="d-flex align-items-center gap-2">
+            {registryAgents.length > 0 && (
+              <span className="badge rounded-pill text-bg-secondary">{registryAgents.length} {registryAgents.length === 1 ? 'agent' : 'agents'}</span>
+            )}
+            <button className="btn btn-dark d-inline-flex align-items-center gap-2" type="button"
+              onClick={() => navigate(businessName ? scoped('/ai-studio') : '/ai-studio')}>
+              <i className="bi bi-plus-lg" /> New agent
+            </button>
+          </div>
+        </div>
+
+        {!catalog && !catalogError && <Loading>Loading…</Loading>}
+        {catalogError && (
+          <div className="alert alert-danger" role="alert">
+            {catalogError}
+            <button className="btn btn-link" onClick={() => setReload((v) => v + 1)}>Retry</button>
+          </div>
+        )}
+        {catalog && !business && (
+          <div className="alert alert-info" role="alert">
+            Select a business to view its registered agents.
+            <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose business</button>
+          </div>
+        )}
+
+        {business && (
+          <>
+            <div className="card border-0 shadow-sm mb-3">
+              <div className="card-body p-0">
+                {registryError && <div className="alert alert-danger m-3 py-2 small" role="alert">{registryError}</div>}
+                {registryLoading ? (
+                  <div className="p-4"><Loading>Loading agents…</Loading></div>
+                ) : registryAgents.length === 0 ? (
+                  <div className="d-flex flex-column align-items-center justify-content-center py-5 text-center px-4">
+                    <div className="registry-icon mb-3" style={{ width: 56, height: 56, fontSize: 24, borderRadius: 16 }}>
+                      <i className="bi bi-collection" />
+                    </div>
+                    <h2 className="h6 fw-bold mb-1">Registry is empty</h2>
+                    <p className="text-muted small mb-3">Create your first agent from a template to see it listed here.</p>
+                    <button className="btn btn-dark btn-sm d-inline-flex align-items-center gap-2" type="button"
+                      onClick={() => navigate(scoped('/ai-studio'))}>
+                      Browse templates <i className="bi bi-arrow-right" />
+                    </button>
+                  </div>
+                ) : (
+                  <ul className="list-group list-group-flush rounded">
+                    {registryAgents.map((agent) => {
+                      const rt = agentRuntime(agent)
+                      return (
+                        <li className="list-group-item d-flex align-items-center gap-3 px-4 py-3" key={agent.id}>
+                          <span className="registry-icon flex-shrink-0"><i className="bi bi-stars" /></span>
+                          <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                            <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                              <span className="fw-semibold">{agent.name}</span>
+                              {agent.config?.domain && <span className={`badge ${domainClass(agent.config.domain)}`}>{agent.config.domain}</span>}
+                              <span className={`runtime-badge ${rt.cls}`}>{rt.label}</span>
+                            </div>
+                            <div className="text-muted small text-truncate">{agent.config?.description}</div>
+                          </div>
+                          <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                            <button type="button" className="btn btn-outline-secondary btn-sm"
+                              onClick={() => navigate(scoped(`/agents/${encodeURIComponent(agent.id)}`))}>
+                              Open <i className="bi bi-arrow-right ms-1" />
+                            </button>
+                          </div>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {registryAgents.length > 0 && (
+              <div className="card border-0 shadow-sm">
+                <div className="card-body">
+                  <h2 className="h6 fw-bold mb-1">Service discovery</h2>
+                  <p className="text-muted small mb-3">Payroll services discover and invoke agents through the service-level API:</p>
+                  <div className="d-flex flex-column gap-2">
+                    <div className="d-flex align-items-center gap-3 p-3 rounded registry-code-block">
+                      <span className="badge text-bg-success" style={{ fontFamily: 'monospace', minWidth: 40 }}>GET</span>
+                      <code className="small flex-grow-1">/{'{service}'}/list-agents</code>
+                      <span className="text-muted small">list agents available to a service</span>
+                    </div>
+                    <div className="d-flex align-items-center gap-3 p-3 rounded registry-code-block">
+                      <span className="badge text-bg-success" style={{ fontFamily: 'monospace', minWidth: 40 }}>GET</span>
+                      <code className="small flex-grow-1">/{'{service}'}/get-agent/{'{agent-id}'}</code>
+                      <span className="text-muted small">get selected agent metadata</span>
+                    </div>
+                    <div className="d-flex align-items-center gap-3 p-3 rounded registry-code-block">
+                      <span className="badge text-bg-primary" style={{ fontFamily: 'monospace', minWidth: 40 }}>POST</span>
+                      <code className="small flex-grow-1">/{'{service}'}/{'{agent-id}'}/prompts</code>
+                      <span className="text-muted small">invoke agent with a prompt</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </AppShell>
+    )
+  }
 
   let content
   if (catalogError) {
@@ -185,28 +427,6 @@ function App() {
   } else if (!catalog.businesses.length) {
     content = <p>No businesses are available yet. Ask your administrator to create one.</p>
   } else if (!business) {
-    content = (
-      <div className="alert alert-warning" role="alert">
-        Business not found.
-        <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose a business</button>
-      </div>
-    )
-  } else if (templateMatch || editId) {
-    const agent = editId && agents.find((item) => item.id === editId)
-    if (editId && agentsLoading) content = <Loading>Loading agent…</Loading>
-    else if (editId && agentsError) content = <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents((value) => value + 1)}>Retry</button></div>
-    else if (editId && !agent) content = <p role="alert">This agent was not found in {business.label}.</p>
-    else content = (
-      <AgentEditor
-        key={`${business.name}:${editId || templateMatch[1]}`}
-        business={business}
-        agent={agent || null}
-        templateId={agent?.templateId || decodeURIComponent(templateMatch[1])}
-        onSaved={saved}
-        onCancel={() => navigate(scoped(editId ? '/agents' : '/ai-studio'))}
-      />
-    )
-  } else if (businessHome) {
     content = (
       <>
         <h1 className="h3 fw-bold">Choose a business</h1>
@@ -228,6 +448,21 @@ function App() {
         </div>
         {!catalog.businesses.some((item) => matches(item.label, item.domain)) && <p>No businesses match your search.</p>}
       </>
+    )
+  } else if (templateMatch || editId) {
+    const agent = editId && agents.find((item) => item.id === editId)
+    if (editId && agentsLoading) content = <Loading>Loading agent…</Loading>
+    else if (editId && agentsError) content = <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents((value) => value + 1)}>Retry</button></div>
+    else if (editId && !agent) content = <p role="alert">This agent was not found in {business.label}.</p>
+    else content = (
+      <AgentEditor
+        key={`${business.name}:${editId || templateMatch[1]}`}
+        business={business}
+        agent={agent || null}
+        templateId={agent?.templateId || decodeURIComponent(templateMatch[1])}
+        onSaved={saved}
+        onCancel={() => navigate(scoped(editId ? '/agents' : '/ai-studio'))}
+      />
     )
   } else if (listPage) {
     content = (
@@ -298,7 +533,7 @@ function App() {
   }
 
   return (
-    <AppShell activeKey={listPage || editId ? 'my-agents' : 'templates'} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
+    <AppShell activeKey={activeNavKey} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
       {!!catalog?.businesses.length && (
         <div className="d-flex justify-content-end align-items-center gap-2 mb-4">
           <label htmlFor="business" className="fw-semibold">Business</label>
