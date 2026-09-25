@@ -1,7 +1,7 @@
 // Golden test cases for the Evaluation page and scripts/benchmark-models.mjs, keyed by template
 // id; each template's starting questions have a case here. Every case runs
 // against the sample payrun PR-2026-09-B; keep the checks in sync with its planted
-// anomalies (listed in backend/trinet_mock/README.md). A check passes when the reply
+// anomalies (seeded in backend/trinet_mock/seed/payruns.json). A check passes when the reply
 // contains any `anyOf` term, or none of the `noneOf` terms (case-insensitive).
 export const EVALUATION_PAYRUN = 'PR-2026-09-B'
 

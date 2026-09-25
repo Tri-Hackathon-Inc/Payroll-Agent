@@ -9,7 +9,8 @@ ask it questions from the TriNet payrun page, and learn about **model configurat
 
 - **Path:** TriNet payrun assistant → Agent Studio webhook (Apollo host) → Hugging Face
   router (`https://router.huggingface.co/v1`, OpenAI-compatible `chat/completions`) → provider.
-  The token (`HF_TOKEN`) stays on the server; see `backend/README.md`, "Agent model calls".
+  The token (`HF_TOKEN`) stays on the server; see the
+  [credential rules](../backend/AGENTS.md#configuration-and-persistence-rules).
 - **Pre-processing:** the webhook loads the open payrun and the previous completed payrun
   from the payroll API and puts them in the prompt with the agent's instructions and
   guardrails (answer only from the data, never change payroll).

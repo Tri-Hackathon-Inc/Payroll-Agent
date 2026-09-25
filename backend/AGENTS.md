@@ -39,7 +39,7 @@ in template details rather than exposed as separate list operations.
 `service`, `attached_services`, and enabled `model_options` and `service_options`. Service
 options match the template's domain. The UI can use these properties to populate
 its configurable form. The React UI uses this contract in both backend and mock modes;
-see [README.md](README.md) for the domain/agent walkthrough.
+see the [overall application flow](#overall-application-flow) for the domain/agent walkthrough.
 
 ## Overall application flow
 
@@ -527,7 +527,7 @@ docker compose -f docker/docker-compose.yaml logs --tail=100 ui backend db redis
 ```
 
 On Windows, `docker desktop start` starts Docker Desktop if its engine is stopped.
-On macOS, use the [Podman setup](../docker/README.md#macos-with-podman): install
+On macOS, use the [Podman run command](../README.md): install
 `podman` and `podman-compose`, initialize a VM once with `podman machine init`,
 and run `podman machine start`. From the repository root,
 `bash docker/podman.sh up --build -d db backend ui` starts the core services;
@@ -590,9 +590,11 @@ optional TriNet mock uses a separate `trinet_data` volume. PostgreSQL uses
 existing volumes must match their initialized values. Existing SQLite data is not automatically
 imported; never delete the old volume as part of an upgrade.
 
-Keep Docker instructions consistent with the [root README](../README.md),
-[backend README](README.md#start-the-stack), and
-[UI README](../ui-payroll-agent/README.md#run-in-containers).
+Keep container instructions consistent with the [root README](../README.md).
+It is the only project README. Organize Docker and Podman instructions into
+Starter, Load (including rebuilds after file changes), then Troubleshooting,
+with short explanations for the commands.
+Do not add READMEs in subdirectories.
 
 ## Main files and checks
 
@@ -638,7 +640,7 @@ docker compose -f docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_T
 Cover history isolation, missing data, zero baselines, duplicated lines,
 provider failures and invalid model output without calling a paid provider.
 Run `node --test tests/contract.test.js` from `ui-payroll-agent/` after installing
-Node dependencies. See README.md for Docker checks, MySQL setup, and API examples.
+Node dependencies. The sections above describe container setup, MySQL and API flows.
 The old `graphql/schema.test.js` and per-directory Dockerfiles are removed.
 
 `getDomainAgentsTemplates(domainName)` returns reusable templates, not saved agents.
