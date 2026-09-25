@@ -9,52 +9,52 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
 from . import services
-from .models import Agent, Business, Template
+from .models import Agent, Domain, Template
 
 
 class AgentWorkflowTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         services.sync_templates()
-        Business.objects.get_or_create(
+        Domain.objects.get_or_create(
             name="payroll-services",
             defaults={"label": "Payroll Services", "domain": "Payroll"},
         )
-        Business.objects.create(
+        Domain.objects.create(
             name="other-payroll", label="Other Payroll", domain="Payroll"
         )
-        Business.objects.create(name="hr-services", label="HR Services", domain="HR")
+        Domain.objects.create(name="hr-services", label="HR Services", domain="HR")
 
-    def create(self, config=None, business="payroll-services"):
+    def create(self, config=None, domain="payroll-services"):
         return services.create_agent(
-            business, "anomaly-detection", " Payroll review ", config or {}
+            domain, "anomaly-detection", " Payroll review ", config or {}
         )
 
-    def test_business_provisioning_is_repeatable_and_preserves_domain(self):
+    def test_domain_provisioning_is_repeatable_and_preserves_domain(self):
         output = StringIO()
         for _ in range(2):
             call_command(
-                "create_business",
+                "create_domain",
                 "new-payroll",
                 label="New Payroll",
                 domain="Payroll",
                 stdout=output,
             )
-        self.assertEqual(Business.objects.filter(name="new-payroll").count(), 1)
-        self.assertIn("Created business", output.getvalue())
-        self.assertIn("Existing business", output.getvalue())
+        self.assertEqual(Domain.objects.filter(name="new-payroll").count(), 1)
+        self.assertIn("Created domain", output.getvalue())
+        self.assertIn("Existing domain", output.getvalue())
         with self.assertRaises(CommandError):
             call_command(
-                "create_business", "new-payroll", label="HR", domain="HR", stdout=output
+                "create_domain", "new-payroll", label="HR", domain="HR", stdout=output
             )
-        self.assertEqual(Business.objects.get(pk="new-payroll").domain, "Payroll")
+        self.assertEqual(Domain.objects.get(pk="new-payroll").domain, "Payroll")
 
-    def test_business_provisioning_rejects_invalid_slug(self):
+    def test_domain_provisioning_rejects_invalid_slug(self):
         with self.assertRaises(CommandError):
             call_command(
-                "create_business", "invalid business", label="Invalid", domain="Payroll"
+                "create_domain", "invalid domain", label="Invalid", domain="Payroll"
             )
-        self.assertFalse(Business.objects.filter(name="invalid business").exists())
+        self.assertFalse(Domain.objects.filter(name="invalid domain").exists())
 
     def test_template_details_contain_form_defaults_and_options(self):
         template = services.get_template("anomaly-detection")
@@ -64,7 +64,20 @@ class AgentWorkflowTests(TestCase):
         self.assertTrue(
             all(item["domain"] == "Payroll" for item in template["service_options"])
         )
-        self.assertEqual(len(services.list_templates()), 4)
+
+    def test_list_templates_filters_primary_service(self):
+        Template.objects.filter(pk="failure-investigation").update(service_id="diagnostics")
+        templates = services.list_templates("payrun")
+        self.assertEqual(len(templates), 3)
+        self.assertNotIn("failure-investigation", [item["id"] for item in templates])
+        self.assertTrue(all(item["config"]["service"] == "payrun" for item in templates))
+        self.assertEqual([item["id"] for item in services.list_templates("diagnostics")], ["failure-investigation"])
+        self.assertEqual(services.list_templates("payrun-history"), [])
+        with self.assertRaises(services.NotFound):
+            services.list_templates("missing")
+        for value in ("", "   ", None):
+            with self.subTest(value=value), self.assertRaises(services.InvalidInput):
+                services.list_templates(value)
 
     def test_create_merges_defaults_and_persists_configuration(self):
         agent = self.create(
@@ -80,7 +93,7 @@ class AgentWorkflowTests(TestCase):
         self.assertEqual(saved.config["instructions"], "Review large payments.")
         self.assertTrue(saved.config["capabilities"]["alerts"]["enabled"])
         self.assertEqual(
-            saved.config, services.get_business_agents("payroll-services")[0]["config"]
+            saved.config, services.get_domain_agents("payroll-services")[0]["config"]
         )
         self.assertEqual(saved.template_version, 1)
         self.assertNotEqual(
@@ -104,11 +117,11 @@ class AgentWorkflowTests(TestCase):
         self.assertEqual(updated["created_at"], agent["created_at"])
         self.assertEqual(Agent.objects.count(), 1)
 
-    def test_business_filter_and_scoped_update(self):
+    def test_domain_filter_and_scoped_update(self):
         agent = self.create()
-        self.assertEqual(services.get_business_agents("other-payroll"), [])
+        self.assertEqual(services.get_domain_agents("other-payroll"), [])
         with self.assertRaises(services.NotFound):
-            services.update_agent(agent["id"], "other-payroll", "Wrong business", {})
+            services.update_agent(agent["id"], "other-payroll", "Wrong domain", {})
         self.assertEqual(Agent.objects.get(pk=agent["id"]).name, "Payroll review")
 
     def test_invalid_config_does_not_create_agents(self):
@@ -137,13 +150,13 @@ class AgentWorkflowTests(TestCase):
         self.assertEqual(saved.name, agent["name"])
         self.assertEqual(saved.config, agent["config"])
 
-    def test_missing_resources_and_business_domain(self):
+    def test_missing_resources_and_domain_domain(self):
         with self.assertRaises(services.NotFound):
-            services.get_business_agents("missing")
+            services.get_domain_agents("missing")
         with self.assertRaises(services.TemplateNotFound):
             services.create_agent("payroll-services", "missing", "Agent", {})
         with self.assertRaises(services.InvalidInput):
-            self.create(business="hr-services")
+            self.create(domain="hr-services")
         with self.assertRaises(services.InvalidInput):
             services.update_agent("bad-id", "payroll-services", "Agent", {})
         with self.assertRaises(services.NotFound):
@@ -164,7 +177,7 @@ class AgentWorkflowTests(TestCase):
             with override_settings(TEMPLATE_CONFIG_DIR=root):
                 services.sync_templates()
                 self.assertEqual(
-                    services.get_business_agents("payroll-services")[0]["config"],
+                    services.get_domain_agents("payroll-services")[0]["config"],
                     agent["config"],
                 )
                 path.unlink()
@@ -175,3 +188,23 @@ class AgentWorkflowTests(TestCase):
 
     def test_no_django_http_routes(self):
         self.assertFalse(hasattr(settings, "ROOT_URLCONF"))
+
+    def test_domain_templates_are_templates_and_scoped(self):
+        self.assertEqual(len(services.get_domain_agents_templates("payroll-services")), 4)
+        self.assertEqual(services.get_domain_agents_templates("hr-services"), [])
+        self.assertIn("anomaly-detection", [t["id"] for t in services.get_domain_agents_templates("payroll-services")])
+        with self.assertRaises(services.NotFound):
+            services.get_domain_agents_templates("missing")
+
+    def test_registry_filters_saved_primary_service_and_domain(self):
+        first = self.create()
+        other = self.create(domain="other-payroll")
+        diagnostic = self.create(config={"service": "diagnostics"})
+        self.assertEqual([a["id"] for a in services.get_service_agent_registry("diagnostics")], [diagnostic["id"]])
+        self.assertEqual([a["id"] for a in services.get_service_agent_registry(first["config"]["service"], "payroll-services")], [first["id"]])
+        self.assertIn(other["id"], [a["id"] for a in services.get_service_agent_registry(first["config"]["service"])])
+        self.assertEqual(services.get_service_agent_registry("payrun-history"), [])
+        with self.assertRaises(services.NotFound):
+            services.get_service_agent_registry("missing")
+        with self.assertRaises(services.NotFound):
+            services.get_service_agent_registry(domain_name="missing")

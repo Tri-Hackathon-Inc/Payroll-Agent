@@ -1,7 +1,6 @@
 export const STUDIO_QUERY = `
   query GetStudio {
-    listBusinesses { name label domain }
-    listTemplates { id name description version config }
+    listDomains { name label domain }
   }
 `
 
@@ -15,11 +14,11 @@ export const TEMPLATE_QUERY = `
   }
 `
 
-const AGENT_FIELDS = 'id name businessName templateId templateVersion config createdAt updatedAt'
+const AGENT_FIELDS = 'id name domainName templateId templateVersion config createdAt updatedAt'
 
-export const BUSINESS_AGENTS_QUERY = `
-  query GetBusinessAgents($businessName: String!) {
-    getBusinessAgents(businessName: $businessName) { ${AGENT_FIELDS} }
+export const SERVICE_AGENT_REGISTRY_QUERY = `
+  query GetServiceAgentRegistry($domainName: String, $serviceName: String) {
+    getServiceAgentRegistry(domainName: $domainName, serviceName: $serviceName) { ${AGENT_FIELDS} }
   }
 `
 
@@ -32,5 +31,11 @@ export const CREATE_AGENT_MUTATION = `
 export const UPDATE_AGENT_MUTATION = `
   mutation UpdateAgent($input: UpdateAgentInput!) {
     updateAgent(input: $input) { ${AGENT_FIELDS} }
+  }
+`
+
+export const DOMAIN_TEMPLATES_QUERY = `
+  query GetDomainAgentsTemplates($domainName: String!) {
+    getDomainAgentsTemplates(domainName: $domainName) { id name description version config }
   }
 `

@@ -4,12 +4,12 @@ from pathlib import Path
 import grpc
 from django.core.management.base import BaseCommand, CommandError
 from registry.proto.templates_pb2_grpc import \
-    add_TemplateCatalogServicer_to_server
-from registry.servicers import TemplateCatalogServicer
+    add_ai_studioServicer_to_server
+from registry.servicers import AIStudioServicer
 
 
 class Command(BaseCommand):
-    help = "Serve template, business, and agent operations over gRPC."
+    help = "Serve template, domain, and agent operations over gRPC."
 
     def add_arguments(self, parser):
         parser.add_argument("--address", default="127.0.0.1:50051")
@@ -23,7 +23,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         server = grpc.server(ThreadPoolExecutor(max_workers=4))
-        add_TemplateCatalogServicer_to_server(TemplateCatalogServicer(), server)
+        add_ai_studioServicer_to_server(AIStudioServicer(), server)
         cert, key, address = options["tls_cert"], options["tls_key"], options["address"]
         if bool(cert) != bool(key):
             raise CommandError("Provide both --tls-cert and --tls-key.")

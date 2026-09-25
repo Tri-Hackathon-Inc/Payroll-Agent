@@ -1,17 +1,19 @@
 syntax = "proto3";
-package payroll.templates.v1;
+package ai_studio_agents;
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
-service TemplateCatalog {
-  rpc ListTemplates(google.protobuf.Empty) returns (TemplateList);
+service ai_studio {
+  rpc ListTemplates(ServiceName) returns (TemplateList);
   rpc GetTemplate(TemplateId) returns (Template);
-  rpc ListBusinesses(google.protobuf.Empty) returns (BusinessList);
-  rpc GetBusinessAgents(BusinessName) returns (AgentList);
+  rpc ListDomains(google.protobuf.Empty) returns (DomainList);
+  rpc GetDomainAgentsTemplates(DomainName) returns (TemplateList);
+  rpc GetServiceAgentRegistry(ServiceAgentRegistryRequest) returns (AgentList);
   rpc CreateAgent(CreateAgentRequest) returns (Agent);
   rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
 }
 message TemplateId { string id = 1; }
+message ServiceName { string service_name = 1; }
 message Template {
   string id = 1;
   string name = 2;
@@ -25,13 +27,13 @@ message Template {
   repeated google.protobuf.Struct service_options = 10;
 }
 message TemplateList { repeated Template templates = 1; }
-message BusinessName { string business_name = 1; }
-message Business { string name = 1; string label = 2; string domain = 3; }
-message BusinessList { repeated Business businesses = 1; }
+message DomainName { string domain_name = 1; }
+message Domain { string name = 1; string label = 2; string domain = 3; }
+message DomainList { repeated Domain domains = 1; }
 message Agent {
   string id = 1;
   string name = 2;
-  string business_name = 3;
+  string domain_name = 3;
   string template_id = 4;
   uint32 template_version = 5;
   google.protobuf.Struct config = 6;
@@ -40,14 +42,16 @@ message Agent {
 }
 message AgentList { repeated Agent agents = 1; }
 message CreateAgentRequest {
-  string business_name = 1;
+  string domain_name = 1;
   string template_id = 2;
   string name = 3;
   google.protobuf.Struct config = 4;
 }
 message UpdateAgentRequest {
   string id = 1;
-  string business_name = 2;
+  string domain_name = 2;
   string name = 3;
   google.protobuf.Struct config = 4;
 }
+
+message ServiceAgentRegistryRequest { string service_name = 1; string domain_name = 2; }

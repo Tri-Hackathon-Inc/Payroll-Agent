@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { graphqlRequest } from './graphql/client'
 import { CREATE_AGENT_MUTATION, TEMPLATE_QUERY, UPDATE_AGENT_MUTATION } from './graphql/operations'
 
-export default function AgentEditor({ business, templateId, agent, onSaved, onCancel }) {
+export default function AgentEditor({ domain, templateId, agent, onSaved, onCancel }) {
   const [template, setTemplate] = useState(null)
   const [name, setName] = useState(agent?.name || '')
   const [config, setConfig] = useState(null)
@@ -17,7 +17,7 @@ export default function AgentEditor({ business, templateId, agent, onSaved, onCa
     setLoadError('')
     graphqlRequest(TEMPLATE_QUERY, { id: templateId }).then(({ getTemplate: detail }) => {
       if (!active) return
-      if (detail.config.domain !== business.domain) throw new Error('This template is not available for the selected business.')
+      if (detail.config.domain !== domain.domain) throw new Error('This template is not available for the selected domain.')
       setTemplate(detail)
       setName(agent?.name || detail.name)
       setConfig(structuredClone(agent?.config || detail.config))
@@ -30,7 +30,7 @@ export default function AgentEditor({ business, templateId, agent, onSaved, onCa
       } else setLoadError(requestError.message)
     })
     return () => { active = false }
-  }, [templateId, agent, business.domain, retry])
+  }, [templateId, agent, domain.domain, retry])
 
   const field = (key, value) => setConfig(current => ({ ...current, [key]: value }))
   const capability = (group, key, value) => setConfig(current => ({ ...current, capabilities: {
@@ -44,7 +44,7 @@ export default function AgentEditor({ business, templateId, agent, onSaved, onCa
     setSaving(true)
     try {
       const input = {
-        businessName: business.name, name: name.trim(),
+        domainName: domain.name, name: name.trim(),
         config: { ...config, questions: config.questions.map(value => value.trim()).filter(Boolean) },
         ...(agent ? { id: agent.id } : { templateId }),
       }
@@ -67,7 +67,7 @@ export default function AgentEditor({ business, templateId, agent, onSaved, onCa
   return <div className="row g-4">
     <div className="col-lg-8"><div className="card border-0 shadow-sm"><div className="card-body p-4">
       <h1 className="h4 fw-bold">{agent ? 'Edit agent' : `Configure ${template.name}`}</h1>
-      <p className="text-muted">{business.label} · {business.domain}</p>
+      <p className="text-muted">{domain.label} · {domain.domain}</p>
       {archived && <p className="alert alert-warning">The source template is no longer available. You can edit this agent’s saved configuration.</p>}
       <form onSubmit={submit}>
         {error && <div className="alert alert-danger" role="alert">{error}</div>}
@@ -139,7 +139,7 @@ export default function AgentEditor({ business, templateId, agent, onSaved, onCa
     <div className="col-lg-4"><div className="card border-0 shadow-sm"><div className="card-body">
       <div className="template-icon accent-neutral mb-3"><i className="bi bi-robot" /></div>
       <h2 className="h5">{name || template.name}</h2><p className="text-muted">{config.description}</p>
-      <dl><dt>Business</dt><dd>{business.label}</dd><dt>Template</dt><dd>{templateId}</dd><dt>Version</dt><dd>{agent?.templateVersion || template.version}</dd></dl>
+      <dl><dt>Domain</dt><dd>{domain.label}</dd><dt>Template</dt><dd>{templateId}</dd><dt>Version</dt><dd>{agent?.templateVersion || template.version}</dd></dl>
     </div></div></div>
   </div>
 }

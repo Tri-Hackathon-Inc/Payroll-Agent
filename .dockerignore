@@ -1,0 +1,16 @@
+.git
+.codex
+.agents
+**/node_modules
+**/.venv
+**/__pycache__
+**/*.py[cod]
+**/*.sqlite3*
+**/.env
+**/.env.*
+**/dist
+**/test-results
+**/playwright-report
+**/.DS_Store
+.local-data/
+**/.not_include

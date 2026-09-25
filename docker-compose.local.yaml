@@ -1,92 +1,17 @@
-# Complete local stack. Server settings are mounted, never copied into images.
+# The explicit local command uses the same three-service stack as the default.
 name: payroll-local
-
 services:
+  db:
+    extends:
+      file: docker-compose.yaml
+      service: db
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: api-test
-    environment:
-      DATABASE_PATH: /data/template_catalog.sqlite3
-    volumes:
-      - backend_data:/data
-      - type: bind
-        source: ./backend/local_server
-        target: /app/local_server
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./backend/templates
-        target: /app/templates
-        read_only: true
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import grpc; from google.protobuf.empty_pb2 import Empty; from registry.proto.templates_pb2_grpc import TemplateCatalogStub; TemplateCatalogStub(grpc.insecure_channel('127.0.0.1:50051')).ListBusinesses(Empty(), timeout=3)"
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 20s
-
-  apollo:
-    build:
-      context: ./backend
-      dockerfile: graphql/Dockerfile.test
-    environment:
-      API_TEST_MODE: "true"
-      NODE_ENV: development
-      GRPC_ADDRESS: backend:50051
-      HOST: 0.0.0.0
-      PORT: "4000"
-    volumes:
-      - type: bind
-        source: ./backend/local_server
-        target: /app/local_server
-        read_only: true
-        bind:
-          create_host_path: false
-    ports:
-      - "127.0.0.1:4000:4000"
-    depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:4000/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ listBusinesses { name } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-
+    extends:
+      file: docker-compose.yaml
+      service: backend
   ui:
-    build:
-      context: ./ui-payroll-agent
-      dockerfile: Dockerfile
-    environment:
-      GRAPHQL_MODE: backend
-      API_PROXY_TARGET: http://apollo:4000
-    ports:
-      - "127.0.0.1:5173:5173"
-    depends_on:
-      apollo:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD
-        - node
-        - -e
-        - "fetch('http://127.0.0.1:5173/ai-studio', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"
-      interval: 5s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
-
+    extends:
+      file: docker-compose.yaml
+      service: ui
 volumes:
-  backend_data:
+  mysql_data:

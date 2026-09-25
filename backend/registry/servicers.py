@@ -31,12 +31,12 @@ def rpc_handler(handler):
     return wrapped
 
 
-class TemplateCatalogServicer(rpc.TemplateCatalogServicer):
+class AIStudioServicer(rpc.ai_studioServicer):
     @rpc_handler
     def ListTemplates(self, request, context):
         return pb.TemplateList(
             templates=[
-                ParseDict(item, pb.Template()) for item in services.list_templates()
+                ParseDict(item, pb.Template()) for item in services.list_templates(request.service_name)
             ]
         )
 
@@ -45,27 +45,32 @@ class TemplateCatalogServicer(rpc.TemplateCatalogServicer):
         return ParseDict(services.get_template(request.id), pb.Template())
 
     @rpc_handler
-    def ListBusinesses(self, request, context):
-        return pb.BusinessList(
-            businesses=[
-                ParseDict(item, pb.Business()) for item in services.list_businesses()
+    def ListDomains(self, request, context):
+        return pb.DomainList(
+            domains=[
+                ParseDict(item, pb.Domain()) for item in services.list_domains()
             ]
         )
 
     @rpc_handler
-    def GetBusinessAgents(self, request, context):
-        return pb.AgentList(
-            agents=[
-                ParseDict(item, pb.Agent())
-                for item in services.get_business_agents(request.business_name)
-            ]
-        )
+    def GetDomainAgentsTemplates(self, request, context):
+        return pb.TemplateList(templates=[
+            ParseDict(item, pb.Template())
+            for item in services.get_domain_agents_templates(request.domain_name)
+        ])
+
+    @rpc_handler
+    def GetServiceAgentRegistry(self, request, context):
+        return pb.AgentList(agents=[
+            ParseDict(item, pb.Agent())
+            for item in services.get_service_agent_registry(request.service_name, request.domain_name)
+        ])
 
     @rpc_handler
     def CreateAgent(self, request, context):
         return ParseDict(
             services.create_agent(
-                request.business_name,
+                request.domain_name,
                 request.template_id,
                 request.name,
                 MessageToDict(request.config),
@@ -78,7 +83,7 @@ class TemplateCatalogServicer(rpc.TemplateCatalogServicer):
         return ParseDict(
             services.update_agent(
                 request.id,
-                request.business_name,
+                request.domain_name,
                 request.name,
                 MessageToDict(request.config),
             ),

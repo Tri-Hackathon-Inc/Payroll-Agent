@@ -34,11 +34,11 @@ scalar JSON
     serviceOptions: [Service!]!
   }
 
-  type Business { name: String!, label: String!, domain: String! }
+  type Domain { name: String!, label: String!, domain: String! }
   type Agent {
     id: ID!
     name: String!
-    businessName: String!
+    domainName: String!
     templateId: String!
     templateVersion: Int!
     config: JSON!
@@ -46,14 +46,14 @@ scalar JSON
     updatedAt: String!
   }
   input CreateAgentInput {
-    businessName: String!
+    domainName: String!
     templateId: String!
     name: String!
     config: JSON!
   }
   input UpdateAgentInput {
     id: ID!
-    businessName: String!
+    domainName: String!
     name: String!
     config: JSON!
   }
@@ -62,8 +62,9 @@ scalar JSON
     updateAgent(input: UpdateAgentInput!): Agent!
   }
   type Query {
-    listTemplates: [Template!]!
+    listTemplates(serviceName: String!): [Template!]!
     getTemplate(id: ID!): Template!
-    listBusinesses: [Business!]!
-    getBusinessAgents(businessName: String!): [Agent!]!
+    listDomains: [Domain!]!
+    getDomainAgentsTemplates(domainName: String!): [Template!]!
+    getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
   }

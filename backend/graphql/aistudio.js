@@ -1,0 +1,128 @@
+const path = require('node:path');
+const { createRpcResolver, encodeStruct, decodeStruct, jsonResolver } = require('./client');
+
+const catalogRpc = {
+  protoPath: path.join(__dirname, '../registry/proto/templates.proto'),
+  packageName: 'ai_studio_agents',
+  serviceName: 'ai_studio'
+};
+
+const typeDefs = `
+  scalar JSON
+
+  type ModelConfig {
+    id: ID!
+    name: String!
+    provider: String!
+    modelId: String!
+    enabled: Boolean!
+    endpointEnv: String!
+
+    
+    credentialEnv: String!
+    parameters: JSON!
+  }
+
+  type Service {
+    id: ID!
+    name: String!
+    enabled: Boolean!
+    method: String!
+  }
+
+  type Template {
+    id: ID!
+    name: String!
+    description: String!
+    version: Int!
+    config: JSON!
+    modelConfig: ModelConfig!
+    service: Service!
+    attachedServices: [Service!]!
+    modelOptions: [ModelConfig!]!
+  }
+
+  type Domain { name: String!, label: String!, domain: String! }
+  type Agent {
+    id: ID!
+    name: String!
+    domainName: String!
+    templateId: String!
+    templateVersion: Int!
+    config: JSON!
+    createdAt: String!
+    updatedAt: String!
+  }
+  input CreateAgentInput {
+    domainName: String!
+    templateId: String!
+    name: String!
+    config: JSON!
+  }
+  input UpdateAgentInput {
+    id: ID!
+    domainName: String!
+    name: String!
+    config: JSON!
+  }
+  type Mutation {
+    createAgent(input: CreateAgentInput!): Agent!
+    updateAgent(input: UpdateAgentInput!): Agent!
+  }
+  type Query {
+    listTemplates(serviceName: String!): [Template!]!
+    getTemplate(id: ID!): Template!
+    listDomains: [Domain!]!
+    getDomainAgentsTemplates(domainName: String!): [Template!]!
+    getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
+  }
+`;
+
+const rpcResolver = createRpcResolver(catalogRpc);
+
+const resolvers = {
+  JSON: jsonResolver,
+  Query: {
+    listTemplates: rpcResolver('ListTemplates', ({ serviceName }) => ({ service_name: serviceName }), value => value.templates || []),
+    getTemplate: rpcResolver('GetTemplate', ({ id }) => ({ id })),
+    listDomains: rpcResolver('ListDomains', () => ({}), value => value.domains || []),
+    getDomainAgentsTemplates: rpcResolver('GetDomainAgentsTemplates', ({ domainName }) => ({ domain_name: domainName }),
+      value => value.templates || []),
+    getServiceAgentRegistry: rpcResolver('GetServiceAgentRegistry', ({ serviceName, domainName }) => ({ service_name: serviceName || '', domain_name: domainName || '' }),
+      value => value.agents || []),
+  },
+  Mutation: {
+    createAgent: rpcResolver('CreateAgent', ({ input }) => ({
+      domain_name: input.domainName, template_id: input.templateId,
+      name: input.name, config: encodeStruct(input.config),
+    })),
+    updateAgent: rpcResolver('UpdateAgent', ({ input }) => ({
+      id: input.id, domain_name: input.domainName,
+      name: input.name, config: encodeStruct(input.config),
+    })),
+  },
+  Agent: {
+    domainName: agent => agent.domain_name,
+    templateId: agent => agent.template_id,
+    templateVersion: agent => agent.template_version,
+    config: agent => decodeStruct(agent.config),
+    createdAt: agent => agent.created_at,
+    updatedAt: agent => agent.updated_at,
+  },
+  Template: {
+    modelOptions: template => (template.model_options || []).map(decodeStruct),
+    serviceOptions: template => (template.service_options || []).map(decodeStruct),
+    config: template => decodeStruct(template.config),
+    modelConfig: template => decodeStruct(template.model_config),
+    service: template => decodeStruct(template.service),
+    attachedServices: template => (template.attached_services || []).map(decodeStruct),
+  },
+  ModelConfig: {
+    modelId: model => model.model_id,
+    endpointEnv: model => model.endpoint_env,
+    credentialEnv: model => model.credential_env,
+  },
+  Service: { baseUrlEnv: service => service.base_url_env },
+};
+
+module.exports = { typeDefs, resolvers, catalogRpc };

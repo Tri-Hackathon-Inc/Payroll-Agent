@@ -6,14 +6,10 @@ const settings = require('./apollo-settings.json');
 const { ApolloServer } = graphqlRequire('@apollo/server');
 const { startStandaloneServer } = graphqlRequire('@apollo/server/standalone');
 const { ApolloServerPluginLandingPageLocalDefault } = graphqlRequire('@apollo/server/plugin/landingPage/default');
-const { createGrpcDataSource } = require('../graphql/client');
-const { typeDefs, resolvers, catalogRpc } = require('../graphql/schema');
+const { createGrpcDataSource } = require('./grpc-client');
+const { typeDefs, resolvers, catalogRpc } = require('../graphql/aistudio');
 
 async function main() {
-  if (process.env.API_TEST_MODE !== 'true') {
-    throw new Error('This temporary server requires API_TEST_MODE=true. Use docker-compose.test.yaml.');
-  }
-
   const grpc = createGrpcDataSource(process.env.GRPC_ADDRESS || settings.grpcAddress);
   const server = new ApolloServer({
     typeDefs,
@@ -36,7 +32,7 @@ async function main() {
         context: { headers: req.headers },
       }),
     });
-    console.log(`Temporary Apollo API and Sandbox: ${url}`);
+    console.log(`GraphQL API and Sandbox: ${url}`);
   } catch (error) {
     grpc.close();
     throw error;

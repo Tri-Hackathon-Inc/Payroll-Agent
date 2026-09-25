@@ -2,13 +2,12 @@
   "name": "payroll-catalog-graphql",
   "private": true,
   "version": "0.1.0",
-  "main": "schema.js",
+  "main": "aistudio.js",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "start": "node ../local_server/apollo.js",
-    "test": "node --test schema.test.js"
+    "start": "node ../local_server/apollo.js"
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",

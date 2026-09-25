@@ -9,11 +9,11 @@ test.beforeAll(() => {
   if (!process.env.DATABASE_PATH) throw new Error('Set DATABASE_PATH to the isolated database used by your running test backend.')
   const python = process.env.PYTHON || path.join(root, '.venv/bin/python')
   for (const [name, label] of [['payroll-services', 'Payroll Services'], ['payroll-demo', 'Payroll Demo']]) {
-    execFileSync(python, ['backend/manage.py', 'create_business', name, '--label', label, '--domain', 'Payroll'], { cwd: root })
+    execFileSync(python, ['backend/manage.py', 'create_domain', name, '--label', label, '--domain', 'Payroll'], { cwd: root })
   }
 })
 
-test('create, reload, edit, handle errors, and filter agents by business', async ({ page }) => {
+test('create, reload, edit, handle errors, and filter agents by domain', async ({ page }) => {
   const name = `Payroll UI review ${Date.now()}`
   await page.goto('/ai-studio')
   await page.getByRole('button', { name: /Payroll Services.*Browse templates/ }).click()
@@ -21,7 +21,7 @@ test('create, reload, edit, handle errors, and filter agents by business', async
   await card.getByRole('button', { name: 'Use Template' }).click()
   await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue(/Compare payrun inputs/)
   await page.getByLabel('Agent name', { exact: true }).fill(name)
-  await page.getByLabel('Instructions', { exact: true }).fill('Review unusual payments for this business only.')
+  await page.getByLabel('Instructions', { exact: true }).fill('Review unusual payments for this domain only.')
   await page.getByLabel('Severity', { exact: true }).selectOption('critical')
   await page.getByLabel('Enable webhook', { exact: true }).check()
   await page.getByLabel('HTTPS destination', { exact: true }).fill('https://example.com/payroll-events')
@@ -53,14 +53,14 @@ test('create, reload, edit, handle errors, and filter agents by business', async
   await page.getByLabel('Enable alerts', { exact: true }).uncheck()
   await page.getByRole('button', { name: 'Save changes', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'My agents', exact: true })).toBeVisible()
-  await page.getByLabel('Business', { exact: true }).selectOption('payroll-demo')
+  await page.getByLabel('Domain', { exact: true }).selectOption('payroll-demo')
   await expect(page.getByRole('status')).toHaveCount(0)
   await expect(page.getByRole('heading', { name: `${name} updated`, exact: true })).toHaveCount(0)
   await page.goBack()
   agentCard = page.locator('.card').filter({ has: page.getByRole('heading', { name: `${name} updated`, exact: true }) })
   await agentCard.getByRole('button', { name: 'Edit agent' }).click()
   await expect(page.getByLabel('Enable alerts', { exact: true })).not.toBeChecked()
-  await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('Review unusual payments for this business only.')
+  await expect(page.getByLabel('Instructions', { exact: true })).toHaveValue('Review unusual payments for this domain only.')
   await page.screenshot({ path: 'test-results/agent-configuration.png', fullPage: true })
 })
 
@@ -70,7 +70,7 @@ test('template request failures can be retried', async ({ page }) => {
       await route.fulfill({ json: { errors: [{ message: 'Template temporarily unavailable.' }] } })
     } else await route.continue()
   })
-  await page.goto('/ai-studio/templates/anomaly-detection/config?business=payroll-services')
+  await page.goto('/ai-studio/templates/anomaly-detection/config?domain=payroll-services')
   await expect(page.getByRole('alert')).toContainText('Template temporarily unavailable')
   await page.unroute('**/graphql')
   await page.getByRole('button', { name: 'Retry' }).click()

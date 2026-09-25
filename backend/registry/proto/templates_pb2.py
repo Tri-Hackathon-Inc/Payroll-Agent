@@ -9,9 +9,13 @@ from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
-
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC, 6, 31, 1, "", "registry/proto/templates.proto"
+    _runtime_version.Domain.PUBLIC,
+    6,
+    31,
+    1,
+    '',
+    'registry/proto/templates.proto'
 )
 # @@protoc_insertion_point(imports)
 
@@ -21,37 +25,38 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
-    b'\n\x1eregistry/proto/templates.proto\x12\x14payroll.templates.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto"\x18\n\nTemplateId\x12\n\n\x02id\x18\x01 \x01(\t"\xe2\x02\n\x08Template\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\r\x12\'\n\x06\x63onfig\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\x12-\n\x0cmodel_config\x18\x06 \x01(\x0b\x32\x17.google.protobuf.Struct\x12(\n\x07service\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x32\n\x11\x61ttached_services\x18\x08 \x03(\x0b\x32\x17.google.protobuf.Struct\x12.\n\rmodel_options\x18\t \x03(\x0b\x32\x17.google.protobuf.Struct\x12\x30\n\x0fservice_options\x18\n \x03(\x0b\x32\x17.google.protobuf.Struct"A\n\x0cTemplateList\x12\x31\n\ttemplates\x18\x01 \x03(\x0b\x32\x1e.payroll.templates.v1.Template"%\n\x0c\x42usinessName\x12\x15\n\rbusiness_name\x18\x01 \x01(\t"7\n\x08\x42usiness\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12\x0e\n\x06\x64omain\x18\x03 \x01(\t"B\n\x0c\x42usinessList\x12\x32\n\nbusinesses\x18\x01 \x03(\x0b\x32\x1e.payroll.templates.v1.Business"\xb8\x01\n\x05\x41gent\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x15\n\rbusiness_name\x18\x03 \x01(\t\x12\x13\n\x0btemplate_id\x18\x04 \x01(\t\x12\x18\n\x10template_version\x18\x05 \x01(\r\x12\'\n\x06\x63onfig\x18\x06 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x12\n\ncreated_at\x18\x07 \x01(\t\x12\x12\n\nupdated_at\x18\x08 \x01(\t"8\n\tAgentList\x12+\n\x06\x61gents\x18\x01 \x03(\x0b\x32\x1b.payroll.templates.v1.Agent"w\n\x12\x43reateAgentRequest\x12\x15\n\rbusiness_name\x18\x01 \x01(\t\x12\x13\n\x0btemplate_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\'\n\x06\x63onfig\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct"n\n\x12UpdateAgentRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x15\n\rbusiness_name\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\'\n\x06\x63onfig\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct2\x83\x04\n\x0fTemplateCatalog\x12K\n\rListTemplates\x12\x16.google.protobuf.Empty\x1a".payroll.templates.v1.TemplateList\x12O\n\x0bGetTemplate\x12 .payroll.templates.v1.TemplateId\x1a\x1e.payroll.templates.v1.Template\x12L\n\x0eListBusinesses\x12\x16.google.protobuf.Empty\x1a".payroll.templates.v1.BusinessList\x12X\n\x11GetBusinessAgents\x12".payroll.templates.v1.BusinessName\x1a\x1f.payroll.templates.v1.AgentList\x12T\n\x0b\x43reateAgent\x12(.payroll.templates.v1.CreateAgentRequest\x1a\x1b.payroll.templates.v1.Agent\x12T\n\x0bUpdateAgent\x12(.payroll.templates.v1.UpdateAgentRequest\x1a\x1b.payroll.templates.v1.Agentb\x06proto3'
-)
+
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1eregistry/proto/templates.proto\x12\x10\x61i_studio_agents\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x18\n\nTemplateId\x12\n\n\x02id\x18\x01 \x01(\t\"#\n\x0bServiceName\x12\x14\n\x0cservice_name\x18\x01 \x01(\t\"\xe2\x02\n\x08Template\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0b\x64\x65scription\x18\x03 \x01(\t\x12\x0f\n\x07version\x18\x04 \x01(\r\x12\'\n\x06\x63onfig\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\x12-\n\x0cmodel_config\x18\x06 \x01(\x0b\x32\x17.google.protobuf.Struct\x12(\n\x07service\x18\x07 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x32\n\x11\x61ttached_services\x18\x08 \x03(\x0b\x32\x17.google.protobuf.Struct\x12.\n\rmodel_options\x18\t \x03(\x0b\x32\x17.google.protobuf.Struct\x12\x30\n\x0fservice_options\x18\n \x03(\x0b\x32\x17.google.protobuf.Struct\"=\n\x0cTemplateList\x12-\n\ttemplates\x18\x01 \x03(\x0b\x32\x1a.ai_studio_agents.Template\"!\n\nDomainName\x12\x13\n\x0b\x64omain_name\x18\x01 \x01(\t\"5\n\x06\x44omain\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05label\x18\x02 \x01(\t\x12\x0e\n\x06\x64omain\x18\x03 \x01(\t\"7\n\nDomainList\x12)\n\x07\x64omains\x18\x01 \x03(\x0b\x32\x18.ai_studio_agents.Domain\"\xb6\x01\n\x05\x41gent\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x13\n\x0b\x64omain_name\x18\x03 \x01(\t\x12\x13\n\x0btemplate_id\x18\x04 \x01(\t\x12\x18\n\x10template_version\x18\x05 \x01(\r\x12\'\n\x06\x63onfig\x18\x06 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x12\n\ncreated_at\x18\x07 \x01(\t\x12\x12\n\nupdated_at\x18\x08 \x01(\t\"4\n\tAgentList\x12\'\n\x06\x61gents\x18\x01 \x03(\x0b\x32\x17.ai_studio_agents.Agent\"u\n\x12\x43reateAgentRequest\x12\x13\n\x0b\x64omain_name\x18\x01 \x01(\t\x12\x13\n\x0btemplate_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\'\n\x06\x63onfig\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\"l\n\x12UpdateAgentRequest\x12\n\n\x02id\x18\x01 \x01(\t\x12\x13\n\x0b\x64omain_name\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\'\n\x06\x63onfig\x18\x04 \x01(\x0b\x32\x17.google.protobuf.Struct\"H\n\x1bServiceAgentRegistryRequest\x12\x14\n\x0cservice_name\x18\x01 \x01(\t\x12\x13\n\x0b\x64omain_name\x18\x02 \x01(\t2\xc6\x04\n\tai_studio\x12N\n\rListTemplates\x12\x1d.ai_studio_agents.ServiceName\x1a\x1e.ai_studio_agents.TemplateList\x12G\n\x0bGetTemplate\x12\x1c.ai_studio_agents.TemplateId\x1a\x1a.ai_studio_agents.Template\x12\x43\n\x0bListDomains\x12\x16.google.protobuf.Empty\x1a\x1c.ai_studio_agents.DomainList\x12X\n\x18GetDomainAgentsTemplates\x12\x1c.ai_studio_agents.DomainName\x1a\x1e.ai_studio_agents.TemplateList\x12\x65\n\x17GetServiceAgentRegistry\x12-.ai_studio_agents.ServiceAgentRegistryRequest\x1a\x1b.ai_studio_agents.AgentList\x12L\n\x0b\x43reateAgent\x12$.ai_studio_agents.CreateAgentRequest\x1a\x17.ai_studio_agents.Agent\x12L\n\x0bUpdateAgent\x12$.ai_studio_agents.UpdateAgentRequest\x1a\x17.ai_studio_agents.Agentb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(
-    DESCRIPTOR, "registry.proto.templates_pb2", _globals
-)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'registry.proto.templates_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-    DESCRIPTOR._loaded_options = None
-    _globals["_TEMPLATEID"]._serialized_start = 115
-    _globals["_TEMPLATEID"]._serialized_end = 139
-    _globals["_TEMPLATE"]._serialized_start = 142
-    _globals["_TEMPLATE"]._serialized_end = 496
-    _globals["_TEMPLATELIST"]._serialized_start = 498
-    _globals["_TEMPLATELIST"]._serialized_end = 563
-    _globals["_BUSINESSNAME"]._serialized_start = 565
-    _globals["_BUSINESSNAME"]._serialized_end = 602
-    _globals["_BUSINESS"]._serialized_start = 604
-    _globals["_BUSINESS"]._serialized_end = 659
-    _globals["_BUSINESSLIST"]._serialized_start = 661
-    _globals["_BUSINESSLIST"]._serialized_end = 727
-    _globals["_AGENT"]._serialized_start = 730
-    _globals["_AGENT"]._serialized_end = 914
-    _globals["_AGENTLIST"]._serialized_start = 916
-    _globals["_AGENTLIST"]._serialized_end = 972
-    _globals["_CREATEAGENTREQUEST"]._serialized_start = 974
-    _globals["_CREATEAGENTREQUEST"]._serialized_end = 1093
-    _globals["_UPDATEAGENTREQUEST"]._serialized_start = 1095
-    _globals["_UPDATEAGENTREQUEST"]._serialized_end = 1205
-    _globals["_TEMPLATECATALOG"]._serialized_start = 1208
-    _globals["_TEMPLATECATALOG"]._serialized_end = 1723
+  DESCRIPTOR._loaded_options = None
+  _globals['_TEMPLATEID']._serialized_start=111
+  _globals['_TEMPLATEID']._serialized_end=135
+  _globals['_SERVICENAME']._serialized_start=137
+  _globals['_SERVICENAME']._serialized_end=172
+  _globals['_TEMPLATE']._serialized_start=175
+  _globals['_TEMPLATE']._serialized_end=529
+  _globals['_TEMPLATELIST']._serialized_start=531
+  _globals['_TEMPLATELIST']._serialized_end=592
+  _globals['_DOMAINNAME']._serialized_start=594
+  _globals['_DOMAINNAME']._serialized_end=627
+  _globals['_DOMAIN']._serialized_start=629
+  _globals['_DOMAIN']._serialized_end=682
+  _globals['_DOMAINLIST']._serialized_start=684
+  _globals['_DOMAINLIST']._serialized_end=739
+  _globals['_AGENT']._serialized_start=742
+  _globals['_AGENT']._serialized_end=924
+  _globals['_AGENTLIST']._serialized_start=926
+  _globals['_AGENTLIST']._serialized_end=978
+  _globals['_CREATEAGENTREQUEST']._serialized_start=980
+  _globals['_CREATEAGENTREQUEST']._serialized_end=1097
+  _globals['_UPDATEAGENTREQUEST']._serialized_start=1099
+  _globals['_UPDATEAGENTREQUEST']._serialized_end=1207
+  _globals['_SERVICEAGENTREGISTRYREQUEST']._serialized_start=1209
+  _globals['_SERVICEAGENTREGISTRYREQUEST']._serialized_end=1281
+  _globals['_AI_STUDIO']._serialized_start=1284
+  _globals['_AI_STUDIO']._serialized_end=1866
 # @@protoc_insertion_point(module_scope)

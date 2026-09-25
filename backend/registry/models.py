@@ -42,7 +42,7 @@ class Template(models.Model):
         ordering = ["id"]
 
 
-class Business(models.Model):
+class Domain(models.Model):
     name = models.SlugField(primary_key=True, max_length=100)
     label = models.CharField(max_length=150)
     domain = models.CharField(max_length=100)
@@ -53,8 +53,8 @@ class Business(models.Model):
 
 class Agent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    business = models.ForeignKey(
-        Business, on_delete=models.PROTECT, related_name="agents"
+    domain = models.ForeignKey(
+        Domain, on_delete=models.PROTECT, related_name="agents"
     )
     name = models.CharField(max_length=150)
     # Provenance is a snapshot: catalog synchronization must not delete agents.

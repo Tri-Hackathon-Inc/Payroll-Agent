@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { graphqlRequest } from './graphql/client'
-import { BUSINESS_AGENTS_QUERY, STUDIO_QUERY } from './graphql/operations'
+import { SERVICE_AGENT_REGISTRY_QUERY, DOMAIN_TEMPLATES_QUERY, STUDIO_QUERY } from './graphql/operations'
 import AgentEditor from './AgentEditor'
 
 const NAV_GROUPS = [
@@ -92,6 +92,7 @@ function Loading({ children = 'Loading…' }) {
 function App() {
   const [route, setRoute] = useState(() => window.location.pathname + window.location.search)
   const [catalog, setCatalog] = useState(null)
+  const [templateResult, setTemplateResult] = useState(null)
   const [catalogError, setCatalogError] = useState('')
   const [reload, setReload] = useState(0)
   const [agentResult, setAgentResult] = useState(null)
@@ -100,16 +101,16 @@ function App() {
   const [notice, setNotice] = useState('')
   const url = new URL(route, window.location.origin)
   const path = url.pathname
-  const businessName = url.searchParams.get('business') || catalog?.businesses[0]?.name
-  const business = catalog?.businesses.find(item => item.name === businessName)
-  const businessHome = path === '/' || (path === '/ai-studio' && !url.searchParams.has('business'))
+  const domainName = url.searchParams.get('domain') || catalog?.domains[0]?.name
+  const domain = catalog?.domains.find(item => item.name === domainName)
+  const domainHome = path === '/' || (path === '/ai-studio' && !url.searchParams.has('domain'))
   const templateMatch = path.match(/^\/ai-studio\/templates\/([^/]+)\/config$/)
   const agentMatch = path.match(/^\/agents\/([^/]+)$/)
   const editId = agentMatch && agentMatch[1] !== 'new' ? decodeURIComponent(agentMatch[1]) : null
   const listPage = path === '/agents'
-  const agents = agentResult && agentResult.businessName === businessName ? agentResult.items : []
-  const agentsLoading = business && (agentResult?.businessName !== businessName || agentResult.loading)
-  const agentsError = agentResult && agentResult.businessName === businessName ? agentResult.error : ''
+  const agents = agentResult && agentResult.domainName === domainName ? agentResult.items : []
+  const agentsLoading = domain && (agentResult?.domainName !== domainName || agentResult.loading)
+  const agentsError = agentResult && agentResult.domainName === domainName ? agentResult.error : ''
 
   useEffect(() => {
     const onPopState = () => {
@@ -124,30 +125,40 @@ function App() {
     let active = true
     setCatalogError('')
     graphqlRequest(STUDIO_QUERY)
-      .then(data => { if (active) setCatalog({ businesses: data.listBusinesses, templates: data.listTemplates }) })
+      .then(data => { if (active) setCatalog({ domains: data.listDomains }) })
       .catch(error => { if (active) setCatalogError(error.message) })
     return () => { active = false }
   }, [reload])
 
   useEffect(() => {
-    if (!business) return
+    if (!domain) return
     let active = true
-    setAgentResult({ businessName: business.name, items: [], loading: true, error: '' })
-    graphqlRequest(BUSINESS_AGENTS_QUERY, { businessName: business.name })
-      .then(data => { if (active) setAgentResult({ businessName: business.name, items: data.getBusinessAgents, loading: false, error: '' }) })
-      .catch(error => { if (active) setAgentResult({ businessName: business.name, items: [], loading: false, error: error.message }) })
+    setAgentResult({ domainName: domain.name, items: [], loading: true, error: '' })
+    graphqlRequest(SERVICE_AGENT_REGISTRY_QUERY, { domainName: domain.name })
+      .then(data => { if (active) setAgentResult({ domainName: domain.name, items: data.getServiceAgentRegistry, loading: false, error: '' }) })
+      .catch(error => { if (active) setAgentResult({ domainName: domain.name, items: [], loading: false, error: error.message }) })
     return () => { active = false }
-  }, [business, refreshAgents])
+  }, [domain, refreshAgents])
+
+  useEffect(() => {
+    if (!domain) return
+    let active = true
+    setTemplateResult({ domainName: domain.name, loading: true, items: [] })
+    graphqlRequest(DOMAIN_TEMPLATES_QUERY, { domainName: domain.name })
+      .then(data => { if (active) setTemplateResult({ domainName: domain.name, items: data.getDomainAgentsTemplates }) })
+      .catch(error => { if (active) setTemplateResult({ domainName: domain.name, items: [], error: error.message }) })
+    return () => { active = false }
+  }, [domain, reload])
 
   function navigate(next) {
     window.history.pushState({}, '', next)
     setRoute(next)
     setSearch('')
   }
-  const scoped = (next, name = businessName) => `${next}?business=${encodeURIComponent(name || '')}`
+  const scoped = (next, name = domainName) => `${next}?domain=${encodeURIComponent(name || '')}`
   const handleNav = item => item.soon ? setNotice(`${item.label} is coming soon.`) : navigate(scoped(item.path))
   const saved = agent => {
-    setNotice(`${agent.name} saved for ${business.label}.`)
+    setNotice(`${agent.name} saved for ${domain.label}.`)
     setRefreshAgents(value => value + 1)
     navigate(scoped('/agents'))
   }
@@ -160,28 +171,28 @@ function App() {
       <button className="btn btn-outline-danger btn-sm ms-3" onClick={() => setReload(value => value + 1)}>Retry</button>
     </div>
   } else if (!catalog) {
-    content = <Loading>Loading businesses and templates…</Loading>
-  } else if (!catalog.businesses.length) {
-    content = <p>No businesses are available yet. Ask your administrator to create one.</p>
-  } else if (!business) {
-    content = <div className="alert alert-warning" role="alert">Business not found.
-      <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose a business</button>
+    content = <Loading>Loading domains…</Loading>
+  } else if (!catalog.domains.length) {
+    content = <p>No domains are available yet. Ask your administrator to create one.</p>
+  } else if (!domain) {
+    content = <div className="alert alert-warning" role="alert">Domain not found.
+      <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose a domain</button>
     </div>
   } else if (templateMatch || editId) {
     const agent = editId && agents.find(item => item.id === editId)
     if (editId && agentsLoading) content = <Loading>Loading agent…</Loading>
     else if (editId && agentsError) content = <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents(value => value + 1)}>Retry</button></div>
-    else if (editId && !agent) content = <p role="alert">This agent was not found in {business.label}.</p>
-    else content = <AgentEditor key={`${business.name}:${editId || templateMatch[1]}`}
-      business={business} agent={agent || null} templateId={agent?.templateId || decodeURIComponent(templateMatch[1])}
+    else if (editId && !agent) content = <p role="alert">This agent was not found in {domain.label}.</p>
+    else content = <AgentEditor key={`${domain.name}:${editId || templateMatch[1]}`}
+      domain={domain} agent={agent || null} templateId={agent?.templateId || decodeURIComponent(templateMatch[1])}
       onSaved={saved} onCancel={() => navigate(scoped(editId ? '/agents' : '/ai-studio'))} />
-  } else if (businessHome) {
+  } else if (domainHome) {
     content = <>
-      <h1 className="h3 fw-bold">Choose a business</h1>
-      <p className="text-muted">Create and manage agents for a specific business.</p>
-      <input className="form-control mb-4" type="search" aria-label="Search businesses" placeholder="Search businesses…" value={search} onChange={event => setSearch(event.target.value)} />
+      <h1 className="h3 fw-bold">Choose a domain</h1>
+      <p className="text-muted">Create and manage agents for a specific domain.</p>
+      <input className="form-control mb-4" type="search" aria-label="Search domains" placeholder="Search domains…" value={search} onChange={event => setSearch(event.target.value)} />
       <div className="row row-cols-1 row-cols-md-3 g-3">
-        {catalog.businesses.filter(item => matches(item.label, item.domain)).map(item => <div className="col" key={item.name}>
+        {catalog.domains.filter(item => matches(item.label, item.domain)).map(item => <div className="col" key={item.name}>
           <button className="card border-0 shadow-sm template-card accent-neutral h-100 w-100 text-start" onClick={() => navigate(scoped('/ai-studio', item.name))}>
             <span className="card-body"><span className="template-icon mb-3"><i className="bi bi-building" /></span>
               <span className="h5 d-block">{item.label}</span><span className="text-muted d-block">{item.domain}</span>
@@ -190,12 +201,12 @@ function App() {
           </button>
         </div>)}
       </div>
-      {!catalog.businesses.some(item => matches(item.label, item.domain)) && <p>No businesses match your search.</p>}
+      {!catalog.domains.some(item => matches(item.label, item.domain)) && <p>No domains match your search.</p>}
     </>
   } else if (listPage) {
     content = <>
       <div className="d-flex justify-content-between align-items-center mb-4 gap-3">
-        <div><h1 className="h3 fw-bold">My agents</h1><p className="text-muted mb-0">{business.label}</p></div>
+        <div><h1 className="h3 fw-bold">My agents</h1><p className="text-muted mb-0">{domain.label}</p></div>
         <button className="btn btn-dark" onClick={() => navigate(scoped('/ai-studio'))}>Create agent</button>
       </div>
       <input className="form-control mb-4" type="search" aria-label="Search agents" placeholder="Search agents…" value={search} onChange={event => setSearch(event.target.value)} />
@@ -209,16 +220,16 @@ function App() {
             </div></div>
           </div>)}
         </div>
-        {!agents.length && <p>No agents yet for {business.label}. Choose a template to create your first agent.</p>}
+        {!agents.length && <p>No agents yet for {domain.label}. Choose a template to create your first agent.</p>}
         {!!agents.length && !agents.some(item => matches(item.name, item.config.description)) && <p>No agents match your search.</p>}
       </>}
     </>
   } else {
-    const templates = catalog.templates.filter(item => item.config.domain === business.domain && matches(item.name, item.description))
+    const templates = (templateResult?.domainName === domainName ? templateResult.items : []).filter(item => item.config.domain === domain.domain && matches(item.name, item.description))
     content = <>
-      <button className="btn btn-link ps-0 mb-3" onClick={() => navigate('/ai-studio')}>← All businesses</button>
-      <h1 className="h3 fw-bold">{business.label} templates</h1>
-      <p className="text-muted">Choose a template and customize its configuration for your business.</p>
+      <button className="btn btn-link ps-0 mb-3" onClick={() => navigate('/ai-studio')}>← All domains</button>
+      <h1 className="h3 fw-bold">{domain.label} templates</h1>
+      <p className="text-muted">Choose a template and customize its configuration for your domain.</p>
       <input className="form-control mb-4" type="search" aria-label="Search templates" placeholder="Search templates…" value={search} onChange={event => setSearch(event.target.value)} />
       <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
         {templates.map(template => <div className="col" key={template.id}>
@@ -230,17 +241,19 @@ function App() {
           </div></div>
         </div>)}
       </div>
-      {!templates.length && <p>No templates match this business and search.</p>}
+      {(!templateResult || templateResult.domainName !== domainName || templateResult.loading) ? <Loading>Loading templates...</Loading>
+        : templateResult.error ? <div role="alert">{templateResult.error}<button onClick={() => setReload(value => value + 1)}>Retry</button></div>
+        : !templates.length && <p>No templates match this domain and search.</p>}
     </>
   }
 
   return <AppShell activeKey={listPage || editId ? 'my-agents' : 'templates'} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
-    {!!catalog?.businesses.length && <div className="d-flex justify-content-end align-items-center gap-2 mb-4">
-      <label htmlFor="business" className="fw-semibold">Business</label>
-      <select id="business" className="form-select w-auto" value={business?.name || ''}
+    {!!catalog?.domains.length && <div className="d-flex justify-content-end align-items-center gap-2 mb-4">
+      <label htmlFor="domain" className="fw-semibold">Domain</label>
+      <select id="domain" className="form-select w-auto" value={domain?.name || ''}
         onChange={event => navigate(scoped(listPage || editId ? '/agents' : '/ai-studio', event.target.value))}>
-        {!business && <option value="">Choose a business</option>}
-        {catalog.businesses.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
+        {!domain && <option value="">Choose a domain</option>}
+        {catalog.domains.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
       </select>
     </div>}
     {content}

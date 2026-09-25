@@ -18,23 +18,23 @@ function merge(base, override) {
 
 export function createMockExecutor() {
   const schema = buildSchema(readFile('../graphql/schema.graphql'))
-  const { businesses, templates, agents } = JSON.parse(readFile('./data.json'))
-  const business = name => businesses.find(item => item.name === name) || fail(`Business ${name} not found.`, 'NOT_FOUND')
+  const { domains, templates, agents } = JSON.parse(readFile('./data.json'))
+  const domain = name => domains.find(item => item.name === name) || fail(`Domain ${name} not found.`, 'NOT_FOUND')
   const template = id => templates.find(item => item.id === id) || fail(`Template ${id} not found.`, 'NOT_FOUND')
 
   function save(input, existing) {
-    const selectedBusiness = business(input.businessName)
+    const selectedDomain = domain(input.domainName)
     const source = template(existing?.templateId || input.templateId)
     const config = merge(existing?.config || source.config, input.config)
     if (!input.name.trim() || input.name.trim().length > 150) fail('A name of at most 150 characters is required.')
-    if (source.config.domain !== selectedBusiness.domain || config.domain !== selectedBusiness.domain) fail('Agent domain must match its business.')
+    if (source.config.domain !== selectedDomain.domain || config.domain !== selectedDomain.domain) fail('Agent domain must match its domain.')
     for (const key of ['description', 'instructions', 'created_by']) {
       if (typeof config[key] !== 'string' || !config[key].trim()) fail(`${key} is required.`)
     }
     if (!source.modelOptions.some(item => item.id === config.model)) fail('Select an enabled model.')
     if (!Array.isArray(config.attached_services) || !Array.isArray(config.questions)) fail('Services and questions must be arrays.')
     for (const id of [config.service, ...config.attached_services]) {
-      if (!source.serviceOptions.some(item => item.id === id)) fail('Select an enabled service in the business domain.')
+      if (!source.serviceOptions.some(item => item.id === id)) fail('Select an enabled service in the domain category.')
     }
     const alerts = config.capabilities?.alerts
     const webhooks = config.capabilities?.webhooks
@@ -45,7 +45,7 @@ export function createMockExecutor() {
       catch { fail('Webhook URL must use HTTPS.') }
     }
     const now = new Date().toISOString()
-    const agent = { id: existing?.id || randomUUID(), name: input.name.trim(), businessName: selectedBusiness.name,
+    const agent = { id: existing?.id || randomUUID(), name: input.name.trim(), domainName: selectedDomain.name,
       templateId: source.id, templateVersion: existing?.templateVersion || source.version,
       config, createdAt: existing?.createdAt || now, updatedAt: now }
     if (existing) Object.assign(existing, agent)
@@ -54,15 +54,24 @@ export function createMockExecutor() {
   }
 
   const rootValue = {
-    listBusinesses: () => businesses,
-    listTemplates: () => templates,
+    listDomains: () => domains,
+    listTemplates: ({ serviceName }) => {
+      if (!serviceName.trim()) fail('service_name is required.')
+      if (!templates.some(item => item.serviceOptions.some(service => service.id === serviceName))) fail(`Service ${serviceName} not found.`, 'NOT_FOUND')
+      return templates.filter(item => item.config.service === serviceName)
+    },
     getTemplate: ({ id }) => template(id),
-    getBusinessAgents: ({ businessName }) => { business(businessName); return agents.filter(item => item.businessName === businessName) },
+    getDomainAgentsTemplates: ({ domainName }) => templates.filter(item => item.config.domain === domain(domainName).domain),
+    getServiceAgentRegistry: ({ serviceName, domainName }) => {
+      if (domainName) domain(domainName)
+      if (serviceName && !templates.some(item => item.serviceOptions.some(service => service.id === serviceName))) fail(`Service ${serviceName} not found.`, 'NOT_FOUND')
+      return agents.filter(item => (!domainName || item.domainName === domainName) && (!serviceName || item.config.service === serviceName))
+    },
     createAgent: ({ input }) => save(input),
     updateAgent: ({ input }) => {
-      business(input.businessName)
-      const agent = agents.find(item => item.id === input.id && item.businessName === input.businessName)
-      if (!agent) fail('Agent not found in this business.', 'NOT_FOUND')
+      domain(input.domainName)
+      const agent = agents.find(item => item.id === input.id && item.domainName === input.domainName)
+      if (!agent) fail('Agent not found in this domain.', 'NOT_FOUND')
       return save(input, agent)
     },
   }

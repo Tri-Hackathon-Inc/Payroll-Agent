@@ -1,36 +1,73 @@
+name: payroll-local
+
 services:
-  backend:
-    container_name: payroll-agent-backend
-    image: ghcr.io/tri-hackathon-inc/payroll-agent-backend:${IMAGE_TAG:-latest}
-    ports:
-      - "8000:8000"
-    env_file:
-      - path: .env
-        required: false
+  db:
+    image: mysql:8.4
     environment:
-      SQLITE_PATH: /data/db.sqlite3
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-payroll}
+      MYSQL_USER: ${MYSQL_USER:-payroll}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-payroll-local-development}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-payroll-root-local-development}
     volumes:
-      - backend_data:/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/agents/')"]
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u $$MYSQL_USER -D $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null"]
       interval: 5s
       timeout: 5s
-      retries: 10
-      start_period: 10s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-payroll}
+      MYSQL_USER: ${MYSQL_USER:-payroll}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-payroll-local-development}
+      GRPC_ADDRESS: 127.0.0.1:50051
+      HOST: 0.0.0.0
+      PORT: "4000"
+      NODE_ENV: development
+    ports:
+      - "127.0.0.1:4000:4000"
+      - "127.0.0.1:50051:50051"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ listDomains { name } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     restart: unless-stopped
 
   ui:
-    container_name: payroll-agent-ui
-    image: ghcr.io/tri-hackathon-inc/payroll-agent-ui:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: ui
     environment:
-      API_PROXY_TARGET: http://backend:8000
-      GRAPHQL_MODE: ${GRAPHQL_MODE:-mock}
+      GRAPHQL_MODE: backend
+      API_PROXY_TARGET: http://backend:4000
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     depends_on:
       backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/ai-studio', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
     restart: unless-stopped
 
 volumes:
-  backend_data:
+  mysql_data:
