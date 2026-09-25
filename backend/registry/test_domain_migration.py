@@ -27,4 +27,5 @@ class DomainMigrationTests(TransactionTestCase):
             self.assertEqual(saved.created_at, agent.created_at)
             self.assertTrue(apps.get_model("registry", "Domain").objects.filter(pk=group.pk).exists())
         finally:
-            MigrationExecutor(connection).migrate(new)
+            executor = MigrationExecutor(connection)
+            executor.migrate(executor.loader.graph.leaf_nodes())

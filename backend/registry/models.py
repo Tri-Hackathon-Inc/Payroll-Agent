@@ -61,8 +61,10 @@ class Agent(models.Model):
     template_id = models.CharField(max_length=100)
     template_version = models.PositiveIntegerField()
     config = models.JSONField()
+    model_config = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        db_table = "agent_info"
         ordering = ["created_at", "id"]

@@ -11,6 +11,7 @@ service ai_studio {
   rpc GetServiceAgentRegistry(ServiceAgentRegistryRequest) returns (AgentList);
   rpc CreateAgent(CreateAgentRequest) returns (Agent);
   rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
+  rpc ChatAgent(ChatAgentRequest) returns (ChatAgentResponse);
 }
 message TemplateId { string id = 1; }
 message ServiceName { string service_name = 1; }
@@ -39,6 +40,7 @@ message Agent {
   google.protobuf.Struct config = 6;
   string created_at = 7;
   string updated_at = 8;
+  google.protobuf.Struct model_config = 9;
 }
 message AgentList { repeated Agent agents = 1; }
 message CreateAgentRequest {
@@ -55,3 +57,16 @@ message UpdateAgentRequest {
 }
 
 message ServiceAgentRegistryRequest { string service_name = 1; string domain_name = 2; }
+message ChatMessage { string role = 1; string content = 2; }
+message ChatAgentRequest {
+  string agent_id = 1;
+  string domain_name = 2;
+  string message = 3;
+  repeated ChatMessage history = 4;
+}
+message ChatAgentResponse {
+  string agent_id = 1;
+  string model_id = 2;
+  string output = 3;
+  bool demo = 4;
+}

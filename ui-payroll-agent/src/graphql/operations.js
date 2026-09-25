@@ -14,7 +14,13 @@ export const TEMPLATE_QUERY = `
   }
 `
 
-const AGENT_FIELDS = 'id name domainName templateId templateVersion config createdAt updatedAt'
+const AGENT_FIELDS = 'id name domainName templateId templateVersion config modelConfig createdAt updatedAt'
+
+export const CHAT_AGENT_MUTATION = `
+  mutation ChatAgent($input: ChatAgentInput!) {
+    chatAgent(input: $input) { agentId modelId output demo }
+  }
+`
 
 export const SERVICE_AGENT_REGISTRY_QUERY = `
   query GetServiceAgentRegistry($domainName: String, $serviceName: String) {

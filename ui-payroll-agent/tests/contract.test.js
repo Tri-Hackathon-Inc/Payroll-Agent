@@ -9,6 +9,34 @@ import { createMockExecutor } from '../mock/graphqlMock.js'
 const require = createRequire(import.meta.url)
 const { typeDefs, resolvers } = require('../../backend/graphql/aistudio.js')
 
+test('chat forwards agent, domain, message and history to gRPC', async () => {
+  const history = [{ role: 'user', content: 'Hello' }, { role: 'assistant', content: 'Hi' }]
+  const reply = await resolvers.Mutation.chatAgent(null, { input: { agentId: 'agent', domainName: 'payroll-services', message: 'Next', history } }, {
+    context: {}, dataSources: { grpc: { call: async (...args) => {
+      assert.equal(args[3], 'ChatAgent')
+      assert.deepEqual(args[4], { agent_id: 'agent', domain_name: 'payroll-services', message: 'Next', history })
+      return { agent_id: 'agent', output: 'Answer' }
+    } } },
+  })
+  assert.equal(reply.output, 'Answer')
+})
+
+test('mock chat uses a saved agent and rejects another domain', async () => {
+  const execute = createMockExecutor()
+  const created = await execute({ query: operations.CREATE_AGENT_MUTATION, variables: { input: {
+    domainName: 'payroll-services', templateId: 'anomaly-detection', name: 'Chat test', config: {},
+  } } })
+  assert.equal(created.errors, undefined)
+  assert.ok(created.data.createAgent.modelConfig.name)
+  const input = { agentId: created.data.createAgent.id, domainName: 'payroll-services', message: 'Hello' }
+  const result = await execute({ query: operations.CHAT_AGENT_MUTATION, variables: { input } })
+  assert.equal(result.errors, undefined)
+  assert.equal(result.data.chatAgent.demo, true)
+  assert.match(result.data.chatAgent.output, /no model inference/)
+  const wrong = await execute({ query: operations.CHAT_AGENT_MUTATION, variables: { input: { ...input, domainName: 'payroll-demo' } } })
+  assert.equal(wrong.errors[0].extensions.code, 'NOT_FOUND')
+})
+
 test('listTemplates requires a service and filters templates by primary service', async () => {
   const execute = createMockExecutor()
   const query = 'query ($service: String!) { listTemplates(serviceName: $service) { id config } }'

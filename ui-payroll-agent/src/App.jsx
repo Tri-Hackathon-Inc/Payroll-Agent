@@ -3,6 +3,7 @@ import './App.css'
 import { graphqlRequest } from './graphql/client'
 import { SERVICE_AGENT_REGISTRY_QUERY, DOMAIN_TEMPLATES_QUERY, STUDIO_QUERY } from './graphql/operations'
 import AgentEditor from './AgentEditor'
+import AgentChat from './AgentChat'
 
 const NAV_GROUPS = [
   {
@@ -106,6 +107,8 @@ function App() {
   const domainHome = path === '/' || (path === '/ai-studio' && !url.searchParams.has('domain'))
   const templateMatch = path.match(/^\/ai-studio\/templates\/([^/]+)\/config$/)
   const agentMatch = path.match(/^\/agents\/([^/]+)$/)
+  const chatMatch = path.match(/^\/agents\/([^/]+)\/chat$/)
+  const chatId = chatMatch ? decodeURIComponent(chatMatch[1]) : null
   const editId = agentMatch && agentMatch[1] !== 'new' ? decodeURIComponent(agentMatch[1]) : null
   const listPage = path === '/agents'
   const agents = agentResult && agentResult.domainName === domainName ? agentResult.items : []
@@ -178,6 +181,12 @@ function App() {
     content = <div className="alert alert-warning" role="alert">Domain not found.
       <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose a domain</button>
     </div>
+  } else if (chatId) {
+    const agent = agents.find(item => item.id === chatId)
+    if (agentsLoading) content = <Loading>Loading agent…</Loading>
+    else if (agentsError) content = <div role="alert" className="alert alert-danger">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents(value => value + 1)}>Retry</button></div>
+    else if (!agent) content = <div role="alert">Agent not found in this domain.</div>
+    else content = <AgentChat key={`${domain.name}:${agent.id}:${agent.updatedAt}`} agent={agent} domain={domain} onBack={() => navigate(scoped('/agents'))} />
   } else if (templateMatch || editId) {
     const agent = editId && agents.find(item => item.id === editId)
     if (editId && agentsLoading) content = <Loading>Loading agent…</Loading>
@@ -217,6 +226,7 @@ function App() {
               <h2 className="h5">{agent.name}</h2><span className={`badge align-self-start mb-3 ${domainClass(agent.config.domain)}`}>{agent.config.domain}</span>
               <p className="text-muted flex-grow-1">{agent.config.description}</p>
               <button className="btn btn-outline-secondary" onClick={() => navigate(scoped(`/agents/${encodeURIComponent(agent.id)}`))}>Edit agent</button>
+              <button className="btn btn-dark mt-2" onClick={() => navigate(scoped(`/agents/${encodeURIComponent(agent.id)}/chat`))}>Chat with agent</button>
             </div></div>
           </div>)}
         </div>
@@ -247,11 +257,11 @@ function App() {
     </>
   }
 
-  return <AppShell activeKey={listPage || editId ? 'my-agents' : 'templates'} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
+  return <AppShell activeKey={listPage || editId || chatId ? 'my-agents' : 'templates'} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
     {!!catalog?.domains.length && <div className="d-flex justify-content-end align-items-center gap-2 mb-4">
       <label htmlFor="domain" className="fw-semibold">Domain</label>
       <select id="domain" className="form-select w-auto" value={domain?.name || ''}
-        onChange={event => navigate(scoped(listPage || editId ? '/agents' : '/ai-studio', event.target.value))}>
+        onChange={event => navigate(scoped(listPage || editId || chatId ? '/agents' : '/ai-studio', event.target.value))}>
         {!domain && <option value="">Choose a domain</option>}
         {catalog.domains.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
       </select>

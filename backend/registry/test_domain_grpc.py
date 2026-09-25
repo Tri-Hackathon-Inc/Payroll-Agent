@@ -42,6 +42,12 @@ class DomainGrpcTests(TransactionTestCase):
                 config = ParseDict({"model": next(m["id"] for m in services.list_model_configs() if m["enabled"]), "service": "payrun"}, Struct())
                 agent = client.CreateAgent(pb.CreateAgentRequest(domain_name="payroll-services", template_id="anomaly-detection", name="RPC agent", config=config), timeout=5)
                 self.assertEqual(agent.domain_name, "payroll-services")
+                reply = client.ChatAgent(pb.ChatAgentRequest(agent_id=agent.id, domain_name="payroll-services", message="Hello"), timeout=5)
+                self.assertTrue(reply.demo)
+                self.assertEqual(reply.output, "Demo response (no model inference): Hello")
+                with self.assertRaises(grpc.RpcError) as error:
+                    client.ChatAgent(pb.ChatAgentRequest(agent_id=agent.id, domain_name="hr", message="Hello"), timeout=5)
+                self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
                 registered = client.GetServiceAgentRegistry(pb.ServiceAgentRegistryRequest(service_name="payrun"), timeout=5).agents
                 self.assertEqual([a.id for a in registered], [agent.id])
                 self.assertEqual(len(client.GetServiceAgentRegistry(pb.ServiceAgentRegistryRequest(service_name="diagnostics"), timeout=5).agents), 0)

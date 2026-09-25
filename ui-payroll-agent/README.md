@@ -80,8 +80,12 @@ Validation failures preserve form values. Back/forward navigation and bookmarked
 agent URLs retain their domain context. Agents created directly through
 GraphQL appear in the same lists.
 
-Saving stores configuration. Model execution, anomaly monitoring, external API
-calls, and alert/webhook delivery are not active yet.
+Saving stores configuration. Select **Chat with agent** under **My Agents** to
+send messages to the saved model. The default demo model echoes messages and is
+clearly labeled. Configure a compatible model server for real generation (see
+the backend README). Chat history lasts until navigation or reload. Failed
+requests retain the message for retry. Anomaly monitoring, external API calls,
+and alert/webhook delivery are not active yet.
 
 ## Standalone mock mode
 

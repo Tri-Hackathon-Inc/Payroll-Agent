@@ -6,6 +6,8 @@ from django.db import close_old_connections
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from . import services
+from .agent_chat import AgentChat
+from .model_runtime import ModelConfigurationError, ModelExecutionError, ModelTimeout
 from .proto import templates_pb2 as pb
 from .proto import templates_pb2_grpc as rpc
 
@@ -22,6 +24,12 @@ def rpc_handler(handler):
             context.abort(grpc.StatusCode.NOT_FOUND, str(error))
         except services.InvalidInput as error:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(error))
+        except ModelConfigurationError as error:
+            context.abort(grpc.StatusCode.FAILED_PRECONDITION, str(error))
+        except ModelTimeout as error:
+            context.abort(grpc.StatusCode.DEADLINE_EXCEEDED, str(error))
+        except ModelExecutionError as error:
+            context.abort(grpc.StatusCode.UNAVAILABLE, str(error))
         except Exception:
             logger.exception("Template catalog RPC failed")
             context.abort(grpc.StatusCode.INTERNAL, "Template catalog unavailable.")
@@ -32,6 +40,13 @@ def rpc_handler(handler):
 
 
 class AIStudioServicer(rpc.ai_studioServicer):
+    @rpc_handler
+    def ChatAgent(self, request, context):
+        return ParseDict(AgentChat().reply(
+            request.agent_id, request.domain_name, request.message,
+            [{"role": item.role, "content": item.content} for item in request.history],
+        ), pb.ChatAgentResponse())
+
     @rpc_handler
     def ListTemplates(self, request, context):
         return pb.TemplateList(

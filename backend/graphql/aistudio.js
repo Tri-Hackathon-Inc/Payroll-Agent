@@ -26,8 +26,11 @@ const typeDefs = `
   type Service {
     id: ID!
     name: String!
+    domain: String!
     enabled: Boolean!
+    baseUrlEnv: String!
     method: String!
+    path: String!
   }
 
   type Template {
@@ -40,6 +43,7 @@ const typeDefs = `
     service: Service!
     attachedServices: [Service!]!
     modelOptions: [ModelConfig!]!
+    serviceOptions: [Service!]!
   }
 
   type Domain { name: String!, label: String!, domain: String! }
@@ -52,6 +56,7 @@ const typeDefs = `
     config: JSON!
     createdAt: String!
     updatedAt: String!
+    modelConfig: JSON!
   }
   input CreateAgentInput {
     domainName: String!
@@ -65,7 +70,16 @@ const typeDefs = `
     name: String!
     config: JSON!
   }
+  input ChatMessageInput { role: String!, content: String! }
+  input ChatAgentInput {
+    agentId: ID!
+    domainName: String!
+    message: String!
+    history: [ChatMessageInput!]
+  }
+  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean! }
   type Mutation {
+    chatAgent(input: ChatAgentInput!): ChatReply!
     createAgent(input: CreateAgentInput!): Agent!
     updateAgent(input: UpdateAgentInput!): Agent!
   }
@@ -92,6 +106,10 @@ const resolvers = {
       value => value.agents || []),
   },
   Mutation: {
+    chatAgent: rpcResolver('ChatAgent', ({ input }) => ({
+      agent_id: input.agentId, domain_name: input.domainName,
+      message: input.message, history: input.history || [],
+    })),
     createAgent: rpcResolver('CreateAgent', ({ input }) => ({
       domain_name: input.domainName, template_id: input.templateId,
       name: input.name, config: encodeStruct(input.config),
@@ -108,6 +126,11 @@ const resolvers = {
     config: agent => decodeStruct(agent.config),
     createdAt: agent => agent.created_at,
     updatedAt: agent => agent.updated_at,
+    modelConfig: agent => decodeStruct(agent.model_config || { fields: {} }),
+  },
+  ChatReply: {
+    agentId: reply => reply.agent_id,
+    modelId: reply => reply.model_id,
   },
   Template: {
     modelOptions: template => (template.model_options || []).map(decodeStruct),

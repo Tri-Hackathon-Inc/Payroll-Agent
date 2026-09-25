@@ -22,7 +22,7 @@ function createGrpcDataSource(address = '127.0.0.1:50051') {
     call(protoPath, packageName, serviceName, method, request, metadata) {
       return new Promise((resolve, reject) => {
         getClient(protoPath, packageName, serviceName)[method](request, metadata,
-          { deadline: new Date(Date.now() + 5000) },
+          { deadline: new Date(Date.now() + (method === 'ChatAgent' ? 60000 : 5000)) },
           (error, response) => error ? reject(error) : resolve(response));
       });
     },

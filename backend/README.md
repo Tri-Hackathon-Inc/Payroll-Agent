@@ -45,6 +45,7 @@ environment variables. No OS-specific paths or platform overrides are required.
 | `getTemplate(id)` | `GetTemplate` | Template defaults and model/service choices |
 | `createAgent(input)` | `CreateAgent` | Saved configured agent |
 | `updateAgent(input)` | `UpdateAgent` | Updated saved agent |
+| `chatAgent(input)` | `ChatAgent` | Text reply from the saved agent's model |
 | `getServiceAgentRegistry(serviceName, domainName)` | `GetServiceAgentRegistry` | Saved agents filtered by service and/or domain |
 
 Domain records have a stable `name` (such as `payroll-services`), display `label`,
@@ -106,8 +107,8 @@ JSON in `templates/`, `templates/Model_config/`, and `templates/services.json`
 is the authoritative template/model/service catalog. `sync_templates` validates
 and projects it into the database. Agent configuration and template version are
 snapshots and survive catalog changes. Domain and service categories must match.
-External API execution, model execution, alerts, and webhook delivery are not
-implemented; this application saves and retrieves configuration.
+External API execution, alerts, and webhook delivery are not implemented.
+Model chat is available through `ChatAgent` and the UI's **Chat with agent** action.
 
 MySQL persists in the `mysql_data` named volume. `docker compose down` retains
 it; `down -v` deletes it. The former SQLite `backend_data` volume is not deleted
@@ -124,6 +125,72 @@ docker compose exec backend python manage.py create_domain hr --label "Human Res
 ```
 
 ## Development and checks
+
+### Agent creation and chat
+
+`CreateAgent` / `createAgent` delegates to `AgentFactory`, which calls the
+`TemplateInterface` implementation (`CatalogTemplate`) to merge template defaults
+with UI input and validates the result before writing the `agent_info` table.
+The existing API remains GraphQL over gRPC; there is no REST `/create-agent` route.
+
+The row stores the agent name, domain, template ID/version, effective `config`
+(including `created_by`, `service`, `attached_services`, and instructions), and
+`model_config` (catalog ID, name, provider model ID, parameters, credential and
+endpoint environment variable names). UI callers select `config.model`; model
+metadata is resolved on the server. Credentials themselves are never stored.
+Migration 0005 renames the existing table and backfills snapshots without deleting
+agents. Agents whose model was already removed get an empty snapshot and need an
+enabled model selected before chat.
+
+`AgentChat` loads this row scoped to the requested domain. `ModelRuntimeFactory`
+initializes a fresh provider client for each request from the saved snapshot,
+then `ModelRuntime.generate(messages)` returns assistant text. There is no
+shared mutable model or conversation state. Changing the selected model refreshes
+its snapshot; other edits retain the model snapshot. Removing/disabling the model
+in the catalog prevents further chat. Snapshot configuration changes otherwise
+require selecting a new model configuration.
+
+```graphql
+mutation Chat($input: ChatAgentInput!) {
+  chatAgent(input: $input) { agentId modelId output demo }
+}
+```
+
+Example variables:
+
+```json
+{
+  "input": {
+    "agentId": "<saved-agent-uuid>",
+    "domainName": "payroll-services",
+    "message": "Summarize this information",
+    "history": []
+  }
+}
+```
+
+History accepts at most 20 complete user/assistant turns; system instructions
+always come from the saved agent. Each message is limited to 10,000 characters
+and the submitted conversation to 100,000. History is held in the browser until
+navigation/reload; the UI sends the most recent 20 turns. Responses render as
+text. The demo provider is an explicitly labeled echo, not an LLM.
+
+For a real local model, edit `templates/Model_config/local-open-source.json`:
+set `enabled: true`, set `model_id` to your deployed model, and configure the
+environment variable named by `endpoint_env` to the server's `/v1` base URL
+(for example `http://host.docker.internal:8080/v1`). Set the configured credential
+variable if authentication is required; otherwise set `credential_env` to `""`.
+Pass these environment variables to the backend container using a Compose
+override, rebuild/restart, and select this model in the agent editor. Merely
+adding a variable to a root `.env` does not inject it into the container.
+
+`CompatibleChatModel` uses the non-streaming `/chat/completions` format supported
+by servers such as [llama.cpp](https://github.com/ggml-org/llama.cpp/tree/master/tools/server#readme).
+Its HTTP timeout is 45 seconds; the chat gRPC deadline is 60 seconds. Missing
+configuration, timeouts, and provider failures return safe errors. Services
+selected on an agent are stored metadata, not callable model tools yet.
+
+### Container checks
 
 ```bash
 docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build -d --wait

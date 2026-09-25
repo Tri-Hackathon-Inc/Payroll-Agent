@@ -174,6 +174,7 @@ def agent_data(agent):
         "config": agent.config,
         "created_at": agent.created_at.isoformat(),
         "updated_at": agent.updated_at.isoformat(),
+        "model_config": agent.model_config,
     }
 
 
@@ -207,22 +208,10 @@ def validate_agent(name, config, domain):
         raise InvalidInput(str(error)) from error
 
 
-@transaction.atomic
 def create_agent(domain_name, template_id, name, config):
-    domain = get_domain(domain_name)
-    template = get_template(template_id)
-    if template["config"]["domain"] != domain.domain:
-        raise InvalidInput("Template domain must match the selected domain.")
-    merged = merge_config(template["config"], config)
-    validate_agent(name, merged, domain)
-    agent = Agent.objects.create(
-        domain=domain,
-        name=name.strip(),
-        template_id=template["id"],
-        template_version=template["version"],
-        config=merged,
-    )
-    return agent_data(agent)
+    from .agent_factory import AgentFactory
+
+    return agent_data(AgentFactory().create(domain_name, template_id, name, config))
 
 
 @transaction.atomic
@@ -240,8 +229,12 @@ def update_agent(agent_id, domain_name, name, config):
         ) from error
     merged = merge_config(agent.config, config)
     validate_agent(name, merged, domain)
+    if merged["model"] != agent.config["model"] or not agent.model_config:
+        from .agent_factory import model_snapshot
+
+        agent.model_config = model_snapshot(merged)
     agent.name, agent.config = name.strip(), merged
-    agent.save(update_fields=["name", "config", "updated_at"])
+    agent.save(update_fields=["name", "config", "model_config", "updated_at"])
     return agent_data(agent)
 
 

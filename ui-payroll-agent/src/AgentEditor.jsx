@@ -128,7 +128,7 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
             <input id="webhook-url" className="form-control" type="url" pattern="https://.*" value={config.capabilities.webhooks.url} required={config.capabilities.webhooks.enabled}
               onChange={event => capability('webhooks', 'url', event.target.value)} placeholder="https://example.com/payroll-events" />
           </fieldset>
-          <p className="small text-muted">Saving stores these settings. Agent execution and notification delivery are not active yet.</p>
+          <p className="small text-muted">Save your agent, then open Chat from My Agents. Service calls and notification delivery are not active yet.</p>
           <div className="d-flex justify-content-end gap-2 mt-4">
             <button type="button" className="btn btn-outline-secondary" onClick={onCancel}>Cancel</button>
             <button type="submit" className="btn btn-dark">{saving ? 'Saving…' : agent ? 'Save changes' : 'Create agent'}</button>

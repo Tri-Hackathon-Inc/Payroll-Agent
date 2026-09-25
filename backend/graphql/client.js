@@ -58,7 +58,7 @@ function createRpcResolver(catalogRpc) {
           method, input, getGrpcMetadata(context),
         ));
       } catch (error) {
-        const code = { 3: 'BAD_USER_INPUT', 5: 'NOT_FOUND' }[error.code];
+        const code = { 3: 'BAD_USER_INPUT', 4: 'TIMEOUT', 5: 'NOT_FOUND', 9: 'MODEL_NOT_CONFIGURED', 14: 'UNAVAILABLE' }[error.code];
         throw apiError(code ? error.details : 'Backend service unavailable.', code || 'INTERNAL_SERVER_ERROR');
       }
     };

@@ -21,6 +21,11 @@ export function createMockExecutor() {
   const { domains, templates, agents } = JSON.parse(readFile('./data.json'))
   const domain = name => domains.find(item => item.name === name) || fail(`Domain ${name} not found.`, 'NOT_FOUND')
   const template = id => templates.find(item => item.id === id) || fail(`Template ${id} not found.`, 'NOT_FOUND')
+  const snapshotModel = (source, config) => {
+    const model = source.modelOptions.find(item => item.id === config.model)
+    return model ? { ...model, model_id: model.modelId } : {}
+  }
+  for (const agent of agents) agent.modelConfig ||= snapshotModel(template(agent.templateId), agent.config)
 
   function save(input, existing) {
     const selectedDomain = domain(input.domainName)
@@ -47,6 +52,7 @@ export function createMockExecutor() {
     const now = new Date().toISOString()
     const agent = { id: existing?.id || randomUUID(), name: input.name.trim(), domainName: selectedDomain.name,
       templateId: source.id, templateVersion: existing?.templateVersion || source.version,
+      modelConfig: existing?.config.model === config.model ? existing.modelConfig : snapshotModel(source, config),
       config, createdAt: existing?.createdAt || now, updatedAt: now }
     if (existing) Object.assign(existing, agent)
     else agents.push(agent)
@@ -54,6 +60,18 @@ export function createMockExecutor() {
   }
 
   const rootValue = {
+    chatAgent: ({ input }) => {
+      domain(input.domainName)
+      const agent = agents.find(item => item.id === input.agentId && item.domainName === input.domainName)
+      if (!agent) fail('Agent not found in this domain.', 'NOT_FOUND')
+      if (!input.message.trim() || input.message.length > 10000) fail('message must be nonempty text of at most 10000 characters.')
+      const history = input.history || []
+      if (history.length > 40 || history.length % 2 || history.some((item, index) =>
+        item.role !== (index % 2 ? 'assistant' : 'user') || !item.content.trim() || item.content.length > 10000)) fail('Invalid chat history.')
+      if (history.reduce((size, item) => size + item.content.length, input.message.length) > 100000) fail('Conversation is too long. Start a new chat.')
+      return { agentId: agent.id, modelId: agent.modelConfig.model_id || agent.config.model,
+        output: `Demo response (no model inference): ${input.message.trim()}`, demo: true }
+    },
     listDomains: () => domains,
     listTemplates: ({ serviceName }) => {
       if (!serviceName.trim()) fail('service_name is required.')

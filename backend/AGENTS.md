@@ -13,11 +13,12 @@ routes; names such as “list-template” refer to service operations.
 | Get template properties and configuration choices | `GetTemplate` | `getTemplate(id)` |
 | Create a configured agent for a domain | `CreateAgent` | `createAgent(input)` |
 | Update a configured agent within its domain | `UpdateAgent` | `updateAgent(input)` |
+| Chat with a saved agent | `ChatAgent` | `chatAgent(input)` |
 | List domains | `ListDomains` | `listDomains` |
 | List templates for a domain | `GetDomainAgentsTemplates` | `getDomainAgentsTemplates(domainName)` |
 | List saved agents for a service or domain | `GetServiceAgentRegistry` | `getServiceAgentRegistry(domainName: ...)` |
 
-These are the seven public operations. Model and external API choices are included
+These are the eight public operations. Model and external API choices are included
 in template details rather than exposed as separate list operations.
 
 ## Domain, template, and agent
@@ -107,8 +108,19 @@ are validated against the current catalog.
 directory. Credentials stay outside JSON; configuration stores environment
 variable names only.
 
-The backend saves configuration. Model execution, external API calls, alert
-sending, and webhook delivery are not implemented. Domain filtering and role
+`AgentFactory` uses `TemplateInterface`/`CatalogTemplate` to merge and validate UI
+configuration, then writes `agent_info`. `model_config` snapshots model name,
+provider, model ID, parameters, and environment variable names; `config` retains
+the user (`created_by`), primary service and attached services. Migration 0005
+preserves existing agents and backfills available model snapshots.
+
+`AgentChat` loads a saved agent in its domain and creates a fresh `ModelRuntime`
+for each request. `CompatibleChatModel` supports a configured compatible model
+server; `DemoModel` explicitly echoes messages without inference. Chat history
+is supplied by the client and is not persisted. Model selection changes refresh
+the snapshot; other edits retain it. The catalog model must still be enabled.
+
+External API calls, alert sending, and webhook delivery are not implemented. Domain filtering and role
 metadata do not provide authentication or authorization.
 
 ## Local server and container setup
@@ -131,7 +143,9 @@ imported; never delete the old volume as part of an upgrade.
 | File | Responsibility |
 | --- | --- |
 | `registry/models.py`, `registry/migrations/` | Catalog, domain, and agent persistence |
-| `registry/services.py` | Seven operations, configuration merge, and catalog synchronization |
+| `registry/services.py` | Catalog operations, configuration merge, and catalog synchronization |
+| `registry/agent_factory.py` | Template interface and persisted agent creation |
+| `registry/agent_chat.py`, `registry/model_runtime.py` | Saved agent chat and provider abstraction |
 | `registry/catalog.py`, `registry/configuration.py` | JSON loading and validation |
 | `registry/proto/templates.proto`, `registry/servicers.py` | gRPC contract and implementation |
 | `graphql/aistudio.js`, `graphql/client.js` | GraphQL contract and gRPC adapter |
