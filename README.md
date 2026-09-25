@@ -5,6 +5,8 @@ their selected model. The UI calls a GraphQL adapter backed by Python gRPC.
 
 ## Start the UI, backend, and database
 
+On macOS, you can also use [Podman](#macos-with-podman) to run the same stack.
+
 Install Docker Desktop with Linux containers and Docker Compose v2. Start Docker
 Desktop and wait for its engine to be ready. Host Python and Node are not required.
 On Windows, you can start Docker Desktop from PowerShell:
@@ -38,6 +40,33 @@ The UI uses backend mode and proxies `/ai_studio/graphql` to the backend. Open
 **My Agents → Chat with agent**. Anomaly Detection defaults to Llama 3.3 70B;
 model replies require the provider configuration described in
 the [backend README](backend/README.md#agent-model-calls).
+
+## macOS with Podman
+
+With Homebrew installed, create and start Podman's Linux VM once:
+
+```sh
+brew install podman podman-compose
+podman machine init --cpus 4 --memory 8192 --disk-size 50
+podman machine start
+```
+
+If a machine already exists, skip `init` and start it. From the **repository root**,
+load all eight services, including the payroll UI and incident evidence capture:
+
+```sh
+bash docker/podman.sh up --build -d
+bash docker/podman.sh ps
+```
+
+The launcher loads `.env` and `backend/.env` when present and uses the shared
+build exclusions. Once services are healthy, open
+[Agent Studio](http://localhost:5173/ai_studio/) or the
+[TriNet payrun](http://localhost:5174/trinet/?domain=payroll-services&payrun=PR-2026-09-B).
+Append `db backend ui` to `up` for only the five core services.
+See the [Podman guide](docker/README.md#macos-with-podman) for VM sizing,
+logs, stop/resume commands, credentials and persistent data. Stop any Docker
+copy of this stack first to free the shared host ports.
 
 ## Employee payment anomaly detection
 

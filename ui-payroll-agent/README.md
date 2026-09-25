@@ -20,6 +20,9 @@ Users can send either a starter question or any custom message.
 Install Docker with Compose v2 and start the Docker engine. Host Python and Node are
 not required; see the [backend README](../backend/README.md#start-the-stack).
 
+For macOS with Podman, use the shared
+[Podman setup and commands](../docker/README.md#macos-with-podman).
+
 From the **repository root**:
 
 ```bash

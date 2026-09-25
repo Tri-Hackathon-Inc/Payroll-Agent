@@ -510,7 +510,7 @@ metadata do not provide authentication or authorization.
 
 ## Local server and container setup
 
-All Docker assets live in `docker/`. `docker/Dockerfile` builds the `backend`,
+All Docker and Podman assets live in `docker/`. `docker/Dockerfile` builds the `backend`,
 `ui`, `trinet-mock`, `trinet-ui` and `evidence-capture` targets using the repository root as context.
 `docker/Dockerfile.dockerignore` excludes local dependencies, credentials, and
 database files. Do not add Dockerfiles or Docker ignore files inside UI folders.
@@ -527,6 +527,20 @@ docker compose -f docker/docker-compose.yaml logs --tail=100 ui backend db redis
 ```
 
 On Windows, `docker desktop start` starts Docker Desktop if its engine is stopped.
+On macOS, use the [Podman setup](../docker/README.md#macos-with-podman): install
+`podman` and `podman-compose`, initialize a VM once with `podman machine init`,
+and run `podman machine start`. From the repository root,
+`bash docker/podman.sh up --build -d db backend ui` starts the core services;
+omit the service list for all eight. Use `bash docker/podman.sh ps` to check
+health and `bash docker/podman.sh logs --tail=100 backend` for diagnostics.
+The launcher selects the native Compose provider, loads root `.env` then
+`backend/.env` when present, and explicitly passes the shared build ignore file.
+Retain those settings for Podman builds and recreation; never copy credentials
+into images. Keep registry-qualified image names for noninteractive Podman pulls.
+Docker and Podman have separate data volumes but use the same host ports, so stop
+the running copy before switching engines. Do not remove Podman machines or
+volumes during routine restarts. The Podman launcher targets the main local stack.
+
 Host Python and Node are not required for the container workflow. The expected
 result is five healthy core containers; backend dependencies automatically start
 Redis and PostgreSQL even when the command lists only `db backend ui`. Agent Studio is at

@@ -15,6 +15,9 @@ Install Docker Desktop with Linux containers and Compose v2, then start its
 engine. On Windows, use `docker desktop start` or open Docker Desktop. Host Python
 and Node are not required. See the [root quick start](../README.md).
 
+On macOS, the same stack can run with Podman; follow the
+[Podman setup and commands](../docker/README.md#macos-with-podman).
+
 From the repository root, start the **UI, backend, and MySQL database**:
 
 ```bash

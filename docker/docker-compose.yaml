@@ -2,7 +2,7 @@ name: payroll-local
 
 services:
   redis:
-    image: redis:8-alpine
+    image: docker.io/library/redis:8-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   vector-db:
-    image: pgvector/pgvector:pg17
+    image: docker.io/pgvector/pgvector:pg17
     environment:
       POSTGRES_DB: payroll_vectors
       POSTGRES_USER: payroll_vector
@@ -27,7 +27,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: mysql:8.4
+    image: docker.io/library/mysql:8.4
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-payroll}
       MYSQL_USER: ${MYSQL_USER:-payroll}
