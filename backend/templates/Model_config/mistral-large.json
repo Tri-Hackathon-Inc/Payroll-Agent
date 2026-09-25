@@ -1,0 +1,28 @@
+{
+  "id": "mistral-large",
+  "name": "Mistral Large",
+  "provider": "mistral",
+  "model_id": "mistral-large-latest",
+  "enabled": true,
+  "endpoint_env": "MISTRAL_API_BASE_URL",
+  "credential_env": "MISTRAL_API_KEY",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 1024
+  },
+  "details": {
+    "license": "commercial",
+    "vendor": "Mistral AI",
+    "context_window": "32K tokens",
+    "description": "Top-tier commercial model from Mistral. Excellent at structured output and function calling, ideal for incident generation and anomaly reporting.",
+    "strengths": [
+      "Structured output",
+      "Function calling",
+      "Low latency"
+    ],
+    "best_for": [
+      "Incident Generator",
+      "Anomaly Detection"
+    ]
+  }
+}

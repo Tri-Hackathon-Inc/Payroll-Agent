@@ -50,9 +50,15 @@
         "modelId": "demo/no-runtime",
         "enabled": true,
         "endpointEnv": "",
+        "credentialEnv": "",
         "parameters": {
           "temperature": 0.2,
           "max_tokens": 1024
+        },
+        "details": {
+          "license": "demo",
+          "vendor": "Agent Studio",
+          "description": "Configuration-only placeholder. Agents save settings but no model is called."
         }
       },
       "service": {
@@ -77,15 +83,121 @@
       ],
       "modelOptions": [
         {
+          "id": "bedrock-claude",
+          "name": "AWS Bedrock \u00b7 Claude",
+          "provider": "aws-bedrock",
+          "modelId": "REPLACE_WITH_BEDROCK_CLAUDE_MODEL_ID",
+          "enabled": true,
+          "endpointEnv": "AWS_BEDROCK_BASE_URL",
+          "credentialEnv": "AWS_BEDROCK_API_KEY",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "commercial",
+            "vendor": "Anthropic / AWS",
+            "context_window": "200K tokens",
+            "description": "Claude via AWS Bedrock. Industry-leading at following complex instructions, analysis, and safe operation in production payroll environments.",
+            "strengths": [
+              "Long context",
+              "Safety",
+              "Instruction following"
+            ],
+            "best_for": [
+              "All agent types"
+            ]
+          }
+        },
+        {
+          "id": "llama-3-3-70b",
+          "name": "Llama 3.3 \u00b7 70B",
+          "provider": "huggingface",
+          "modelId": "meta-llama/Llama-3.3-70B-Instruct",
+          "enabled": true,
+          "endpointEnv": "HF_INFERENCE_BASE_URL",
+          "credentialEnv": "HF_TOKEN",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "open-source",
+            "vendor": "Meta",
+            "context_window": "128K tokens",
+            "description": "Meta's latest 70B open-source model (successor to Llama 3.1 70B). Excellent at reasoning and tool use, making it well-suited for agentic payroll workflows.",
+            "strengths": [
+              "Tool calling",
+              "Reasoning",
+              "Code generation"
+            ],
+            "best_for": [
+              "Anomaly Detection",
+              "General Query"
+            ],
+            "benchmarks": [
+              {
+                "name": "MMLU-Pro",
+                "score": 68.9,
+                "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+              },
+              {
+                "name": "HumanEval",
+                "score": 88.4,
+                "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+              },
+              {
+                "name": "MATH",
+                "score": 77.0,
+                "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+              }
+            ]
+          }
+        },
+        {
+          "id": "mistral-large",
+          "name": "Mistral Large",
+          "provider": "mistral",
+          "modelId": "mistral-large-latest",
+          "enabled": true,
+          "endpointEnv": "MISTRAL_API_BASE_URL",
+          "credentialEnv": "MISTRAL_API_KEY",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "commercial",
+            "vendor": "Mistral AI",
+            "context_window": "32K tokens",
+            "description": "Top-tier commercial model from Mistral. Excellent at structured output and function calling, ideal for incident generation and anomaly reporting.",
+            "strengths": [
+              "Structured output",
+              "Function calling",
+              "Low latency"
+            ],
+            "best_for": [
+              "Incident Generator",
+              "Anomaly Detection"
+            ]
+          }
+        },
+        {
           "id": "poc-demo",
           "name": "POC demo model (configuration only)",
           "provider": "demo",
           "modelId": "demo/no-runtime",
           "enabled": true,
           "endpointEnv": "",
+          "credentialEnv": "",
           "parameters": {
             "temperature": 0.2,
             "max_tokens": 1024
+          },
+          "details": {
+            "license": "demo",
+            "vendor": "Agent Studio",
+            "description": "Configuration-only placeholder. Agents save settings but no model is called."
           }
         }
       ],
@@ -125,6 +237,42 @@
           "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
           "method": "GET",
           "path": "/diagnostics/logs"
+        },
+        {
+          "id": "slack-webhook",
+          "name": "Slack alert webhook",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "SLACK_WEBHOOK_BASE_URL",
+          "method": "POST",
+          "path": "/services/payroll-alerts"
+        },
+        {
+          "id": "email-notification",
+          "name": "Email notification",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMAIL_API_BASE_URL",
+          "method": "POST",
+          "path": "/notifications/email"
+        },
+        {
+          "id": "alert-manager",
+          "name": "On-call alerting",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "ALERTING_API_BASE_URL",
+          "method": "POST",
+          "path": "/alerts"
+        },
+        {
+          "id": "opensearch-sink",
+          "name": "OpenSearch event sink",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "OPENSEARCH_BASE_URL",
+          "method": "POST",
+          "path": "/agent-events/_doc"
         }
       ]
     },
@@ -166,9 +314,15 @@
         "modelId": "demo/no-runtime",
         "enabled": true,
         "endpointEnv": "",
+        "credentialEnv": "",
         "parameters": {
           "temperature": 0.2,
           "max_tokens": 1024
+        },
+        "details": {
+          "license": "demo",
+          "vendor": "Agent Studio",
+          "description": "Configuration-only placeholder. Agents save settings but no model is called."
         }
       },
       "service": {
@@ -193,15 +347,76 @@
       ],
       "modelOptions": [
         {
+          "id": "bedrock-claude",
+          "name": "AWS Bedrock \u00b7 Claude",
+          "provider": "aws-bedrock",
+          "modelId": "REPLACE_WITH_BEDROCK_CLAUDE_MODEL_ID",
+          "enabled": true,
+          "endpointEnv": "AWS_BEDROCK_BASE_URL",
+          "credentialEnv": "AWS_BEDROCK_API_KEY",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "commercial",
+            "vendor": "Anthropic / AWS",
+            "context_window": "200K tokens",
+            "description": "Claude via AWS Bedrock. Industry-leading at following complex instructions, analysis, and safe operation in production payroll environments.",
+            "strengths": [
+              "Long context",
+              "Safety",
+              "Instruction following"
+            ],
+            "best_for": [
+              "All agent types"
+            ]
+          }
+        },
+        {
+          "id": "mistral-large",
+          "name": "Mistral Large",
+          "provider": "mistral",
+          "modelId": "mistral-large-latest",
+          "enabled": true,
+          "endpointEnv": "MISTRAL_API_BASE_URL",
+          "credentialEnv": "MISTRAL_API_KEY",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "commercial",
+            "vendor": "Mistral AI",
+            "context_window": "32K tokens",
+            "description": "Top-tier commercial model from Mistral. Excellent at structured output and function calling, ideal for incident generation and anomaly reporting.",
+            "strengths": [
+              "Structured output",
+              "Function calling",
+              "Low latency"
+            ],
+            "best_for": [
+              "Incident Generator",
+              "Anomaly Detection"
+            ]
+          }
+        },
+        {
           "id": "poc-demo",
           "name": "POC demo model (configuration only)",
           "provider": "demo",
           "modelId": "demo/no-runtime",
           "enabled": true,
           "endpointEnv": "",
+          "credentialEnv": "",
           "parameters": {
             "temperature": 0.2,
             "max_tokens": 1024
+          },
+          "details": {
+            "license": "demo",
+            "vendor": "Agent Studio",
+            "description": "Configuration-only placeholder. Agents save settings but no model is called."
           }
         }
       ],
@@ -241,6 +456,42 @@
           "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
           "method": "GET",
           "path": "/diagnostics/logs"
+        },
+        {
+          "id": "slack-webhook",
+          "name": "Slack alert webhook",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "SLACK_WEBHOOK_BASE_URL",
+          "method": "POST",
+          "path": "/services/payroll-alerts"
+        },
+        {
+          "id": "email-notification",
+          "name": "Email notification",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMAIL_API_BASE_URL",
+          "method": "POST",
+          "path": "/notifications/email"
+        },
+        {
+          "id": "alert-manager",
+          "name": "On-call alerting",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "ALERTING_API_BASE_URL",
+          "method": "POST",
+          "path": "/alerts"
+        },
+        {
+          "id": "opensearch-sink",
+          "name": "OpenSearch event sink",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "OPENSEARCH_BASE_URL",
+          "method": "POST",
+          "path": "/agent-events/_doc"
         }
       ]
     },
@@ -282,9 +533,15 @@
         "modelId": "demo/no-runtime",
         "enabled": true,
         "endpointEnv": "",
+        "credentialEnv": "",
         "parameters": {
           "temperature": 0.2,
           "max_tokens": 1024
+        },
+        "details": {
+          "license": "demo",
+          "vendor": "Agent Studio",
+          "description": "Configuration-only placeholder. Agents save settings but no model is called."
         }
       },
       "service": {
@@ -309,15 +566,138 @@
       ],
       "modelOptions": [
         {
+          "id": "bedrock-claude",
+          "name": "AWS Bedrock \u00b7 Claude",
+          "provider": "aws-bedrock",
+          "modelId": "REPLACE_WITH_BEDROCK_CLAUDE_MODEL_ID",
+          "enabled": true,
+          "endpointEnv": "AWS_BEDROCK_BASE_URL",
+          "credentialEnv": "AWS_BEDROCK_API_KEY",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "commercial",
+            "vendor": "Anthropic / AWS",
+            "context_window": "200K tokens",
+            "description": "Claude via AWS Bedrock. Industry-leading at following complex instructions, analysis, and safe operation in production payroll environments.",
+            "strengths": [
+              "Long context",
+              "Safety",
+              "Instruction following"
+            ],
+            "best_for": [
+              "All agent types"
+            ]
+          }
+        },
+        {
+          "id": "llama-3-3-70b",
+          "name": "Llama 3.3 \u00b7 70B",
+          "provider": "huggingface",
+          "modelId": "meta-llama/Llama-3.3-70B-Instruct",
+          "enabled": true,
+          "endpointEnv": "HF_INFERENCE_BASE_URL",
+          "credentialEnv": "HF_TOKEN",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "open-source",
+            "vendor": "Meta",
+            "context_window": "128K tokens",
+            "description": "Meta's latest 70B open-source model (successor to Llama 3.1 70B). Excellent at reasoning and tool use, making it well-suited for agentic payroll workflows.",
+            "strengths": [
+              "Tool calling",
+              "Reasoning",
+              "Code generation"
+            ],
+            "best_for": [
+              "Anomaly Detection",
+              "General Query"
+            ],
+            "benchmarks": [
+              {
+                "name": "MMLU-Pro",
+                "score": 68.9,
+                "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+              },
+              {
+                "name": "HumanEval",
+                "score": 88.4,
+                "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+              },
+              {
+                "name": "MATH",
+                "score": 77.0,
+                "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+              }
+            ]
+          }
+        },
+        {
           "id": "poc-demo",
           "name": "POC demo model (configuration only)",
           "provider": "demo",
           "modelId": "demo/no-runtime",
           "enabled": true,
           "endpointEnv": "",
+          "credentialEnv": "",
           "parameters": {
             "temperature": 0.2,
             "max_tokens": 1024
+          },
+          "details": {
+            "license": "demo",
+            "vendor": "Agent Studio",
+            "description": "Configuration-only placeholder. Agents save settings but no model is called."
+          }
+        },
+        {
+          "id": "qwen-2-5-72b",
+          "name": "Qwen 2.5 \u00b7 72B",
+          "provider": "huggingface",
+          "modelId": "Qwen/Qwen2.5-72B-Instruct",
+          "enabled": true,
+          "endpointEnv": "HF_INFERENCE_BASE_URL",
+          "credentialEnv": "HF_TOKEN",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "open-source",
+            "vendor": "Alibaba Cloud",
+            "context_window": "128K tokens",
+            "description": "Highly capable open-source model with strong instruction following and multilingual support. Good balance of performance and speed for payroll Q&A.",
+            "strengths": [
+              "Fast inference",
+              "Multilingual",
+              "Strong reasoning"
+            ],
+            "best_for": [
+              "General Query",
+              "Summarizer"
+            ],
+            "benchmarks": [
+              {
+                "name": "MMLU-Pro",
+                "score": 71.1,
+                "source": "https://arxiv.org/abs/2412.15115"
+              },
+              {
+                "name": "HumanEval",
+                "score": 86.6,
+                "source": "https://arxiv.org/abs/2412.15115"
+              },
+              {
+                "name": "MATH",
+                "score": 83.1,
+                "source": "https://arxiv.org/abs/2412.15115"
+              }
+            ]
           }
         }
       ],
@@ -357,6 +737,42 @@
           "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
           "method": "GET",
           "path": "/diagnostics/logs"
+        },
+        {
+          "id": "slack-webhook",
+          "name": "Slack alert webhook",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "SLACK_WEBHOOK_BASE_URL",
+          "method": "POST",
+          "path": "/services/payroll-alerts"
+        },
+        {
+          "id": "email-notification",
+          "name": "Email notification",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMAIL_API_BASE_URL",
+          "method": "POST",
+          "path": "/notifications/email"
+        },
+        {
+          "id": "alert-manager",
+          "name": "On-call alerting",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "ALERTING_API_BASE_URL",
+          "method": "POST",
+          "path": "/alerts"
+        },
+        {
+          "id": "opensearch-sink",
+          "name": "OpenSearch event sink",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "OPENSEARCH_BASE_URL",
+          "method": "POST",
+          "path": "/agent-events/_doc"
         }
       ]
     },
@@ -398,9 +814,15 @@
         "modelId": "demo/no-runtime",
         "enabled": true,
         "endpointEnv": "",
+        "credentialEnv": "",
         "parameters": {
           "temperature": 0.2,
           "max_tokens": 1024
+        },
+        "details": {
+          "license": "demo",
+          "vendor": "Agent Studio",
+          "description": "Configuration-only placeholder. Agents save settings but no model is called."
         }
       },
       "service": {
@@ -425,15 +847,93 @@
       ],
       "modelOptions": [
         {
+          "id": "bedrock-claude",
+          "name": "AWS Bedrock \u00b7 Claude",
+          "provider": "aws-bedrock",
+          "modelId": "REPLACE_WITH_BEDROCK_CLAUDE_MODEL_ID",
+          "enabled": true,
+          "endpointEnv": "AWS_BEDROCK_BASE_URL",
+          "credentialEnv": "AWS_BEDROCK_API_KEY",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "commercial",
+            "vendor": "Anthropic / AWS",
+            "context_window": "200K tokens",
+            "description": "Claude via AWS Bedrock. Industry-leading at following complex instructions, analysis, and safe operation in production payroll environments.",
+            "strengths": [
+              "Long context",
+              "Safety",
+              "Instruction following"
+            ],
+            "best_for": [
+              "All agent types"
+            ]
+          }
+        },
+        {
           "id": "poc-demo",
           "name": "POC demo model (configuration only)",
           "provider": "demo",
           "modelId": "demo/no-runtime",
           "enabled": true,
           "endpointEnv": "",
+          "credentialEnv": "",
           "parameters": {
             "temperature": 0.2,
             "max_tokens": 1024
+          },
+          "details": {
+            "license": "demo",
+            "vendor": "Agent Studio",
+            "description": "Configuration-only placeholder. Agents save settings but no model is called."
+          }
+        },
+        {
+          "id": "qwen-2-5-72b",
+          "name": "Qwen 2.5 \u00b7 72B",
+          "provider": "huggingface",
+          "modelId": "Qwen/Qwen2.5-72B-Instruct",
+          "enabled": true,
+          "endpointEnv": "HF_INFERENCE_BASE_URL",
+          "credentialEnv": "HF_TOKEN",
+          "parameters": {
+            "temperature": 0.2,
+            "max_tokens": 1024
+          },
+          "details": {
+            "license": "open-source",
+            "vendor": "Alibaba Cloud",
+            "context_window": "128K tokens",
+            "description": "Highly capable open-source model with strong instruction following and multilingual support. Good balance of performance and speed for payroll Q&A.",
+            "strengths": [
+              "Fast inference",
+              "Multilingual",
+              "Strong reasoning"
+            ],
+            "best_for": [
+              "General Query",
+              "Summarizer"
+            ],
+            "benchmarks": [
+              {
+                "name": "MMLU-Pro",
+                "score": 71.1,
+                "source": "https://arxiv.org/abs/2412.15115"
+              },
+              {
+                "name": "HumanEval",
+                "score": 86.6,
+                "source": "https://arxiv.org/abs/2412.15115"
+              },
+              {
+                "name": "MATH",
+                "score": 83.1,
+                "source": "https://arxiv.org/abs/2412.15115"
+              }
+            ]
           }
         }
       ],
@@ -473,6 +973,42 @@
           "baseUrlEnv": "DIAGNOSTICS_API_BASE_URL",
           "method": "GET",
           "path": "/diagnostics/logs"
+        },
+        {
+          "id": "slack-webhook",
+          "name": "Slack alert webhook",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "SLACK_WEBHOOK_BASE_URL",
+          "method": "POST",
+          "path": "/services/payroll-alerts"
+        },
+        {
+          "id": "email-notification",
+          "name": "Email notification",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "EMAIL_API_BASE_URL",
+          "method": "POST",
+          "path": "/notifications/email"
+        },
+        {
+          "id": "alert-manager",
+          "name": "On-call alerting",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "ALERTING_API_BASE_URL",
+          "method": "POST",
+          "path": "/alerts"
+        },
+        {
+          "id": "opensearch-sink",
+          "name": "OpenSearch event sink",
+          "domain": "Payroll",
+          "enabled": true,
+          "baseUrlEnv": "OPENSEARCH_BASE_URL",
+          "method": "POST",
+          "path": "/agent-events/_doc"
         }
       ]
     }

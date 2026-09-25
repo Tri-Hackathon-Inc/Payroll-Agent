@@ -41,9 +41,9 @@ class NoRedirects(HTTPRedirectHandler):
 class CompatibleChatModel(ModelRuntime):
     """Client for a configured /v1/chat/completions compatible model server."""
 
-    def __init__(self, config):
+    def __init__(self, config, default_url=""):
         self.config = deepcopy(config)
-        base_url = os.getenv(config.get("endpoint_env", ""), "").rstrip("/")
+        base_url = (os.getenv(config.get("endpoint_env", ""), "") or default_url).rstrip("/")
         parsed = urlsplit(base_url)
         if (parsed.scheme not in ("http", "https") or not parsed.hostname
                 or parsed.username or parsed.password or parsed.query or parsed.fragment):
@@ -91,8 +91,15 @@ class CompatibleChatModel(ModelRuntime):
             raise ModelExecutionError("The model returned an invalid response or disconnected.") from error
 
 
+class HuggingFaceChatModel(CompatibleChatModel):
+    def __init__(self, config):
+        if not config.get("credential_env"):
+            raise ModelConfigurationError("Configure the model's credential environment variable.")
+        super().__init__(config, default_url="https://router.huggingface.co/v1")
+
+
 class ModelRuntimeFactory:
-    providers = {"demo": DemoModel, "openai-compatible": CompatibleChatModel}
+    providers = {"demo": DemoModel, "openai-compatible": CompatibleChatModel, "huggingface": HuggingFaceChatModel}
 
     @classmethod
     def create(cls, config):

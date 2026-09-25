@@ -1,5 +1,5 @@
 export async function graphqlRequest(query, variables) {
-  const response = await fetch('/graphql', {
+  const response = await fetch(`${import.meta.env.BASE_URL}graphql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ query, variables }),

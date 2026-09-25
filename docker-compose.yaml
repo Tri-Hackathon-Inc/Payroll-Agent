@@ -31,6 +31,12 @@ services:
       HOST: 0.0.0.0
       PORT: "4000"
       NODE_ENV: development
+      # Agent model calls (server-side only). Set HF_TOKEN in the root .env; never commit it.
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_INFERENCE_BASE_URL: ${HF_INFERENCE_BASE_URL:-}
+      MODEL_TIMEOUT_MS: ${MODEL_TIMEOUT_MS:-60000}
+      # Payroll data the webhook loads as context when an agent is asked on a payrun.
+      TRINET_API_URL: http://trinet-mock:4100/
     ports:
       - "127.0.0.1:4000:4000"
       - "127.0.0.1:50051:50051"
@@ -57,17 +63,69 @@ services:
     environment:
       GRAPHQL_MODE: backend
       API_PROXY_TARGET: http://backend:4000
+      STUDIO_BASE_PATH: ${STUDIO_BASE_PATH:-/ai_studio/}
+      VITE_TRINET_MOCK_URL: http://localhost:5174/trinet/
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173/ai-studio', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173${STUDIO_BASE_PATH:-/ai_studio/}', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 12
     restart: unless-stopped
 
+  # --- Temporary TriNet mock: stands in for the real TriNet UI and payroll API until the
+  # agent is embedded in TriNet. Not part of Agent Studio; it uses only Agent Studio's API.
+  trinet-mock:
+    build:
+      context: ./backend/trinet_mock
+    environment:
+      DATABASE_PATH: /data/trinet_mock.sqlite3
+    volumes:
+      - trinet_data:/data
+    ports:
+      - "127.0.0.1:4100:4100"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4100/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ payruns { id } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  trinet-ui:
+    build:
+      context: ./ui-trinet-mock
+      dockerfile: Dockerfile
+    environment:
+      TRINET_API_TARGET: http://trinet-mock:4100
+      AGENT_STUDIO_TARGET: http://ui:5173${STUDIO_BASE_PATH:-/ai_studio/}
+    ports:
+      - "127.0.0.1:5174:5174"
+    depends_on:
+      trinet-mock:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5174/trinet/', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   mysql_data:
+  trinet_data:

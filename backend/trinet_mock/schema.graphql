@@ -1,0 +1,143 @@
+# Temporary GraphQL mock of the TriNet payroll API. It stands in for TriNet until the agent is
+# embedded in the real TriNet UI; it is not part of Agent Studio.
+
+enum PayrunStatus {
+  PENDING_APPROVAL
+  COMPLETED
+}
+
+type PayrunTotals {
+  employees: Int!
+  gross: Float!
+  taxes: Float!
+  deductions: Float!
+  employerTaxes: Float!
+  net: Float!
+}
+
+type Hours {
+  regular: Float!
+  overtime: Float!
+}
+
+type Earnings {
+  regular: Float!
+  overtime: Float!
+  bonus: Float!
+  reimbursement: Float!
+}
+
+type Taxes {
+  federal: Float!
+  state: Float!
+  socialSecurity: Float!
+  medicare: Float!
+}
+
+type Deductions {
+  health: Float!
+  retirement401k: Float!
+  garnishment: Float!
+}
+
+type PayLine {
+  "Stable line ID; an employee can appear on more than one line of a run."
+  lineId: ID!
+  employeeId: ID!
+  name: String!
+  department: String!
+  "salary or hourly"
+  payType: String!
+  "active, new-hire, or terminated"
+  employmentStatus: String!
+  hireDate: String
+  terminationDate: String
+  hourlyRate: Float
+  periodSalary: Float
+  hours: Hours!
+  earnings: Earnings!
+  gross: Float!
+  taxes: Taxes!
+  deductions: Deductions!
+  net: Float!
+  "Direct Deposit or Live Check"
+  paymentMethod: String!
+}
+
+type Payrun {
+  id: ID!
+  name: String!
+  company: String!
+  frequency: String!
+  currency: String!
+  periodStart: String!
+  periodEnd: String!
+  payDate: String!
+  status: PayrunStatus!
+  "Increments on every saved edit; pass it back as expectedVersion to detect conflicts."
+  version: Int!
+  updatedAt: String
+  totals: PayrunTotals!
+  lines: [PayLine!]!
+}
+
+type Employee {
+  employeeId: ID!
+  name: String!
+  department: String!
+  payType: String!
+}
+
+type EmployeePayLine {
+  payrunId: ID!
+  payDate: String!
+  status: PayrunStatus!
+  line: PayLine!
+}
+
+type EmployeePayHistory {
+  employee: Employee!
+  lines: [EmployeePayLine!]!
+}
+
+input HoursInput {
+  regular: Float
+  overtime: Float
+}
+
+input EarningsInput {
+  bonus: Float
+  reimbursement: Float
+}
+
+input DeductionsInput {
+  health: Float
+  garnishment: Float
+}
+
+"Only the fields you pass change; pay, taxes, and totals are recalculated."
+input UpdatePayLineInput {
+  payrunId: ID!
+  lineId: ID!
+  expectedVersion: Int
+  hours: HoursInput
+  earnings: EarningsInput
+  deductions: DeductionsInput
+  paymentMethod: String
+}
+
+type Query {
+  "Newest first."
+  payruns(status: PayrunStatus): [Payrun!]!
+  payrun(id: ID!): Payrun!
+  "Completed runs, newest first, optionally only those older than `before`."
+  payrunHistory(limit: Int, before: ID): [Payrun!]!
+  employeePayHistory(employeeId: ID!): EmployeePayHistory!
+}
+
+type Mutation {
+  "Edit one pay line on a draft (PENDING_APPROVAL) payrun."
+  updatePayLine(input: UpdatePayLineInput!): Payrun!
+  "Restore the seed data."
+  resetPayrollData: Boolean!
+}

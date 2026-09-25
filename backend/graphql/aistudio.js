@@ -17,10 +17,9 @@ const typeDefs = `
     modelId: String!
     enabled: Boolean!
     endpointEnv: String!
-
-    
     credentialEnv: String!
     parameters: JSON!
+    details: JSON!
   }
 
   type Service {

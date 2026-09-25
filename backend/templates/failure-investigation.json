@@ -3,6 +3,11 @@
   "name": "Failure Investigation",
   "version": 1,
   "description": "Prepare diagnostic evidence for engineering review.",
+  "models": [
+    "poc-demo",
+    "mistral-large",
+    "bedrock-claude"
+  ],
   "config": {
     "description": "Prepare diagnostic evidence for engineering review.",
     "instructions": "Collect diagnostic evidence from approved service logs. Do not modify code or retry production payments.",

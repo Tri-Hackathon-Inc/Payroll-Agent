@@ -3,6 +3,12 @@
   "name": "Anomaly Detection",
   "version": 1,
   "description": "Flag unusual payments against historical payrun data.",
+  "models": [
+    "poc-demo",
+    "llama-3-3-70b",
+    "mistral-large",
+    "bedrock-claude"
+  ],
   "config": {
     "description": "Flag unusual payments against historical payrun data.",
     "instructions": "Compare payrun inputs against history. Explain unusual values and evidence. Do not change payroll.",

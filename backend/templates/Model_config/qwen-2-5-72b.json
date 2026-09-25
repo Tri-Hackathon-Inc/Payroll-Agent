@@ -1,0 +1,45 @@
+{
+  "id": "qwen-2-5-72b",
+  "name": "Qwen 2.5 · 72B",
+  "provider": "huggingface",
+  "model_id": "Qwen/Qwen2.5-72B-Instruct",
+  "enabled": true,
+  "endpoint_env": "HF_INFERENCE_BASE_URL",
+  "credential_env": "HF_TOKEN",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 1024
+  },
+  "details": {
+    "license": "open-source",
+    "vendor": "Alibaba Cloud",
+    "context_window": "128K tokens",
+    "description": "Highly capable open-source model with strong instruction following and multilingual support. Good balance of performance and speed for payroll Q&A.",
+    "strengths": [
+      "Fast inference",
+      "Multilingual",
+      "Strong reasoning"
+    ],
+    "best_for": [
+      "General Query",
+      "Summarizer"
+    ],
+    "benchmarks": [
+      {
+        "name": "MMLU-Pro",
+        "score": 71.1,
+        "source": "https://arxiv.org/abs/2412.15115"
+      },
+      {
+        "name": "HumanEval",
+        "score": 86.6,
+        "source": "https://arxiv.org/abs/2412.15115"
+      },
+      {
+        "name": "MATH",
+        "score": 83.1,
+        "source": "https://arxiv.org/abs/2412.15115"
+      }
+    ]
+  }
+}

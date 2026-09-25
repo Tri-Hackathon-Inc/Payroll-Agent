@@ -1,4 +1,8 @@
 import { defineConfig } from '@playwright/test'
+import { basePath } from './vite.config.js'
+
+// Same mount path the app uses; run with STUDIO_BASE_PATH=/other/path/ to test another mount.
+const BASE = basePath(process.env.STUDIO_BASE_PATH || '/ai_studio/')
 
 export default defineConfig({
   testDir: './tests',
@@ -12,8 +16,8 @@ export default defineConfig({
   },
   webServer: {
     command: 'npm run dev -- --host 127.0.0.1 --port 5180 --strictPort',
-    url: 'http://127.0.0.1:5180',
-    env: { GRAPHQL_MODE: process.env.GRAPHQL_MODE || 'mock' },
+    url: `http://127.0.0.1:5180${BASE}`,
+    env: { GRAPHQL_MODE: process.env.GRAPHQL_MODE || 'mock', STUDIO_BASE_PATH: BASE },
     reuseExistingServer: false,
   },
 })

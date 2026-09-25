@@ -9,5 +9,10 @@
   "parameters": {
     "temperature": 0.2,
     "max_tokens": 1024
+  },
+  "details": {
+    "license": "open-source",
+    "vendor": "Self-hosted",
+    "description": "Any OpenAI-compatible endpoint you run yourself. Disabled until configured."
   }
 }

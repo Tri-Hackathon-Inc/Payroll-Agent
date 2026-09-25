@@ -35,6 +35,7 @@ def sync_templates():
         values.update(
             endpoint_env=entry.get("endpoint_env", ""),
             credential_env=entry.get("credential_env", ""),
+            details=entry.get("details", {}),
         )
         ModelConfiguration.objects.update_or_create(id=entry["id"], defaults=values)
     for entry in catalog["services"]:
@@ -57,6 +58,7 @@ def sync_templates():
             },
         )
         template.attached_services.set(config["attached_services"])
+        template.supported_models.set(entry.get("models", []))
     # The database is a projection of the source files, including removals.
     Template.objects.exclude(
         id__in=[item["id"] for item in catalog["templates"]]
@@ -82,6 +84,7 @@ def model_data(model):
             "endpoint_env",
             "credential_env",
             "parameters",
+            "details",
         )
     }
 
@@ -111,8 +114,31 @@ def template_data(template):
 
 def template_queryset():
     return Template.objects.select_related("default_model", "service").prefetch_related(
-        "attached_services"
+        "attached_services", "supported_models"
     )
+
+
+def with_options(template, data, models, service_list):
+    # Form options travel with the template, not separate public APIs.
+    supported = {item.id for item in template.supported_models.all()}
+    data["model_options"] = [
+        item for item in models
+        if item["enabled"] and (not supported or item["id"] in supported)
+    ]
+    data["service_options"] = [
+        item
+        for item in service_list
+        if item["enabled"] and item["domain"] == data["config"]["domain"]
+    ]
+    return data
+
+
+def templates_with_options(queryset):
+    models, service_list = list_model_configs(), list_services()
+    return [
+        with_options(template, template_data(template), models, service_list)
+        for template in queryset
+    ]
 
 
 def list_templates(service_name):
@@ -120,25 +146,15 @@ def list_templates(service_name):
         raise InvalidInput("service_name is required.")
     if not ServiceDefinition.objects.filter(pk=service_name).exists():
         raise NotFound(f"Service {service_name!r} not found.")
-    return [
-        template_data(template)
-        for template in template_queryset().filter(service_id=service_name)
-    ]
+    return templates_with_options(template_queryset().filter(service_id=service_name))
 
 
 def get_template(template_id):
     try:
-        data = template_data(template_queryset().get(pk=template_id))
-        # Form options travel with the template, not separate public APIs.
-        data["model_options"] = [
-            item for item in list_model_configs() if item["enabled"]
-        ]
-        data["service_options"] = [
-            item
-            for item in list_services()
-            if item["enabled"] and item["domain"] == data["config"]["domain"]
-        ]
-        return data
+        template = template_queryset().get(pk=template_id)
+        return with_options(
+            template, template_data(template), list_model_configs(), list_services()
+        )
     except Template.DoesNotExist as error:
         raise TemplateNotFound(f"Template {template_id!r} not found.") from error
 
@@ -208,6 +224,11 @@ def validate_agent(name, config, domain):
         raise InvalidInput(str(error)) from error
 
 
+def validate_template_model(template, config):
+    if config["model"] not in {item["id"] for item in template["model_options"]}:
+        raise InvalidInput(f"Model {config['model']!r} is not offered by this template.")
+
+
 def create_agent(domain_name, template_id, name, config):
     from .agent_factory import AgentFactory
 
@@ -229,6 +250,10 @@ def update_agent(agent_id, domain_name, name, config):
         ) from error
     merged = merge_config(agent.config, config)
     validate_agent(name, merged, domain)
+    try:
+        validate_template_model(get_template(agent.template_id), merged)
+    except TemplateNotFound:
+        pass  # The source template was removed; its saved configuration stays editable.
     if merged["model"] != agent.config["model"] or not agent.model_config:
         from .agent_factory import model_snapshot
 
@@ -240,7 +265,7 @@ def update_agent(agent_id, domain_name, name, config):
 
 def get_domain_agents_templates(domain_name):
     domain = get_domain(domain_name)
-    return [template_data(item) for item in template_queryset().filter(config__domain=domain.domain)]
+    return templates_with_options(template_queryset().filter(config__domain=domain.domain))
 
 
 def get_service_agent_registry(service_name="", domain_name=""):

@@ -38,8 +38,8 @@ class DomainGrpcTests(TransactionTestCase):
                 templates = client.GetDomainAgentsTemplates(pb.DomainName(domain_name="payroll-services"), timeout=5).templates
                 self.assertEqual(len(templates), 4)
                 self.assertEqual(len(client.GetDomainAgentsTemplates(pb.DomainName(domain_name="hr"), timeout=5).templates), 0)
-                # Use an enabled model from the catalog rather than a provider model name.
-                config = ParseDict({"model": next(m["id"] for m in services.list_model_configs() if m["enabled"]), "service": "payrun"}, Struct())
+                # Keep the integration test offline with the explicitly configured demo provider.
+                config = ParseDict({"model": "poc-demo", "service": "payrun"}, Struct())
                 agent = client.CreateAgent(pb.CreateAgentRequest(domain_name="payroll-services", template_id="anomaly-detection", name="RPC agent", config=config), timeout=5)
                 self.assertEqual(agent.domain_name, "payroll-services")
                 reply = client.ChatAgent(pb.ChatAgentRequest(agent_id=agent.id, domain_name="payroll-services", message="Hello"), timeout=5)

@@ -40,6 +40,7 @@ class AgentFactory:
         if template["config"]["domain"] != domain.domain:
             raise services.InvalidInput("Template domain must match the selected domain.")
         services.validate_agent(name, effective, domain)
+        services.validate_template_model(template, effective)
         return Agent.objects.create(
             domain=domain,
             name=name.strip(),

@@ -14,14 +14,16 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
   echo "Warning: uncommitted changes; the images will not match commit $SHA." >&2
 fi
 
-# The build sections live in docker-compose.dev.yaml, so use it together with the
-# base file and set the tags explicitly (the dev file's :dev image name is overridden).
+# Build sections come from docker-compose.yaml: backend (gRPC + GraphQL + webhook), UI, and the
+# temporary TriNet mock API and UI. The db service uses the public mysql image.
 for tag in "$SHA" latest; do
   echo "==> Pushing tag: $tag"
   docker buildx bake \
-    -f docker-compose.yaml -f docker-compose.dev.yaml \
+    -f docker-compose.yaml \
     --set "backend.tags=$REGISTRY/payroll-agent-backend:$tag" \
     --set "ui.tags=$REGISTRY/payroll-agent-ui:$tag" \
+    --set "trinet-mock.tags=$REGISTRY/payroll-agent-trinet-mock:$tag" \
+    --set "trinet-ui.tags=$REGISTRY/payroll-agent-trinet-ui:$tag" \
     --set '*.platform=linux/amd64,linux/arm64' \
     --push
 done

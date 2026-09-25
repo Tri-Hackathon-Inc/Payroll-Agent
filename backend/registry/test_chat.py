@@ -77,6 +77,7 @@ class AgentChatTests(TestCase):
         agent.refresh_from_db()
         self.assertEqual(agent.model_config["model_id"], "demo/no-runtime")
         ModelConfiguration.objects.filter(pk="local-open-source").update(enabled=True)
+        Template.objects.get(pk=agent.template_id).supported_models.add("local-open-source")
         services.update_agent(str(agent.id), agent.domain_id, "Updated", {"model": "local-open-source"})
         agent.refresh_from_db()
         self.assertEqual(agent.model_config["id"], "local-open-source")
@@ -123,3 +124,10 @@ class CompatibleModelTests(SimpleTestCase):
             ModelRuntimeFactory.create(self.config())
         with self.assertRaises(ModelConfigurationError):
             ModelRuntimeFactory.create({**self.config(), "provider": "unknown"})
+
+    @patch.dict("os.environ", {"HF_TOKEN": "test-token", "HF_INFERENCE_BASE_URL": ""}, clear=True)
+    def test_huggingface_catalog_provider_uses_router(self):
+        config = {**self.config(), "provider": "huggingface", "credential_env": "HF_TOKEN", "endpoint_env": "HF_INFERENCE_BASE_URL"}
+        model = ModelRuntimeFactory.create(config)
+        self.assertEqual(model.url, "https://router.huggingface.co/v1/chat/completions")
+        self.assertEqual(model.headers["Authorization"], "Bearer test-token")

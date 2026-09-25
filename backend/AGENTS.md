@@ -34,8 +34,8 @@ in template details rather than exposed as separate list operations.
   It has a UUID, name, domain, source template ID/version, effective
   configuration, and creation/update timestamps.
 
-`GetTemplate` supplies `config` defaults, resolved `model_config`, `service`,
-`attached_services`, and enabled `model_options` and `service_options`. Service
+`GetTemplate` and `ListTemplates` supply `config` defaults, resolved `model_config`,
+`service`, `attached_services`, and enabled `model_options` and `service_options`. Service
 options match the template's domain. The UI can use these properties to populate
 its configurable form. The React UI uses this contract in both backend and mock modes;
 see [README.md](README.md) for the domain/agent walkthrough.
@@ -120,7 +120,12 @@ server; `DemoModel` explicitly echoes messages without inference. Chat history
 is supplied by the client and is not persisted. Model selection changes refresh
 the snapshot; other edits retain it. The catalog model must still be enabled.
 
-External API calls, alert sending, and webhook delivery are not implemented. Domain filtering and role
+External API calls, alert sending, and outbound
+webhook delivery are not implemented. The GraphQL process also serves the chat
+webhook, `POST /webhook/<domainName>/<agentId>` (`graphql/webhook.js`): it checks the
+agent belongs to the domain and answers with the agent's model when it is connected
+(`HF_TOKEN`), using the payrun as context; otherwise it acknowledges the question.
+Domain filtering and role
 metadata do not provide authentication or authorization.
 
 ## Local server and container setup

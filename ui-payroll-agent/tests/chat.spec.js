@@ -1,11 +1,18 @@
 import { test, expect } from '@playwright/test'
+import { basePath } from '../vite.config.js'
+
+const BASE = basePath(process.env.STUDIO_BASE_PATH || '/ai_studio/')
 
 test('saved agent chat returns replies, preserves failures and resets history', async ({ page }) => {
   const name = `Chat agent ${Date.now()}`
-  await page.goto('/ai-studio/templates/anomaly-detection/config?domain=payroll-services')
+  await page.goto(BASE)
+  await page.locator('.service-card').filter({ has: page.getByText('Payroll', { exact: true }) }).click()
+  await page.locator('.template-card').filter({ has: page.getByRole('heading', { name: 'Anomaly Detection', exact: true }) }).getByRole('button', { name: 'Use Template' }).click()
   await page.getByLabel('Agent name', { exact: true }).fill(name)
   await page.getByRole('button', { name: 'Create agent', exact: true }).click()
-  const card = page.locator('.card').filter({ has: page.getByRole('heading', { name, exact: true }) })
+  await expect(page.locator('.alert-success')).toContainText(name)
+  await page.getByRole('navigation', { name: 'Agent Studio' }).getByRole('button', { name: 'My Agents' }).click()
+  const card = page.locator('.my-agent-row').filter({ hasText: name })
   await card.getByRole('button', { name: 'Chat with agent' }).click()
   await expect(page.getByRole('heading', { name: `Chat with ${name}` })).toBeVisible()
   await page.getByLabel('Message', { exact: true }).fill('Hello agent')
