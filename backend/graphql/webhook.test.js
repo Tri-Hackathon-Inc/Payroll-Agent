@@ -196,7 +196,7 @@ test('answerQuestion sends instructions, payrun data, and the question to the mo
   });
   const payrollUrl = await standIn(() => ({ json: { data: { payrun: run('PR-B', 'PENDING_APPROVAL', 9000), payrunHistory: [run('PR-A', 'COMPLETED', 4500)] } } }));
   const answer = await answerQuestion({
-    agent: { name: 'Anomaly bot' }, model, question: 'Which payments need review?',
+    agent: { name: 'Anomaly bot' }, model, question: "Why are Maya Chen's taxes so high?",
     config: { model: 'qwen-2-5-72b', service: 'payrun', description: 'Flags anomalies.', instructions: 'Compare payrun inputs against history.' },
     invocation: { page: 'payrun', payrunId: 'PR-B' },
   }, { env: { HF_TOKEN: 'hf_test', HF_INFERENCE_BASE_URL: modelUrl }, endpoint: payrollUrl });
@@ -205,7 +205,9 @@ test('answerQuestion sends instructions, payrun data, and the question to the mo
   assert.equal(answer.context.payrunId, 'PR-B');
   assert.match(prompt[0].content, /Instructions: Compare payrun inputs against history\./);
   assert.match(prompt[0].content, /one-sentence direct answer[\s\S]*Never paste raw data lines/);
-  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Which payments need review\?/);
+  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Why are Maya Chen's taxes so high\?/);
+  assert.equal(answer.answeredBy, 'model');
+  assert.equal(answer.check.ok, true);
 });
 
 test('answerQuestion still answers when the payroll context cannot be loaded', async () => {

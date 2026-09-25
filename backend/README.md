@@ -182,21 +182,35 @@ docker compose -f docker/docker-compose.yaml exec backend python manage.py creat
 ## Agent model calls
 
 The chat webhook (`POST /webhook/<domain>/<agentId>` with `{ question, context?, sessionId?, requestId? }`,
-served by the backend's GraphQL process) answers with the agent's model when that
-model can be called. Anomaly Detection always calculates evidence first, even
-without a model connection; other templates acknowledge missing configuration.
+served by the backend's GraphQL process) follows one rule: code decides, the model
+explains. Fact questions are answered from the payroll data in code; payrun questions
+then go to the RAG pipeline (when Redis is configured) and Anomaly Detection review
+questions to the anomaly pipeline, which always calculates evidence first, even without a
+model connection. Other questions go to the agent's model with a checked reply; without a
+connected model they get an acknowledgement that names what is missing.
 Code is in `graphql/`:
 
 | Step | File | What it does |
 | --- | --- | --- |
+| Computed answers | `factAnswers.js` | Answers fact questions (totals, employee lookups, counts, comparisons, findings) exactly from the data, with no model call, even when no model is connected; 58 of the 64 bank questions |
 | Conversation | `redisStore.js` | Restores recent turns and employee/topic focus from an expiring Redis session |
 | Retrieval and answer | `rag/` | Intent model, local embeddings, persistent pgvector documents, filtered KNN and a separate answer model |
 | Payroll data | `payrunContext.js` | Loads the current run and configurable history from `TRINET_API_URL`; RAG defaults to 100 runs, anomaly baselines use up to six |
 | Pre-processing | `anomalyPreprocessor.js` | Groups lines by employee ID, computes historical medians and payment differences, and creates review findings |
 | Anomaly orchestration | `anomalyPipeline.js` | Initializes one `ChatModel` per request, passes calculated evidence, and handles unavailable models |
 | Post-processing | `rag/postprocessor.js`, `anomalyPostprocessor.js` | Validates model JSON, citations and finding references, retains calculated evidence, and formats the chat response |
+| Severity | `findingPolicy.js` | Gives each finding a severity (critical, warning, info) and the dollars at risk |
+| Answer cache | `answerCache.js` | The same first question on the same payrun version returns the same model answer word for word (in memory, 30 minutes) |
+| Context scope | `contextScope.js` | Sends the model only the pay lines the question needs (named employees, flagged ones, or the whole run when it is small) |
 | Prompt | `agentPrompt.js` | Agent description and instructions, guardrails (answer only from the data, never change payroll), payroll data, question |
-| Model call | `modelRuntime.js` | OpenAI-compatible `chat/completions` request; measures latency and tokens/s; maps provider errors (bad token, no credits, rate limit, model not served) to clear messages |
+| Model call | `modelRuntime.js` | OpenAI-compatible `chat/completions` request; measures latency and tokens/s; maps provider errors (bad token, no credits, rate limit, overloaded, model not served) to clear messages |
+| Reply check | `replyCheck.js` | Every employee ID and dollar amount in the model's reply must be in the data it was sent; otherwise the reply gets a "Check before acting" note |
+| Automatic incidents | `incidentTrigger.js` | For agents with alerts enabled: new critical findings are handed to the domain's Incident Report agent (once per finding); warnings are returned as suggestions |
+
+Replies say how they were produced: `answeredBy` is `payroll-data` or `model`, with
+`cached` and `check` for model answers, and `incidentAlert` when alerts are enabled.
+`context.answerMode = "model"` always asks the model and never raises incidents (the
+benchmark script uses it).
 
 Models with provider `huggingface` use the Hugging Face router
 (`https://router.huggingface.co/v1`, override with `HF_INFERENCE_BASE_URL`) and the
@@ -232,9 +246,9 @@ endpoints as defaults).
 Use mock payroll data only with free tiers. Parameters in a model's `parameters`
 (for example `reasoning_effort`) are passed to the provider as they are.
 
-Successful replies add `model`, `metrics` (`latencyMs`, `promptTokens`,
+Successful model replies add `model`, `metrics` (`latencyMs`, `promptTokens`,
 `completionTokens`, `tokensPerSecond`, `provider`), and `context` (`payrunId`,
-`characters`, `error`) to the JSON. `npm run test:webhook` in `graphql/` tests these
+`characters` and `scope` sent to the model, `error`) to the JSON. `npm run test:webhook` in `graphql/` tests these
 modules against local stand-in servers. To compare models on the Evaluation suites
 (checks against the planted anomalies in payrun PR-2026-09-B, plus latency and
 tokens/s), with the stack up:

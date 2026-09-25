@@ -3,6 +3,8 @@
 // as compact text context for the model. The checks are generic rules comparing each employee
 // with their own history; the model explains and prioritizes what they surface.
 
+const { amountAtRisk, severityOf } = require('./findingPolicy');
+
 const LINE_FIELDS = `lineId employeeId name department payType employmentStatus hireDate terminationDate hourlyRate periodSalary
   hours { regular overtime } earnings { regular overtime bonus reimbursement } gross
   taxes { federal state socialSecurity medicare } deductions { health retirement401k garnishment } net paymentMethod`;
@@ -29,14 +31,18 @@ function historyByEmployee(historyRuns) {
   return history;
 }
 
-function range(values, unit = '') {
+const dollars = value => `$${money(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const signed = value => `${value >= 0 ? '+' : '-'}${dollars(Math.abs(value))}`;
+
+function range(values, unit = '', format = money) {
   if (!values.length) return 'no history';
   const low = money(Math.min(...values)), high = money(Math.max(...values));
-  return low === high ? `${low}${unit}` : `${low}–${high}${unit}`;
+  return low === high ? `${format(low)}${unit}` : `${format(low)}–${format(high)}${unit}`;
 }
 
-// Generic checks; each returns a short, factual finding. Thresholds are deliberately loose so
-// normal variation (a few overtime hours, small bonuses) is not flagged.
+// Generic checks; each returns a short, factual finding with its amount at risk and severity
+// (findingPolicy). Thresholds are deliberately loose so normal variation (a few overtime hours,
+// small bonuses) is not flagged.
 function detectSignals(run, historyRuns) {
   const history = historyByEmployee(historyRuns);
   const signals = [];
@@ -47,40 +53,40 @@ function detectSignals(run, historyRuns) {
 
   for (const line of run.lines) {
     const past = history.get(line.employeeId) || [];
-    const outlier = (label, current, pastValues, { ratio, minIncrease, unit = '' }) => {
+    const outlier = (label, current, pastValues, { ratio, minIncrease, unit = '', format = dollars }) => {
       if (!pastValues.length) return;
       const highest = Math.max(...pastValues);
       if (current - highest >= minIncrease && current > highest * ratio) {
-        add(line, `${label} outlier`, `${label} ${money(current)}${unit} vs ${range(pastValues, unit)} in the last ${pastValues.length} runs`);
+        add(line, `${label} outlier`, `${label} ${format(current)}${unit} vs ${range(pastValues, unit, format)} in the last ${pastValues.length} runs`);
       }
     };
     if (counts.get(line.employeeId) > 1 && !reported.has(line.employeeId)) {
-      add(line, 'duplicate payment', `${counts.get(line.employeeId)} pay lines for the same employee in this run (gross ${money(line.gross)} each)`);
+      add(line, 'duplicate payment', `${counts.get(line.employeeId)} pay lines for the same employee in this run (gross ${dollars(line.gross)} each)`);
     }
     reported.add(line.employeeId);
-    outlier('overtime', line.hours.overtime, past.map(item => item.hours.overtime), { ratio: 2, minIncrease: 10, unit: 'h' });
+    outlier('overtime', line.hours.overtime, past.map(item => item.hours.overtime), { ratio: 2, minIncrease: 10, unit: 'h', format: money });
     outlier('bonus', line.earnings.bonus, past.map(item => item.earnings.bonus), { ratio: 3, minIncrease: 1000 });
     outlier('reimbursement', line.earnings.reimbursement, past.map(item => item.earnings.reimbursement), { ratio: 3, minIncrease: 500 });
     for (const [field, label] of [['health', 'health deduction'], ['retirement401k', '401(k) deduction']]) {
       const pastValues = past.map(item => item.deductions[field]);
       if (pastValues.length && pastValues.every(value => value > 0) && line.deductions[field] === 0) {
-        add(line, `${label} missing`, `${label} is 0 this run vs ${range(pastValues)} in the last ${pastValues.length} runs`);
+        add(line, `${label} missing`, `${label} is $0 this run vs ${range(pastValues, '', dollars)} in the last ${pastValues.length} runs`);
       }
     }
     if (line.gross > 0 && line.taxes.federal === 0 && line.taxes.state === 0) {
-      add(line, 'no tax withholding', `federal and state withholding are both 0 on gross ${money(line.gross)}`);
+      add(line, 'no tax withholding', `federal and state withholding are both $0 on gross ${dollars(line.gross)}`);
     }
     if (line.terminationDate && line.gross > 0 && line.terminationDate < run.periodEnd) {
       const whole = line.terminationDate < run.periodStart;
-      add(line, 'paid after termination', `terminated ${line.terminationDate} but paid gross ${money(line.gross)} for ${run.periodStart} to ${run.periodEnd}${whole ? ' (entire period after termination)' : ''}`);
+      add(line, 'paid after termination', `terminated ${line.terminationDate} but paid gross ${dollars(line.gross)} for ${run.periodStart} to ${run.periodEnd}${whole ? ' (entire period after termination)' : ''}`);
     }
     if (!past.length) add(line, 'new hire', `first pay run${line.hireDate ? ` (hired ${line.hireDate})` : ''}`);
   }
-  return signals;
+  return signals.map(signal => {
+    const amount = amountAtRisk(signal.kind, run.lines.filter(line => line.employeeId === signal.employeeId), history.get(signal.employeeId) || []);
+    return { ...signal, amountAtRisk: amount, severity: severityOf(signal.kind, amount) };
+  });
 }
-
-const dollars = value => `$${money(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const signed = value => `${value >= 0 ? '+' : '-'}${dollars(Math.abs(value))}`;
 
 // Aggregates computed in code so the model never has to add up lines itself.
 function payrunFacts(run, historyRuns) {
@@ -159,9 +165,12 @@ function formatEmployee(line, past) {
       `net ${money(line.net)}, ${line.paymentMethod}`].filter(Boolean).join('; ');
 }
 
-function formatContext(run, historyRuns) {
+// employeeIds limits the pay lines to the employees a question is about (see contextScope.js);
+// the totals, facts, and findings always cover the whole run.
+function formatContext(run, historyRuns, { employeeIds = null } = {}) {
   const history = historyByEmployee(historyRuns);
   const signals = detectSignals(run, historyRuns);
+  const shown = employeeIds ? run.lines.filter(line => employeeIds.includes(line.employeeId)) : run.lines;
   const t = run.totals;
   return [
     `Current payrun ${run.id} "${run.name}" (${run.company}): ${run.frequency ? `${run.frequency} run, ` : ''}period ${run.periodStart} to ${run.periodEnd}, pay date ${run.payDate}, status ${run.status}, ${run.currency}.`,
@@ -169,10 +178,12 @@ function formatContext(run, historyRuns) {
     `History: ${historyRuns.length ? historyRuns.map(item => `${item.id} (paid ${item.payDate})`).join(', ') : 'none'}.`,
     'Payrun facts (computed exactly from the pay lines):',
     ...payrunFacts(run, historyRuns).map(fact => `- ${fact}`),
-    'Pay lines in this run (history ranges in parentheses):',
-    ...run.lines.map(line => formatEmployee(line, history.get(line.employeeId) || [])),
+    shown.length === run.lines.length ? 'Pay lines in this run (history ranges in parentheses):'
+      : shown.length ? `Pay lines for the employees this question is about (${shown.length} of ${run.lines.length}; history ranges in parentheses):`
+        : `Pay lines: not needed for this question (${run.lines.length} lines in the run).`,
+    ...shown.map(line => formatEmployee(line, history.get(line.employeeId) || [])),
     signals.length ? 'Findings from automated checks (verify against the lines above):' : 'Automated checks found nothing unusual.',
-    ...signals.map(item => `- ${item.employeeId} ${item.name}: ${item.kind}: ${item.detail}.`),
+    ...signals.map(item => `- ${item.employeeId} ${item.name}: ${item.kind} (${item.severity}${item.amountAtRisk != null ? `, ${dollars(item.amountAtRisk)} at risk` : ''}): ${item.detail}.`),
   ].join('\n');
 }
 
@@ -213,4 +224,4 @@ async function loadPayrunContext(invocation, { endpoint = process.env.TRINET_API
     current: payrun, payrun: scoped, history: payrunHistory };
 }
 
-module.exports = { loadPayrunContext, detectSignals, formatContext, payrunFacts, PAYRUN_FIELDS };
+module.exports = { loadPayrunContext, detectSignals, formatContext, payrunFacts, historyByEmployee, dollars, money, MAX_CONTEXT_CHARS, PAYRUN_FIELDS };

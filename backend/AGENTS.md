@@ -505,6 +505,14 @@ Keep provider credentials server-side (`HF_TOKEN`, `GROQ_API_KEY`,
 put them in `VITE_` variables, log them, or return raw provider errors. Creating a
 token requires the user's provider account. The model dropdown must select a real
 enabled provider model; setting a token must not silently change saved agents.
+The webhook answers fact questions from the payrun data in code first (`factAnswers.js`),
+exactly and repeatably, even without a model; follow-ups that depend on the conversation,
+RAG questions, and Anomaly Detection review questions continue to the flows above. Generic
+model answers send only the pay lines the question needs (`contextScope.js`), are checked
+against the data (`replyCheck.js`: unknown employee IDs or dollar amounts add a "Check before
+acting" note), and are cached per payrun version (`answerCache.js`, in process). Agents with
+alerts enabled raise new critical findings as incidents automatically (`findingPolicy.js`,
+`incidentTrigger.js`; raised-incident memory is in process until it moves to shared storage).
 Domain filtering and role
 metadata do not provide authentication or authorization.
 

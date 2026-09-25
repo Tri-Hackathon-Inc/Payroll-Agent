@@ -7,7 +7,7 @@
   "endpoint_env": "GEMINI_BASE_URL",
   "credential_env": "GEMINI_API_KEY",
   "parameters": {
-    "temperature": 0.2,
+    "temperature": 0,
     "max_tokens": 4096,
     "reasoning_effort": "low"
   },

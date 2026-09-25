@@ -94,7 +94,16 @@ export default function AssistantPanel({ domain, run, employeeId, onEmployeeChan
         context,
       })
       setMessages((current) => [...current, { id: response.id, role: 'agent', text: response.reply, agent: agent.name,
-        modelStatus: response.analysis?.modelStatus, sources: response.retrieval?.sources, scope }])
+        modelStatus: response.analysis?.modelStatus, sources: response.retrieval?.sources, scope, source: response.source,
+        // Suggestions and already-raised incidents are shown only under review answers.
+        suggested: response.incidentAlert?.review ? response.incidentAlert.suggested || [] : [],
+        alreadyRaised: response.incidentAlert?.review && !response.incidentAlert.raised ? response.incidentAlert.alreadyRaised || 0 : 0,
+        alertNote: response.incidentAlert?.note || '' },
+      // Critical findings are raised as an incident automatically (severity policy on the backend).
+      ...(response.incidentAlert?.raised ? [
+        { id: `${response.id}-auto`, role: 'handoff', scope, text: `${response.incidentAlert.raised.findings.length} critical finding${response.incidentAlert.raised.findings.length === 1 ? '' : 's'}: ${agent.name} raised an incident automatically with ${response.incidentAlert.raised.agent.name}.` },
+        { id: `${response.id}-incident`, role: 'incident', scope, agent: response.incidentAlert.raised.agent.name, text: response.incidentAlert.raised.reply, incident: response.incidentAlert.raised.incident },
+      ] : [])])
     } catch (requestError) {
       setError(requestError.message || 'The agent could not be reached.')
       setQuestion(trimmed)
@@ -189,6 +198,17 @@ export default function AssistantPanel({ domain, run, employeeId, onEmployeeChan
                 {item.sources?.length > 0 && <details className="small mt-2"><summary>Historical sources ({item.sources.length})</summary>
                   <ul>{item.sources.map((source) => <li key={source.id}>{source.employeeId} · {source.payrunId} · {source.topic}{source.cited ? ' (cited)' : ''}</li>)}</ul>
                 </details>}
+                {item.source && <div className={`tn-copilot-source ${item.source.kind}`}>
+                  <i className={`bi ${item.source.kind === 'data' ? 'bi-calculator' : 'bi-cpu'} me-1`} aria-hidden="true" />{item.source.label}
+                  {item.source.checked === true && <span title="Every employee and dollar amount matches the payroll data"> · figures checked</span>}
+                </div>}
+                {item.alertNote && <div className="tn-copilot-alert"><i className="bi bi-exclamation-triangle me-1" aria-hidden="true" />{item.alertNote}</div>}
+                {item.alreadyRaised > 0 && <div className="tn-copilot-alert info">
+                  <i className="bi bi-check2-circle me-1" aria-hidden="true" />{item.alreadyRaised} critical finding{item.alreadyRaised === 1 ? ' was' : 's were'} already raised as an incident for this payrun.
+                </div>}
+                {item.suggested?.length > 0 && <div className="tn-copilot-alert warning">
+                  <i className="bi bi-flag me-1" aria-hidden="true" />Suggested for an incident ({item.suggested.length} warning{item.suggested.length === 1 ? '' : 's'}): {item.suggested.map((finding) => `${finding.name} (${finding.kind})`).join(', ')}
+                </div>}
                 {item === lastAgentMessage && item.role === 'agent' && <div className="tn-copilot-actions">
                   {incidentAgent
                     ? <button type="button" className="tn-copilot-action" disabled={handingOff || sending} onClick={handOff}>

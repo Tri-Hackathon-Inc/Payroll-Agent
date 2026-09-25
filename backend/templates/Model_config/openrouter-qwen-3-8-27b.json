@@ -1,18 +1,19 @@
 {
   "id": "openrouter-qwen-3-8-27b",
-  "name": "Qwen 3.8 \u00b7 27B (OpenRouter, free)",
+  "name": "Qwen 3.8 · 27B (OpenRouter, free)",
   "provider": "openai-compatible",
   "model_id": "qwen/qwen3.8-27b:free",
   "enabled": true,
   "endpoint_env": "OPENROUTER_BASE_URL",
   "credential_env": "OPENROUTER_API_KEY",
   "parameters": {
-    "temperature": 0.2,
-    "max_tokens": 2048
+    "temperature": 0,
+    "max_tokens": 2048,
+    "seed": 7
   },
   "details": {
     "license": "open-source",
-    "vendor": "Alibaba Qwen \u00b7 via OpenRouter",
+    "vendor": "Alibaba Qwen · via OpenRouter",
     "context_window": "262K tokens",
     "description": "A free OpenRouter model, used as a backup when the other free tiers hit their limits (20 requests a minute, 50 a day without purchased credit).",
     "strengths": [
