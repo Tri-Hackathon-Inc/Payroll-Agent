@@ -1,6 +1,7 @@
-// Calls a chat model through an OpenAI-compatible API (the Hugging Face router by default) and
-// measures it. Server-side only: the credential comes from the environment variable named in the
-// model configuration and is never logged or returned.
+// Calls a chat model through an OpenAI-compatible API (the Hugging Face router by default; Groq,
+// Gemini, OpenRouter, or a local Ollama through provider openai-compatible) and measures it.
+// Server-side only: the credential comes from the environment variable named in the model
+// configuration and is never logged or returned. A self-hosted endpoint may have no credential.
 
 const HF_ROUTER_URL = 'https://router.huggingface.co/v1';
 const PROVIDERS = new Set(['huggingface', 'openai-compatible']);
@@ -12,7 +13,8 @@ class ModelUnavailable extends Error {
 // Why a model cannot be called right now, or null when it can.
 function unavailableReason(model, env = process.env) {
   if (!PROVIDERS.has(model.provider)) return `${model.name} has no runtime integration yet (provider ${model.provider}).`;
-  if (!model.credentialEnv || !env[model.credentialEnv]) return `${model.name} is not connected: set ${model.credentialEnv || 'a credential variable'} on the server.`;
+  const needsCredential = model.provider === 'huggingface' || Boolean(model.credentialEnv);
+  if (needsCredential && (!model.credentialEnv || !env[model.credentialEnv])) return `${model.name} is not connected: set ${model.credentialEnv || 'a credential variable'} on the server.`;
   if (model.provider === 'openai-compatible' && !env[model.endpointEnv]) return `${model.name} is not connected: set ${model.endpointEnv}.`;
   return null;
 }
@@ -21,10 +23,11 @@ function upstreamError(status, detail) {
   if (status === 400 && /not supported by any provider/i.test(detail || '')) status = 404;
   const reason = {
     401: 'the access token was rejected',
-    403: 'the access token lacks permission to call Inference Providers',
+    403: 'the access token lacks permission to call this model',
     402: 'the account has no inference credits left',
     404: 'the model is not served by any available provider',
     429: 'the provider rate limit was reached; try again shortly',
+    503: 'the model is overloaded at the provider; try again shortly',
   }[status] || `the provider returned HTTP ${status}`;
   // Upstream messages may echo credentials or payroll inputs; never return them.
   return new ModelUnavailable(`Model call failed: ${reason}.`);
@@ -40,13 +43,19 @@ async function callModel(model, messages, { env = process.env, fetchImpl = fetch
   try {
     response = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env[model.credentialEnv]}` },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(model.credentialEnv ? { Authorization: `Bearer ${env[model.credentialEnv]}` } : {}),
+      },
+      // Provider-specific parameters in the configuration (e.g. reasoning_effort) pass through.
       body: JSON.stringify({
+        ...parameters,
         model: model.modelId,
         messages,
         temperature: parameters.temperature ?? 0.2,
         max_tokens: parameters.max_tokens ?? 1024,
         ...(responseFormat ? { response_format: responseFormat } : {}),
+        stream: false,
       }),
       signal: AbortSignal.timeout(timeoutMs || Number(env.MODEL_TIMEOUT_MS) || 60000),
       redirect: 'error',
@@ -56,7 +65,9 @@ async function callModel(model, messages, { env = process.env, fetchImpl = fetch
   }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const detail = typeof body.error === 'string' ? body.error : body.error?.message;
+    // Gemini wraps its error in a one-item array.
+    const error = (Array.isArray(body) ? body[0] : body)?.error;
+    const detail = typeof error === 'string' ? error : error?.message;
     throw upstreamError(response.status, detail && String(detail).slice(0, 200));
   }
   const latencyMs = Math.round(performance.now() - started);

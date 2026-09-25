@@ -41,7 +41,7 @@ the [backend README](backend/README.md#agent-model-calls).
 
 ## Employee payment anomaly detection
 
-Start all seven services so the assistant can load payroll history:
+Start all eight services so the assistant can load payroll history and capture incident evidence:
 
 ```sh
 docker compose -f docker/docker-compose.yaml up --build -d --wait
@@ -163,15 +163,16 @@ when its data volume is first created. Keep existing database credentials when
 reusing a populated volume. `HF_TOKEN` and `HF_INFERENCE_BASE_URL` configure
 Hugging Face model calls in the backend. Keep credentials out of Git.
 
-The TriNet mock payroll API and UI are optional. Start the entire seven-service
+The TriNet mock payroll API, UI and incident evidence capture are optional. Start the entire eight-service
 demo when you need **Open in payrun** or payroll context:
 
 ```sh
 docker compose -f docker/docker-compose.yaml up --build -d --wait
 ```
 
-The additional services are `trinet-mock` ([payroll API](http://localhost:4100/))
-and `trinet-ui` ([payrun UI](http://localhost:5174/trinet/)). Their data uses the
+The additional services are `trinet-mock` ([payroll API](http://localhost:4100/)),
+`trinet-ui` ([payrun UI](http://localhost:5174/trinet/)), and `evidence-capture`
+(internal incident screenshots). Payroll data uses the
 separate `trinet_data` volume. `docker/docker-compose.local.yaml` selects the same
 configuration as the default Compose file.
 

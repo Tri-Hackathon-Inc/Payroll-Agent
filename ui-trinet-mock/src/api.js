@@ -58,5 +58,6 @@ export async function askAgent({ domain, agent, question, context }) {
     try { sessionStorage.setItem(key, body.session.id) } catch { /* The answer remains available. */ }
   }
   return { id: `agent-${Date.now()}`, reply: message || 'Your request was sent to the agent.',
-    analysis: typeof body === 'object' ? body.analysis : null, session: body.session, retrieval: body.retrieval }
+    analysis: typeof body === 'object' ? body.analysis : null, session: body.session, retrieval: body.retrieval,
+    incident: typeof body === 'object' ? body.incident : undefined }
 }

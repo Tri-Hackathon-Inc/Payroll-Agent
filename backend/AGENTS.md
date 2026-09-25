@@ -409,7 +409,7 @@ not skip inference. Current employee details are filtered by the same resolved
 employee scope as the evidence; never include other employees in a scoped prompt.
 
 Chat writes short-term session data to Redis and historical semantic documents to
-PostgreSQL. It never modifies payroll or sends alerts. Reference validation does
+PostgreSQL. Ordinary chat never modifies payroll or sends alerts. Reference validation does
 not establish that model-written financial explanations are factually correct;
 calculated evidence stays separately labeled.
 
@@ -430,6 +430,19 @@ The demo provider echoes standalone messages and returns calculated comparisons
 without answer-model prose for payrun RAG. Supplying `HF_TOKEN` does not change
 an agent's selected model. Direct gRPC requests remain stateless; adapters own
 session persistence.
+
+### Incident report handoff
+
+The docked Payroll Assistant keeps messages while hidden and offers a question
+library. After an answer, the user can explicitly hand the active conversation
+to a saved Incident Report agent. Send only messages for the current agent,
+payrun and employee scope, together with `context.task = "incident-report"`,
+`context.employeeId` and `context.handoff`. The webhook handles this request
+before normal Redis chat processing so the handoff payload is preserved.
+`incidentReport.js` loads scoped payroll signals, optionally requests read-only
+screenshots from `evidence-capture`, and writes a report. It sends email only
+when `EMAIL_API_BASE_URL` is configured; the response reports delivery status.
+Ordinary chat requests continue through the RAG/session flow above.
 
 ## Configuration and persistence rules
 
@@ -487,7 +500,8 @@ values and insufficient history must remain explicit. Preserve calculated values
 and source payrun IDs during post-processing; never accept model-supplied amounts
 or invented finding IDs. Model prose is labeled separately and is not verified
 financial evidence. Do not mutate payroll from this pipeline.
-Keep credentials server-side in `HF_TOKEN`; never persist them in agent records,
+Keep provider credentials server-side (`HF_TOKEN`, `GROQ_API_KEY`,
+`GEMINI_API_KEY` or `OPENROUTER_API_KEY`); never persist them in agent records,
 put them in `VITE_` variables, log them, or return raw provider errors. Creating a
 token requires the user's provider account. The model dropdown must select a real
 enabled provider model; setting a token must not silently change saved agents.
@@ -497,12 +511,12 @@ metadata do not provide authentication or authorization.
 ## Local server and container setup
 
 All Docker assets live in `docker/`. `docker/Dockerfile` builds the `backend`,
-`ui`, `trinet-mock`, and `trinet-ui` targets using the repository root as context.
+`ui`, `trinet-mock`, `trinet-ui` and `evidence-capture` targets using the repository root as context.
 `docker/Dockerfile.dockerignore` excludes local dependencies, credentials, and
 database files. Do not add Dockerfiles or Docker ignore files inside UI folders.
 The core services are `backend` (gRPC and GraphQL together), `ui`, `db`
 (MySQL 8.4), `redis`, and `vector-db` (PostgreSQL 17 with pgvector). There is no separate Apollo container. The Compose files also define
-two optional demo services: `trinet-mock` and `trinet-ui`.
+three optional demo services: `trinet-mock`, `trinet-ui` and `evidence-capture`.
 
 From the repository root, with Docker Desktop's Linux engine running:
 
@@ -522,9 +536,10 @@ as `db:3306` within Docker and has no published host port. The UI uses backend
 mode and proxies requests under its mount path to the backend.
 
 Use the explicit core service list when only UI, backend, and DB are requested.
-Running `docker compose -f docker/docker-compose.yaml up --build -d --wait` without that list starts all seven
+Running `docker compose -f docker/docker-compose.yaml up --build -d --wait` without that list starts all eight
 services, including the TriNet demo at `http://localhost:5174/trinet/` and its
-payroll API at `http://localhost:4100/`. The demo is needed for payrun context.
+payroll API at `http://localhost:4100/`, plus the internal screenshot service.
+The demo is needed for payrun context.
 `docker/docker-compose.local.yaml` selects the same configuration as the default file.
 
 Rebuild with the same startup command after code changes. For mounted development
@@ -579,6 +594,7 @@ Keep Docker instructions consistent with the [root README](../README.md),
 | `graphql/redisStore.js` | Expiring conversations, scope checks and request serialization |
 | `graphql/rag/` | Intent model, historical documents, local embeddings, pgvector KNN and answer model |
 | `graphql/rag/ingest-history.js` | Repeatable preload of completed payroll history into PostgreSQL |
+| `graphql/incidentReport.js`, `evidence_capture/server.js` | Explicit incident handoff, scoped evidence, screenshots and optional email delivery |
 | `graphql/anomalyPipeline.js`, `graphql/anomalyPreprocessor.js`, `graphql/anomalyPostprocessor.js` | Employee history comparisons, model explanations, and response validation |
 | `registry/test_agents.py`, `registry/test_domain_grpc.py`, `registry/test_domain_migration.py` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
 

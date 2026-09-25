@@ -31,6 +31,14 @@ export default function App() {
   const [reloadDetail, setReloadDetail] = useState(0)
   const payrunId = query.payrun || null
 
+  // The docked assistant closes from its header button, its close button, or Esc.
+  useEffect(() => {
+    if (!assistantOpen) return undefined
+    const onKeyDown = (event) => { if (event.key === 'Escape') setAssistantOpen(false) }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [assistantOpen])
+
   useEffect(() => {
     const onPopState = () => setQuery(readQuery())
     window.addEventListener('popstate', onPopState)
@@ -96,8 +104,15 @@ export default function App() {
   const assistantEmployeeId = assistantSelection && assistantSelection.payrunId === run?.id ? assistantSelection.employeeId : ''
   const assistantEmployee = run?.lines.find((line) => line.employeeId === assistantEmployeeId)
 
-  return <div className="tn-app">
-    <header className="tn-header"><span className="tn-logo">TriNet</span><span className="tn-mock-tag">Mock</span></header>
+  const assistantAvailable = Boolean(run && domain)
+  return <div className={`tn-app${assistantAvailable && assistantOpen ? ' tn-with-assistant' : ''}`}>
+    <header className="tn-header">
+      <span className="tn-logo">TriNet</span><span className="tn-mock-tag">Mock</span>
+      {assistantAvailable && <button type="button" className={`tn-assistant-toggle${assistantOpen ? ' active' : ''}`}
+        aria-pressed={assistantOpen} aria-controls="tn-assistant" onClick={() => { setLineId(null); setAssistantOpen((value) => !value) }}>
+        <i className="bi bi-stars" aria-hidden="true" /><span>Payroll Assistant{assistantEmployee && ` · ${assistantEmployee.name}`}</span>
+      </button>}
+    </header>
     <main className="tn-main">
       {error ? <div className="tn-page"><div className="alert alert-danger">{error}</div><button type="button" className="tn-link" onClick={() => go(null)}>Back to payrolls</button></div>
         : !payrunId ? (payruns ? <PayrollList payruns={payruns} onOpen={go} /> : <Loading>Loading payrolls…</Loading>)
@@ -112,12 +127,9 @@ export default function App() {
     </main>
     {drawerLine && <EmployeeDrawer key={`${drawerLine.lineId}-${run.version}`} line={drawerLine} run={run}
       onClose={() => setLineId(null)} onSaved={saved} onReload={reload} />}
-    {run && domain && assistantOpen && <AssistantPanel key={`${domain.name}:${run.id}:${run.version}`} domain={domain} run={run}
+    {assistantAvailable && <AssistantPanel key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}
       employeeId={assistantEmployeeId}
       onEmployeeChange={(employeeId) => setAssistantSelection({ payrunId: run.id, employeeId })}
       onClose={() => setAssistantOpen(false)} />}
-    {run && domain && !assistantOpen && <button type="button" className="tn-assistant-launcher" onClick={() => { setLineId(null); setAssistantOpen(true) }}>
-      <i className="bi bi-stars" />Payroll Assistant{assistantEmployee && ` · ${assistantEmployee.name}`}
-    </button>}
   </div>
 }

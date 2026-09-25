@@ -1,0 +1,44 @@
+{
+  "id": "incident-report",
+  "name": "Incident Report",
+  "version": 1,
+  "description": "Take over a conversation about a payroll issue, collect evidence, and send an incident report.",
+  "models": [
+    "poc-demo",
+    "llama-3-3-70b",
+    "bedrock-claude",
+    "groq-qwen-3-8-27b",
+    "groq-gpt-oss-120b",
+    "gemini-flash-lite",
+    "openrouter-qwen-3-8-27b",
+    "ollama-local"
+  ],
+  "config": {
+    "description": "Take over a conversation about a payroll issue, collect evidence, and send an incident report.",
+    "instructions": "Write a concise incident report for the payroll team from the handed-over conversation and the collected evidence. Cite evidence IDs, state the impact in dollars, and recommend concrete next steps. Do not change payroll.",
+    "questions": [
+      "Create an incident report for the issues found in this payrun."
+    ],
+    "domain": "Payroll",
+    "model": "poc-demo",
+    "service": "payrun",
+    "page": "payrun",
+    "attached_services": [
+      "payrun-history",
+      "email-notification",
+      "slack-webhook"
+    ],
+    "created_by": "poc-user",
+    "roles": [],
+    "capabilities": {
+      "alerts": {
+        "enabled": true,
+        "severity": "critical"
+      },
+      "webhooks": {
+        "enabled": false,
+        "url": ""
+      }
+    }
+  }
+}

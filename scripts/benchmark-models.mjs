@@ -6,10 +6,15 @@
 //   node scripts/benchmark-models.mjs --dry-run            # list the planned calls only
 //   node scripts/benchmark-models.mjs --runs 2 --out docs/model-benchmark.md
 //   node scripts/benchmark-models.mjs --models qwen-2-5-72b
+//   node scripts/benchmark-models.mjs --bank --models llama-3-3-70b   # the 64-question bank
+//
+// --bank runs ui-payroll-agent/src/questionBank.js on the General Query template's models and
+// adds a pass rate per question category to the report.
 //
 // Requires the local stack (docker/docker-compose.local.yaml) with HF_TOKEN set in the root .env.
 import { writeFileSync } from 'node:fs'
 import { EVALUATION_PAYRUN, EVALUATION_SUITES, gradeReply } from '../ui-payroll-agent/src/evaluationSuites.js'
+import { QUESTION_BANK } from '../ui-payroll-agent/src/questionBank.js'
 
 const args = process.argv.slice(2)
 const option = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 ? args[i + 1] : fallback }
@@ -18,6 +23,9 @@ const DOMAIN = option('domain', option('business', 'payroll-services'))
 const RUNS = Number(option('runs', 1))
 const ONLY = option('models', '').split(',').filter(Boolean)
 const DRY_RUN = args.includes('--dry-run')
+const BANK = args.includes('--bank')
+const slug = text => text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48)
+const bankSuite = { cases: QUESTION_BANK.flatMap(group => group.questions.map(item => ({ ...item, id: slug(item.prompt), category: group.category }))) }
 const RUNNABLE = new Set(['huggingface', 'openai-compatible'])
 
 async function graphql(query, variables) {
@@ -56,7 +64,7 @@ const median = values => {
 const { getDomainAgentsTemplates: templates } = await graphql('query ($d: String!) { getDomainAgentsTemplates(domainName: $d) { id name modelOptions { id name provider modelId } } }', { d: DOMAIN })
 const plan = []
 for (const template of templates) {
-  const suite = EVALUATION_SUITES[template.id]
+  const suite = BANK ? (template.id === 'general-query' ? bankSuite : null) : EVALUATION_SUITES[template.id]
   if (!suite) continue
   for (const model of template.modelOptions) {
     if (!RUNNABLE.has(model.provider) || (ONLY.length && !ONLY.includes(model.id))) continue
@@ -74,7 +82,7 @@ for (const { template, model, item } of plan) {
   for (let run = 1; run <= RUNS; run += 1) {
     const answer = await ask(agent, item.prompt)
     const graded = answer.error ? [] : gradeReply(answer.reply, item.checks)
-    rows.push({ template: template.id, model: model.id, modelId: model.modelId, case: item.id, run, error: answer.error,
+    rows.push({ template: template.id, model: model.id, modelId: model.modelId, case: item.id, category: item.category, run, error: answer.error,
       passed: graded.filter(check => check.passed).length, total: item.checks.length,
       latencyMs: answer.metrics?.latencyMs, tokensPerSecond: answer.metrics?.tokensPerSecond,
       completionTokens: answer.metrics?.completionTokens, provider: answer.metrics?.provider, reply: answer.reply })
@@ -94,6 +102,11 @@ const lines = [
     const ok = own.filter(row => !row.error)
     return `| ${id} (${own[0].modelId}) | ${ok.reduce((s, r) => s + r.passed, 0)}/${own.reduce((s, r) => s + r.total, 0)} | ${median(ok.map(r => r.latencyMs)) ?? '–'} ms | ${median(ok.map(r => r.tokensPerSecond)) ?? '–'} | ${own.length - ok.length} |`
   }), '',
+  ...(BANK ? ['| Category | Model | Checks passed | Questions fully correct |', '| --- | --- | --- | --- |',
+    ...QUESTION_BANK.flatMap(group => models.map(id => {
+      const own = rows.filter(row => row.model === id && row.category === group.category)
+      return `| ${group.category} | ${id} | ${own.reduce((s, r) => s + r.passed, 0)}/${own.reduce((s, r) => s + r.total, 0)} | ${own.filter(r => !r.error && r.passed === r.total).length}/${own.length} |`
+    })), ''] : []),
   '| Template | Model | Case | Run | Checks | Latency (ms) | Tokens/s | Completion tokens | Provider |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   ...rows.map(r => `| ${r.template} | ${r.model} | ${r.case} | ${r.run} | ${r.error ? `error: ${r.error.replace(/\|/g, '/')}` : `${r.passed}/${r.total}`} | ${r.latencyMs ?? '–'} | ${r.tokensPerSecond ?? '–'} | ${r.completionTokens ?? '–'} | ${r.provider ?? '–'} |`),
   '', '## Answers', '',

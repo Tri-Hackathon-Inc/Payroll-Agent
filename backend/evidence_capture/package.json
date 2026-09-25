@@ -1,0 +1,16 @@
+{
+  "name": "payroll-evidence-capture",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Headless browser that captures read-only screenshots of payroll screens as incident evidence.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "playwright": "1.55.1"
+  }
+}

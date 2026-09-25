@@ -19,3 +19,12 @@ test('every operation validates against its backend schema', () => {
   for (const name of PAYROLL) assert.deepEqual(validate(payrollSchema, parse(operations[name])), [], name)
   for (const name of AGENT_STUDIO) assert.deepEqual(validate(agentStudioSchema, parse(operations[name])), [], name)
 })
+
+test('the question library lists exactly the prompts of the Agent Studio question bank', async () => {
+  const { QUESTION_LIBRARY } = await import('../src/questionLibrary.js')
+  const { QUESTION_BANK } = await import('../../ui-payroll-agent/src/questionBank.js')
+  assert.deepEqual(
+    QUESTION_LIBRARY.map((group) => ({ category: group.category, prompts: group.prompts })),
+    QUESTION_BANK.map((group) => ({ category: group.category, prompts: group.questions.map((item) => item.prompt) })),
+  )
+})

@@ -30,6 +30,17 @@ COPY ui-payroll-agent/ ./
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
+# Read-only screenshots for incident reports. Shares the repository-root build context.
+FROM node:22-bookworm-slim AS evidence-capture
+WORKDIR /app
+COPY backend/evidence_capture/package.json backend/evidence_capture/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund \
+  && npx playwright install --with-deps --only-shell chromium \
+  && rm -rf /var/lib/apt/lists/* /root/.npm
+COPY backend/evidence_capture/server.js ./
+EXPOSE 4300
+CMD ["node", "server.js"]
+
 # Optional TriNet payroll API and UI. All targets use the repository root context.
 FROM node:22-bookworm-slim AS trinet-mock
 WORKDIR /app

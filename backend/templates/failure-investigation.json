@@ -6,7 +6,12 @@
   "models": [
     "poc-demo",
     "mistral-large",
-    "bedrock-claude"
+    "bedrock-claude",
+    "groq-qwen-3-8-27b",
+    "groq-gpt-oss-120b",
+    "gemini-flash-lite",
+    "openrouter-qwen-3-8-27b",
+    "ollama-local"
   ],
   "config": {
     "description": "Prepare diagnostic evidence for engineering review.",

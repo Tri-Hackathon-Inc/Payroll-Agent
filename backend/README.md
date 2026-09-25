@@ -6,7 +6,8 @@ also serves an HTTP chat webhook.
 five core services: `backend` (Python gRPC plus Node GraphQL and the agent
 webhook), `ui`, `db` (MySQL 8.4), `redis` (short conversations), and `vector-db`
 (PostgreSQL/pgvector for long-term semantic information). The temporary TriNet
-mock adds `trinet-mock` (payroll API) and `trinet-ui`.
+mock adds `trinet-mock` (payroll API) and `trinet-ui`. The `evidence-capture`
+service supplies optional headless-browser screenshots for incident reports.
 
 ## Start the stack
 
@@ -213,6 +214,21 @@ Keep that `--env-file` option for subsequent starts/recreates. If root `.env`
 also contains database settings, pass `--env-file .env --env-file backend/.env`
 to preserve them. Both files are ignored by Git and excluded from Docker images.
 
+Free-tier providers use provider `openai-compatible`: each model names the
+environment variables for its endpoint and key, and is usable once the key is set in
+the root `.env` (`docker-compose.yaml` passes them to the backend with the public
+endpoints as defaults).
+
+| Model ID | Provider | Key in `.env` | Free limits (check the provider) |
+| --- | --- | --- | --- |
+| `groq-gpt-oss-120b`, `groq-qwen-3-8-27b` | [Groq](https://console.groq.com/keys) | `GROQ_API_KEY` | About 30 requests/min and 1,000/day per model, no card |
+| `gemini-flash-lite` | [Google AI Studio](https://aistudio.google.com/apikey) | `GEMINI_API_KEY` | Per-model limits in AI Studio; free-tier prompts may be used by Google |
+| `openrouter-qwen-3-8-27b` | [OpenRouter](https://openrouter.ai/keys) | `OPENROUTER_API_KEY` | 20/min, 50/day (1,000/day after $10 of purchased credit) |
+| `ollama-local` | [Ollama](https://ollama.com) on your machine | none; set `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1` | Unlimited; quality depends on the model you pull |
+
+Use mock payroll data only with free tiers. Parameters in a model's `parameters`
+(for example `reasoning_effort`) are passed to the provider as they are.
+
 Successful replies add `model`, `metrics` (`latencyMs`, `promptTokens`,
 `completionTokens`, `tokensPerSecond`, `provider`), and `context` (`payrunId`,
 `characters`, `error`) to the JSON. `npm run test:webhook` in `graphql/` tests these
@@ -225,7 +241,35 @@ node scripts/benchmark-models.mjs --dry-run                    # planned calls o
 node scripts/benchmark-models.mjs --out docs/model-benchmark.md  # real, billed calls
 ```
 
-Findings so far are in [docs/model-evaluation-findings.md](../docs/model-evaluation-findings.md).
+`node scripts/benchmark-models.mjs --bank --models llama-3-3-70b` runs the 64-question bank
+(`ui-payroll-agent/src/questionBank.js`: totals, comparisons, anomalies, employees, taxes,
+deductions, hours, departments, payments, payroll concepts, out-of-scope requests) and
+reports a pass rate per category. Findings so far are in
+[docs/model-evaluation-findings.md](../docs/model-evaluation-findings.md).
+
+### Agent-to-agent: incident reports
+
+An agent can hand its conversation to an agent created from the **Incident Report** template:
+`POST /webhook/<domain>/<incidentAgentId>` with `context: { page: "payrun", payrunId, employeeId,
+task: "incident-report", handoff: { fromAgent, conversation } }` (the TriNet assistant's
+"Create incident report" action does this). `graphql/incidentReport.js` then:
+
+1. **Collects evidence** from the payroll API: one item per anomaly finding for the employees the
+   conversation discussed within the selected employee scope (all eligible findings if it names none), each with a pay-line snapshot, the
+   employee's history, the source, a timestamp, and the amount at risk where computable.
+   The `evidence-capture` service (`evidence_capture/`, Playwright headless Chromium) then opens
+   the payroll UI read-only and screenshots each finding's pay rows and Edit Employee Pay drawer
+   (`POST <EVIDENCE_CAPTURE_URL>/capture`); the images are attached to the evidence and
+   embedded in the report. It never edits payroll. If the service is unavailable, the report
+   is still created and says why there are no screenshots.
+2. **Writes the report**: the agent's model writes Summary, Impact, and Recommended actions when
+   connected; otherwise the report is built from the evidence. The evidence table is always
+   appended from the collected data.
+3. **Emails it** through the email notification tool: `POST <EMAIL_API_BASE_URL>/notifications/email`
+   to `INCIDENT_EMAIL_TO`. Without `EMAIL_API_BASE_URL` the reply says the email was not sent.
+
+The response carries `incident` (ID, severity, evidence, total at risk, Markdown report, email
+status, screenshot count).
 
 ### Employee anomaly pipeline
 

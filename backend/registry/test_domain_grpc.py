@@ -36,7 +36,7 @@ class DomainGrpcTests(TransactionTestCase):
                         client.ListTemplates(pb.ServiceName(service_name=name), timeout=5)
                     self.assertEqual(error.exception.code(), code)
                 templates = client.GetDomainAgentsTemplates(pb.DomainName(domain_name="payroll-services"), timeout=5).templates
-                self.assertEqual(len(templates), 4)
+                self.assertEqual(len(templates), 5)
                 self.assertEqual(len(client.GetDomainAgentsTemplates(pb.DomainName(domain_name="hr"), timeout=5).templates), 0)
                 # Keep the integration test offline with the explicitly configured demo provider.
                 config = ParseDict({"model": "poc-demo", "service": "payrun"}, Struct())

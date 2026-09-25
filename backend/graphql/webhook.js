@@ -1,4 +1,6 @@
-// Chat webhook: POST /webhook/<domainName>/<agentId> with { question, context? }.
+// Chat webhook: POST /webhook/<domainName>/<agentId> with { question, context? }. With
+// context.task "incident-report", the agent receives another agent's conversation instead
+// (see incidentReport.js).
 // context describes where the host app invoked the agent, e.g. { page: 'payrun', payrunId }.
 // Looks the agent up through the same gRPC resolvers as GraphQL. When the agent's model can be
 // called (see modelRuntime), the question is answered with the payrun as context; otherwise the
@@ -10,6 +12,7 @@ const { callModel, unavailableReason, ModelUnavailable } = require('./modelRunti
 const { loadPayrunContext } = require('./payrunContext');
 const { AnomalyDetectionPipeline } = require('./anomalyPipeline');
 const { withConversation } = require('./redisStore');
+const { createIncidentReport } = require('./incidentReport');
 
 const WEBHOOK_PATH = /^\/webhook\/([^/]+)\/([^/]+)\/?$/;
 const MAX_BODY = 64 * 1024;
@@ -98,6 +101,12 @@ async function handleWebhook(req, res, pathname, context) {
 
     const config = resolvers.Agent.config(agent);
     const model = await agentModel(agent, config, context);
+    // The explicit handoff carries a transcript and may deliver email. Keep it
+    // outside ordinary chat session normalization and the payroll RAG path.
+    if (invocation?.task === 'incident-report') {
+      const answer = await createIncidentReport({ agent, config, model, invocation, domainName });
+      return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...answer });
+    }
     const answer = await withConversation({ sessionId, requestId, question: question.trim(),
       scope: { domainName, agentId, channel: 'payroll', owner: context.context?.sessionOwner },
       context: invocation || {} }, async conversation => {
