@@ -55,6 +55,28 @@ test('callModel sends an OpenAI-compatible request and measures the answer', asy
   assert.ok(result.metrics.latencyMs >= 0 && result.metrics.tokensPerSecond > 0);
 });
 
+test('callModel reaches free-tier providers and keyless local models, passing provider parameters through', async () => {
+  let seen;
+  const url = await standIn(request => {
+    seen = request;
+    return { json: { choices: [{ message: { content: 'Gross is $62,504.00.' } }] } };
+  });
+  const groq = { id: 'groq-gpt-oss-120b', name: 'GPT-OSS', provider: 'openai-compatible', modelId: 'openai/gpt-oss-120b',
+    endpointEnv: 'GROQ_BASE_URL', credentialEnv: 'GROQ_API_KEY', parameters: { max_tokens: 4096, reasoning_effort: 'low' } };
+  await assert.rejects(callModel(groq, [], { env: { GROQ_BASE_URL: url } }), /not connected: set GROQ_API_KEY/);
+  await callModel(groq, [{ role: 'user', content: 'hi' }], { env: { GROQ_API_KEY: 'gsk_test', GROQ_BASE_URL: url } });
+  assert.equal(seen.headers.authorization, 'Bearer gsk_test');
+  assert.equal(seen.body.reasoning_effort, 'low');
+  assert.equal(seen.body.stream, false);
+
+  const ollama = { ...groq, id: 'ollama-local', modelId: 'llama3.2:3b', endpointEnv: 'OLLAMA_BASE_URL', credentialEnv: '', parameters: {} };
+  await assert.rejects(callModel(ollama, [], { env: {} }), /not connected: set OLLAMA_BASE_URL/);
+  const result = await callModel(ollama, [{ role: 'user', content: 'hi' }], { env: { OLLAMA_BASE_URL: url } });
+  assert.equal(seen.headers.authorization, undefined);
+  assert.equal(seen.body.model, 'llama3.2:3b');
+  assert.equal(result.text, 'Gross is $62,504.00.');
+});
+
 test('callModel explains missing credentials, unsupported providers, and provider errors', async () => {
   await assert.rejects(callModel(model, [], { env: {} }), /not connected: set HF_TOKEN/);
   await assert.rejects(callModel({ ...model, provider: 'aws-bedrock' }, [], { env: { HF_TOKEN: 'x' } }), /no runtime integration/);
@@ -63,6 +85,9 @@ test('callModel explains missing credentials, unsupported providers, and provide
     await assert.rejects(callModel(model, [], { env: { HF_TOKEN: 'x', HF_INFERENCE_BASE_URL: url } }),
       error => error instanceof ModelUnavailable && message.test(error.message) && !error.message.includes('x '));
   }
+  // Gemini's error shape: a one-item array.
+  const url = await standIn(() => ({ status: 503, json: [{ error: { code: 503, message: 'High demand.' } }] }));
+  await assert.rejects(callModel(model, [], { env: { HF_TOKEN: 'x', HF_INFERENCE_BASE_URL: url } }), /overloaded at the provider.*\(High demand\.\)/);
 });
 
 test('payrun context loads the run with recent history and formats each employee', async () => {

@@ -124,7 +124,7 @@ External API calls, alert sending, and outbound
 webhook delivery are not implemented. The GraphQL process also serves the chat
 webhook, `POST /webhook/<domainName>/<agentId>` (`graphql/webhook.js`): it checks the
 agent belongs to the domain and answers with the agent's model when it is connected
-(`HF_TOKEN`), using the payrun as context; otherwise it acknowledges the question.
+(`HF_TOKEN`, or a free-tier key such as `GROQ_API_KEY`), using the payrun as context; otherwise it acknowledges the question.
 Domain filtering and role
 metadata do not provide authentication or authorization.
 

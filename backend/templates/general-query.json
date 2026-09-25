@@ -7,7 +7,12 @@
     "poc-demo",
     "qwen-2-5-72b",
     "llama-3-3-70b",
-    "bedrock-claude"
+    "bedrock-claude",
+    "groq-qwen-3-8-27b",
+    "groq-gpt-oss-120b",
+    "gemini-flash-lite",
+    "openrouter-qwen-3-8-27b",
+    "ollama-local"
   ],
   "config": {
     "description": "Answer questions using attached payroll services.",

@@ -6,7 +6,12 @@
   "models": [
     "poc-demo",
     "llama-3-3-70b",
-    "bedrock-claude"
+    "bedrock-claude",
+    "groq-qwen-3-8-27b",
+    "groq-gpt-oss-120b",
+    "gemini-flash-lite",
+    "openrouter-qwen-3-8-27b",
+    "ollama-local"
   ],
   "config": {
     "description": "Take over a conversation about a payroll issue, collect evidence, and send an incident report.",

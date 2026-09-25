@@ -167,6 +167,21 @@ token in `HF_TOKEN`. Create a fine-grained User Access Token with the permission
 browser. Free accounts get a small monthly credit; beyond it, usage is billed at the
 provider's rate.
 
+Free-tier providers use provider `openai-compatible`: each model names the
+environment variables for its endpoint and key, and is usable once the key is set in
+the root `.env` (`docker-compose.yaml` passes them to the backend with the public
+endpoints as defaults).
+
+| Model ID | Provider | Key in `.env` | Free limits (check the provider) |
+| --- | --- | --- | --- |
+| `groq-gpt-oss-120b`, `groq-qwen-3-8-27b` | [Groq](https://console.groq.com/keys) | `GROQ_API_KEY` | About 30 requests/min and 1,000/day per model, no card |
+| `gemini-flash-lite` | [Google AI Studio](https://aistudio.google.com/apikey) | `GEMINI_API_KEY` | Per-model limits in AI Studio; free-tier prompts may be used by Google |
+| `openrouter-qwen-3-8-27b` | [OpenRouter](https://openrouter.ai/keys) | `OPENROUTER_API_KEY` | 20/min, 50/day (1,000/day after $10 of purchased credit) |
+| `ollama-local` | [Ollama](https://ollama.com) on your machine | none; set `OLLAMA_BASE_URL=http://host.docker.internal:11434/v1` | Unlimited; quality depends on the model you pull |
+
+Use mock payroll data only with free tiers. Parameters in a model's `parameters`
+(for example `reasoning_effort`) are passed to the provider as they are.
+
 Successful replies add `model`, `metrics` (`latencyMs`, `promptTokens`,
 `completionTokens`, `tokensPerSecond`, `provider`), and `context` (`payrunId`,
 `characters`, `error`) to the JSON. `npm run test:webhook` in `graphql/` tests these
