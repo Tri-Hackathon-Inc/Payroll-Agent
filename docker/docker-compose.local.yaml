@@ -1,6 +1,14 @@
 # The explicit local command uses the same stack as the default (plus the temporary TriNet mock).
 name: payroll-local
 services:
+  redis:
+    extends:
+      file: docker-compose.yaml
+      service: redis
+  vector-db:
+    extends:
+      file: docker-compose.yaml
+      service: vector-db
   db:
     extends:
       file: docker-compose.yaml
@@ -24,3 +32,5 @@ services:
 volumes:
   mysql_data:
   trinet_data:
+  vector_data:
+  embedding_cache:

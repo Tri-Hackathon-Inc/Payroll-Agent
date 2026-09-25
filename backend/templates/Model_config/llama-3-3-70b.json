@@ -8,7 +8,7 @@
   "credential_env": "HF_TOKEN",
   "parameters": {
     "temperature": 0.2,
-    "max_tokens": 1024
+    "max_tokens": 4096
   },
   "details": {
     "license": "open-source",

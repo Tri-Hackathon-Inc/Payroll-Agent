@@ -23,7 +23,7 @@ class AgentChatTests(TestCase):
         Domain.objects.create(name="other", label="Other", domain="Payroll")
 
     def create(self):
-        return AgentFactory().create("payroll-services", "anomaly-detection", "Review", {"created_by": "reviewer"})
+        return AgentFactory().create("payroll-services", "anomaly-detection", "Review", {"created_by": "reviewer", "model": "poc-demo"})
 
     def test_factory_uses_template_interface_and_persists_model_user_and_services(self):
         template = Mock(wraps=CatalogTemplate())
@@ -34,8 +34,8 @@ class AgentChatTests(TestCase):
         self.assertEqual(saved.config["created_by"], "reviewer")
         self.assertEqual(saved.config["service"], "payrun")
         self.assertIn("attached_services", saved.config)
-        self.assertEqual(saved.model_config["model_id"], "demo/no-runtime")
-        self.assertEqual(saved.model_config["provider"], "demo")
+        self.assertEqual(saved.model_config["model_id"], "meta-llama/Llama-3.3-70B-Instruct")
+        self.assertEqual(saved.model_config["provider"], "huggingface")
         self.assertIn("name", saved.model_config)
 
     def test_chat_uses_snapshot_instructions_and_history_without_template(self):

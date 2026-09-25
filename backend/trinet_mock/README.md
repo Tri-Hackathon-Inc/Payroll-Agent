@@ -24,6 +24,10 @@ It needs Node 22.13 or later, for the built-in `node:sqlite` module, so no datab
 library is installed. Both Compose stacks run it as `trinet-mock`, with the database
 at `/data/trinet_mock.sqlite3` in the `trinet_data` volume.
 
+Docker configuration is centralized in [docker/](../../docker/README.md). From the
+repository root, start the full demo with
+`docker compose -f docker/docker-compose.yaml up --build -d --wait`.
+
 ## Tables
 
 The mock has its own SQLite database, separate from Agent Studio's

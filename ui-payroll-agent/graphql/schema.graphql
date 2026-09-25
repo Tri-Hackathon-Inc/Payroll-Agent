@@ -64,9 +64,12 @@ scalar JSON
     agentId: ID!
     domainName: String!
     message: String!
-    history: [ChatMessageInput!]
+  history: [ChatMessageInput!]
+    sessionId: String
+    requestId: String
+    context: JSON
   }
-  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean! }
+  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
   type Mutation {
     chatAgent(input: ChatAgentInput!): ChatReply!
     createAgent(input: CreateAgentInput!): Agent!

@@ -2,8 +2,9 @@
 
 The backend manages reusable agent templates and user-configured agents grouped
 by domain, such as **Payroll Services** (`payroll-services`). It is a **gRPC
-service with GraphQL adapters**. There are no REST endpoints or Django HTTP
-routes; names such as “list-template” refer to service operations.
+service with GraphQL adapters**. Django has no HTTP routes; names such as
+“list-template” refer to service operations. The Node GraphQL process also hosts
+the HTTP chat webhook described below.
 
 ## Supported capabilities
 
@@ -40,44 +41,395 @@ options match the template's domain. The UI can use these properties to populate
 its configurable form. The React UI uses this contract in both backend and mock modes;
 see [README.md](README.md) for the domain/agent walkthrough.
 
-## Backend flow
+## Overall application flow
+
+There are two flows:
+
+| Flow | Trigger | Result |
+| --- | --- | --- |
+| Query flow | A user submits a question to a saved agent in the UI | The backend restores the Redis session, retrieves relevant historical documents from PostgreSQL/pgvector, and returns a grounded model answer plus calculated evidence. |
+| Agent creation and service attachment flow | A user chooses a template, model, primary service, attached services and host page | `AgentFactory` saves the validated agent and service associations in `agent_info`; the host UI discovers the saved agent through the registry. No model call occurs during creation. |
+
+### 1. Query flow end to end: UI -> backend -> models -> UI
+
+The payrun webhook and GraphQL `chatAgent` with payrun context use this flow when
+RAG is enabled and Redis is configured. Agent Studio chat without a payrun uses
+the standalone gRPC model runtime described below. The two model calls in the
+payrun flow have separate jobs: resolve the question's intention, then write an
+answer from retrieved history and calculated evidence.
 
 ```mermaid
 flowchart TD
-    UI["UI: select domain"] --> Domains["ListDomains / listDomains"]
-    Domains --> Domain["Payroll Services"]
-    Domain --> List["ListTemplates(service_name) / listTemplates(serviceName)"]
-    List --> Choose["Choose template: Anomaly Detection"]
-    Choose --> Detail["GetTemplate / getTemplate(id)"]
-    Config["Template defaults: model, external APIs, alerts, webhooks"] --> Detail
-    Detail --> Form["UI: configurable form with defaults and choices"]
-    Form --> Input["User edits name and configuration"]
-    Input --> Create["CreateAgent / createAgent(input)"]
-    Create --> Validate["Merge configuration and validate domain category and references"]
-    Validate --> DB[("MySQL: domains and saved agents")]
-    Domain --> Agents["GetServiceAgentRegistry / getServiceAgentRegistry(domainName: ...)"]
-    Agents -->|Read agents for selected domain| DB
-    Agents --> Edit["UI: edit a saved agent"]
-    Edit --> Update["UpdateAgent / updateAgent(input)"]
-    Update --> Validate
+    UI["Payroll Assistant or Agent Studio: submit question and context"] --> API["UI proxy -> Apollo webhook or chatAgent"]
+    API --> Setup["Validate request, load agent/model and restore session"]
+    Setup -->|gRPC registry and template lookup| MySQL[("MySQL: saved agent and model catalog")]
+    Setup <-->|ConversationStore| Redis[("Redis: recent turns, context and focus")]
+    Setup --> Load["TRINET_API_URL: fetch current payrun and historical payments"]
+    Load --> Evidence["Preprocess: validate data and calculate employee comparisons"]
+    Evidence --> Intent["Model 1: question + recent turns -> intent, employees, topics, search query"]
+    Intent --> Filters["Validate filters against visible employees; apply selected employee"]
+    Filters --> Docs["Build eligible historical documents by employee, payrun and topic"]
+    Docs --> Embed["Local MiniLM embeddings: 384 dimensions"]
+    Embed --> Index["Reuse existing vectors; insert new documents and embeddings"]
+    Index --> PG[("PostgreSQL + pgvector: historical semantic memory")]
+    Index --> KNN["Embed search query; filter and rank eligible documents with cosine KNN"]
+    PG --> KNN
+    KNN --> Answer["Model 2: selected agent model -> structured answer and finding comments"]
+    Evidence --> Answer
+    Answer --> Validate["Postprocess: validate JSON, citations and finding references"]
+    Validate --> Save["Save completed turn and updated focus in Redis"]
+    Save --> Redis
+    Save --> Reply["Return API response; UI renders answer, findings and historical sources"]
+    Reply --> Followup["Follow-up question with returned session ID"]
+    Followup --> API
 ```
 
-The GraphQL request path is:
+The backend owns model initialization and credentials. It creates request-local
+model clients; conversation state lives in Redis. The browser sends question and
+context identifiers and retains the returned `session.id` in `sessionStorage`.
+For example, the Payroll Assistant sends this first-turn body to
+`POST /webhook/payroll-services/<agentId>` through the UI proxies:
+
+```json
+{
+  "question": "Why is this employee's overtime higher than previous payruns?",
+  "context": {
+    "page": "payrun",
+    "payrunId": "PR-2026-09-B",
+    "employeeId": "E1002"
+  },
+  "requestId": "7bdac347-1fcb-4522-9590-e6262087e4db"
+}
+```
+
+For a follow-up such as "What about their deductions?", send `sessionId` with
+the returned ID, the same context and a new `requestId`. Recent turns and saved
+employee/topic focus let the intent step resolve the reference. An explicit UI
+employee selection takes precedence over model-selected employees. Agent Studio
+uses GraphQL `chatAgent(input)` with `agentId`, `domainName` and `message` in place
+of the webhook URL parameters and `question`.
+
+| Step | Implementation and behavior |
+| --- | --- |
+| 1. Resolve request and session | `graphql/webhook.js` or `graphql/aistudio.js` resolves the saved agent within its domain and the selected model from current template options through gRPC. `graphql/redisStore.js` restores scoped messages and focus. The webhook loads the agent before opening the session; GraphQL loads it inside the session callback. |
+| 2. Load and preprocess payroll | `graphql/payrunContext.js` fetches source data; `AnomalyPreprocessor` validates the employee selection, chooses compatible history and computes baselines and findings before inference. |
+| 3. Resolve intention | `graphql/rag/intent.js` calls `RAG_INTENT_MODEL_ID` (default `Qwen/Qwen2.5-72B-Instruct`) with the question, recent conversation and visible employees. Validate the returned intent, employee IDs, topics and search query. |
+| 4. Index historical context | `graphql/rag/documents.js` builds earnings, overtime and deduction documents. `graphql/rag/embeddings.js` uses local `Xenova/all-MiniLM-L6-v2` with normalized mean pooling, quantized weights and 384 dimensions. Stable content IDs avoid re-embedding unchanged documents. First use downloads public weights to `embedding_cache`; no embedding API key is needed. |
+| 5. Retrieve with filters and KNN | `graphql/rag/vectorStore.js` embeds the search query and uses parameterized SQL with pgvector cosine distance. Filter by domain/service/company scope, eligible historical IDs, embedding version, employee selection and topic. Default `RAG_TOP_K=6`, maximum 20; this is exact KNN. |
+| 6. Generate the answer | `graphql/rag/pipeline.js` creates `ChatModel` for the selected agent model. The prompt includes instructions, current employee details, recent turns, retrieved documents and calculated evidence. New AD agents default to `meta-llama/Llama-3.3-70B-Instruct`; this is a separate inference call from intent classification. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
+| 7. Postprocess | `PayrollAnswerPostprocessor` in `graphql/rag/postprocessor.js` validates the structured answer, supplied source IDs and exactly one valid comment per calculated finding. Invalid model output is discarded; calculated evidence remains available. |
+| 8. Save and display | `ConversationStore` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `AssistantPanel.jsx` or `AgentChat.jsx` renders it and retains the session ID for follow-ups. |
+
+Historical retrieval considers up to `RAG_HISTORY_LIMIT=100` runs (maximum 500);
+`retrieval.historyLimitReached` signals that the fetch limit was reached. Only
+earlier, completed, non-overlapping history matching company, currency, frequency
+and pay type is eligible. The anomaly baseline independently uses up to six
+compatible historical runs. Never recalculate baseline amounts from a KNN subset.
+
+Redis holds at most 20 recent user/assistant turns and trims older pairs when
+history exceeds approximately 60,000 characters. Session scope includes the
+domain, agent, entry point and server-issued browser cookie; payrun/employee
+context cannot change within a session. Requests are serialized per session and
+the most recent `requestId` with the same question/context can be retried without
+another inference call. Expired sessions return HTTP 410 or GraphQL
+`SESSION_EXPIRED`; changed scope returns HTTP 409 or GraphQL `SESSION_CONFLICT`.
+Completed fallback reports are saved as turns; requests that throw an error are
+not appended. The UI's **New chat** action clears its session reference so the
+next question creates a new session. Redis expires old sessions after 30 minutes
+of inactivity by default (`CHAT_SESSION_TTL_SECONDS=1800`). The cookie provides
+session isolation, not authentication.
+
+PostgreSQL stores long-term documents and embeddings in
+`payroll_history_documents`, keyed by document ID and embedding model version.
+There is no conversation transcript or expiry in this table. Redis has no disk
+persistence in the local Compose stack; PostgreSQL uses the `vector_data` volume.
+MySQL continues to store the catalog and domains, with configured agents in
+`agent_info`. The payroll API remains the source of truth: each query reloads
+history, and KNN returns only IDs eligible in that current source snapshot.
+Preloaded vectors do not provide an offline fallback when the payroll API fails.
+
+#### Historical data preload
+
+**Payroll API completed payruns -> validate and build employee/topic documents
+-> local embeddings -> PostgreSQL JSONB documents and pgvector vectors -> reuse
+on subsequent queries.**
+
+`graphql/rag/ingest-history.js` preloads completed payroll history independently
+of a question. It uses `PayrollHistoryIngestor`, `completedPayrunDocuments` and the
+same vector store as the query path, including historical employees not present
+in a current run. From the repository root with the services running:
+
+```sh
+docker compose -f docker/docker-compose.yaml --env-file backend/.env exec backend node graphql/rag/ingest-history.js --domain payroll-services --service payrun
+```
+
+Match the domain/service arguments to the saved agent. Omit the `--env-file`
+option when using root `.env` only. `--dry-run` validates and reports counts without
+writes. Reruns reuse existing embeddings and index changed content under new IDs;
+partial failures are resumable. This command reads all completed runs exposed by
+the payroll API and does not invoke hosted models or mutate payments. It is manual,
+not a scheduled import. Query-time source validation and the historical fetch limit
+still govern which stored documents may enter a model prompt.
+
+| UI entry point | API and processing | Response |
+| --- | --- | --- |
+| TriNet Payroll Assistant | `POST /webhook/<domainName>/<agentId>` with `question`, `context`, optional `sessionId` and `requestId` -> Redis -> payroll RAG | `agent`, `reply`, `analysis`, `retrieval`, `session`, `model`, `metrics`, `context` |
+| Agent Studio with payrun context | GraphQL `chatAgent(input)` with `context.payrunId` -> Redis -> payroll RAG | `agentId`, `modelId`, `output`, `demo`, `analysis`, `retrieval`, `session` |
+| Agent Studio without payrun context | GraphQL `chatAgent(input)` -> Redis -> gRPC `ChatAgent` with restored history -> saved model runtime | `output`, `demo`, `session` |
+| Agent Studio webhook chat window | `POST /webhook/<domainName>/<agentId>` -> Redis -> generic prompt with restored recent turns (anomaly agents require payrun context) | `reply`, `session` |
+
+Missing intent credentials or invalid intent output select a labeled rule-based
+fallback (`rules` or `rules_fallback`). Missing answer credentials, failed
+retrieval, or invalid model output return calculated comparisons with explicit
+status. Set `RAG_ENABLED=false` to use the earlier webhook processing path.
+Direct gRPC callers retain the stateless history-in/history-out contract.
+
+### Components and startup
 
 ```mermaid
 flowchart LR
-    Client["GraphQL client"] --> Apollo["Apollo: local_server/apollo.js"]
-    Apollo --> Resolver["graphql/aistudio.js resolvers"]
-    Resolver --> Grpc["gRPC: registry/servicers.py"]
-    Direct["Direct gRPC client"] --> Grpc
-    Grpc --> Logic["registry/services.py"]
-    Logic --> DB[(MySQL)]
-    Files["Template, model, and service JSON"] --> Sync["Validate and sync_templates"]
+    Studio["Agent Studio UI :5173"] --> Proxy["Agent Studio API proxy"]
+    TriNet["TriNet payrun UI :5174"] -->|Agent requests| Proxy
+    TriNet -->|Payroll requests via TriNet proxy| Payroll["TriNet mock GraphQL :4100"]
+    Proxy --> Apollo["Backend: Node Apollo :4000"]
+    Apollo --> GRPC["Backend: Python gRPC :50051"]
+    GRPC <--> DB[("MySQL: catalog, domains, agent_info")]
+    Files["Template, model and service JSON"] --> Sync["Startup: migrate and sync_templates"]
     Sync --> DB
+    Apollo <--> Redis[("Redis: expiring conversation sessions")]
+    Apollo --> Pipeline["PayrollRagPipeline"]
+    Pipeline -->|Current run and history| Payroll
+    Payroll <--> PayrollDB[("TriNet payroll SQLite")]
+    Pipeline <--> PG[("PostgreSQL + pgvector: historical semantic memory")]
+    Pipeline --> Embed["Local MiniLM embedding model"]
+    Pipeline -->|Intent and answer calls| Model["Hosted model provider API"]
+    GRPC -->|Standalone chat| Model
 ```
 
-Apollo hosts the GraphQL schema in `graphql/aistudio.js` and forwards operations
-to gRPC. Django provides persistence and shared service logic, with no HTTP routes.
+`backend/local_server/run_backend.py` migrates and synchronizes the catalog before
+starting gRPC and Apollo. MySQL persists in `mysql_data`; mock payroll data in
+`trinet_data`; semantic documents and vectors in `vector_data`. Embedding weights
+are cached in `embedding_cache`. Redis conversations are temporary.
+Hosted model credentials enter only the backend through environment variables.
+
+Agent Studio proxies `/ai_studio/graphql` and `/ai_studio/webhook/...` to Apollo.
+TriNet proxies `/trinet/graphql` to the payroll API and
+`/trinet/agent-studio/...` through Agent Studio. `STUDIO_BASE_PATH` controls the
+Agent Studio mount.
+
+### 2. Agent creation and service attachment flow end to end
+
+**Choose template -> configure agent and services -> validate with AgentFactory
+-> save agent_info -> discover the agent for its service/page -> start querying.**
+
+Agent Studio loads domains and their templates, then `AgentEditor.jsx` fetches
+`getTemplate(id)` to populate defaults and enabled model/service choices. The
+current UI uses `getDomainAgentsTemplates(domainName)` for discovery. API clients
+can also use `listTemplates(serviceName: "payrun")`; this argument is the primary
+service ID. Creation uses GraphQL `createAgent(input)` -> gRPC `CreateAgent`;
+there is no HTTP `/create-agent` route.
+
+Service attachment is saved as part of `createAgent(input)` or
+`updateAgent(input)`. The primary service, additional service references, and
+page attachment are separate configuration fields:
+
+| UI field | Saved field in `agent_info.config` | Purpose |
+| --- | --- | --- |
+| Primary external API | `service`, for example `"payrun"` | Associates the agent with its primary service. The registry's `serviceName` filter matches this field. |
+| Attached external APIs | `attached_services`, for example `["payrun-history", "employee-details"]` | Records additional services selected for the agent. These IDs do not participate in the registry's primary-service filter. |
+| Page attachment | `page`, for example `"payrun"` | Lets the host UI select agents for a particular screen. The TriNet Payroll Assistant filters for this value. |
+
+```mermaid
+sequenceDiagram
+    participant UI as Agent Studio
+    participant Host as Host service UI / Payroll Assistant
+    participant API as Apollo / aistudio.js
+    participant RPC as gRPC / servicers.py
+    participant Factory as AgentFactory
+    participant Template as TemplateInterface / CatalogTemplate
+    participant DB as MySQL
+    UI->>API: listDomains, getDomainAgentsTemplates(domainName), getTemplate(id)
+    API->>RPC: ListDomains, GetDomainAgentsTemplates, GetTemplate
+    RPC->>DB: Read catalog and domain
+    DB-->>RPC: Catalog records and domain
+    RPC-->>API: Defaults, enabled model options and service options
+    API-->>UI: Template selection and configuration form data
+    UI->>UI: Set model, primary service, attached services and page
+    UI->>API: createAgent(input)
+    API->>RPC: CreateAgent with config encoded as protobuf Struct
+    RPC->>Factory: services.create_agent delegates to create
+    Factory->>Template: configure(template_id, UI overrides)
+    Template-->>Factory: Template metadata and merged configuration
+    Factory->>Factory: Validate model, enabled services, matching domain and capabilities
+    alt Invalid configuration
+        Factory-->>RPC: Validation error, no agent inserted
+        RPC-->>API: INVALID_ARGUMENT
+        API-->>UI: BAD_USER_INPUT, keep form values for correction
+    else Valid configuration
+        Factory->>DB: Transaction: insert agent_info and resolved model snapshot
+        DB-->>Factory: Saved agent UUID, configuration and timestamps
+        Factory-->>RPC: Agent record
+        RPC-->>API: CreateAgent response
+        API-->>UI: Decode config, return saved agent
+        UI->>UI: Close editor and show creation confirmation
+    end
+    Note over UI,Host: After successful creation, My Agents and host UIs discover the saved record
+    Host->>API: getServiceAgentRegistry(domainName, optional serviceName)
+    API->>RPC: GetServiceAgentRegistry
+    RPC->>DB: Filter agents by domain and optional config.service
+    DB-->>RPC: Matching saved agents and configuration
+    RPC-->>API: Agent list
+    API-->>Host: Agents available for selection
+    Host->>Host: Apply page attachment filter and display agents
+    Note over Host: Selecting an agent and submitting a question starts the query flow
+```
+
+The GraphQL mutation takes `domainName`, `templateId`, `name` and `config` inside
+`input`. For example, these variables select a model and attach an AD agent to
+the payrun service/page; omitted configuration comes from the template:
+
+```json
+{
+  "input": {
+    "domainName": "payroll-services",
+    "templateId": "anomaly-detection",
+    "name": "Employee Payrun Review",
+    "config": {
+      "model": "llama-3-3-70b",
+      "created_by": "payroll-user",
+      "service": "payrun",
+      "attached_services": ["payrun-history", "employee-details"],
+      "page": "payrun"
+    }
+  }
+}
+```
+
+`registry/servicers.py` delegates to `services.create_agent`, then
+`AgentFactory.create` in `registry/agent_factory.py`. Its `TemplateInterface`
+implementation, `CatalogTemplate.configure`, recursively merges defaults with
+the submitted overrides. `config.model` is the catalog selection ID; the server
+resolves the provider's `model_id` and model name. `config.created_by` records
+creator metadata supplied in configuration; it is not authenticated identity.
+Every primary or attached service must exist, be enabled and match the agent's
+domain category; duplicate attached service IDs are rejected. Validation failure
+prevents the database write.
+
+The transaction writes one configured agent to MySQL:
+
+| Stored field | Source and purpose |
+| --- | --- |
+| `id`, `name`, `domain_id` | Generated UUID, submitted name and validated domain association. |
+| `template_id`, `template_version` | Source template identity and version at creation. |
+| `config` | Merged instructions, selected catalog model ID, creator/role metadata, service IDs, page and other settings. |
+| `model_config` | Snapshot of model name, provider, provider model ID, parameters and credential/endpoint environment variable names. No API key value is stored. |
+| `created_at`, `updated_at` | Persistence timestamps returned to the UI. |
+
+Creation does not initialize or call the model, write a Redis conversation or
+ingest PostgreSQL history. Those actions belong to the query or preload flows.
+A separate attach API or registration call to the external service is not
+required. These associations are configuration metadata; arbitrary catalog
+services are not automatically
+invoked as model tools. The anomaly pipeline currently obtains payroll data
+through its explicit `TRINET_API_URL` integration.
+
+For example, a host service can find its agents using:
+
+```graphql
+query {
+  getServiceAgentRegistry(domainName: "payroll-services", serviceName: "payrun") {
+    id
+    name
+    templateId
+    config
+  }
+}
+```
+
+The current TriNet UI requests the domain's agents without `serviceName`, then
+filters `config.page === "payrun"` in `AssistantPanel.jsx`. A host that needs
+service-specific discovery should supply `serviceName` as shown above. Attaching
+`payrun-history` as an additional API does not make the agent a primary
+`payrun-history` registry match.
+
+To change an attachment, `updateAgent(input)` merges the new `service`,
+`attached_services` or `page` into the saved configuration, validates it, and
+updates the same row. Arrays replace the previous selection. Registry lookups
+reflect the new primary service; reopening the Payroll Assistant reloads agents
+and reapplies its page filter. Changing the selected model refreshes its model
+snapshot; changing only service/page attachments preserves the snapshot.
+
+### Employee anomaly detection and chat response
+
+The Payroll Assistant lists the domain's agents attached to the `payrun` page.
+The employee scope selector is available for every payrun agent. Selecting or
+saving an employee's pay on the payroll screen carries that employee into the
+assistant; closing and reopening the panel retains the selection. Changing the
+payrun clears it. Keep the scope visible and send `context.employeeId` for a
+selected employee, including when using a suggested question such as "Which
+payments need review?". Choosing **All employees** explicitly clears this filter.
+All payrun questions use
+the RAG flow when enabled, including those sent through Agent Studio's optional
+payrun context. The preprocessor flags payment, overtime, bonus and deduction
+changes, duplicate lines, negative net pay and post-termination payments.
+
+Both payrun adapters return `analysis` (employees, findings, thresholds and model
+status), `retrieval` (intent, source IDs, payrun/employee/topic metadata and
+distances), and `session`. The webhook returns final text as `reply` alongside
+`agent`, `model`, `metrics` and `context`. GraphQL returns `output`, `agentId`,
+`modelId` and `demo`; its `ChatReply` does not expose the webhook's `model`,
+`metrics` or `context` fields.
+
+The answer model returns JSON with `answer`, `sourceIds` and `findings` before
+postprocessing. Only an accepted narrative is combined with the separately
+labeled calculated review in the final text. `analysis.modelAnswer` contains
+the validated summary, source IDs and finding comments for custom rendering,
+or null if inference did not produce an accepted answer. The TriNet panel
+displays expandable historical sources. Raw provider output is not sent directly
+to the chat window.
+
+| `analysis.modelStatus` | Behavior |
+| --- | --- |
+| `completed` | Answer citations and finding comments passed structural/reference validation. Model prose accompanies calculated evidence. |
+| `not_configured` | The answer model or its credential is missing; calculated comparisons remain available. |
+| `not_needed` | Historical retrieval was unavailable; show the available calculated report. |
+| `context_limit` | RAG input exceeds 60,000 characters; request an employee selection for inference. |
+| `unavailable` | The answer provider failed or timed out; preserve calculated evidence. |
+| `invalid_response` | Reject invalid model text, citations or finding references; preserve calculated evidence. |
+
+`retrieval.status` separately reports `completed`, `no_results` or
+`unavailable`. Missing payrun data or invalid employee selection returns an
+error. Without RAG, the original anomaly path uses a 40,000-character input
+limit and skips inference if there are no findings.
+
+When retrieval succeeds with no matching historical documents, the answer model
+may explain the current employee's payrun information. Its prompt requires an
+explicit history limitation and an empty source list. Missing history alone does
+not skip inference. Current employee details are filtered by the same resolved
+employee scope as the evidence; never include other employees in a scoped prompt.
+
+Chat writes short-term session data to Redis and historical semantic documents to
+PostgreSQL. It never modifies payroll or sends alerts. Reference validation does
+not establish that model-written financial explanations are factually correct;
+calculated evidence stays separately labeled.
+
+### Standalone Agent Studio chat
+
+The GraphQL adapter restores Redis history, then calls gRPC `ChatAgent` with
+the current message and recent turns. `AgentChat.reply` validates the saved
+agent and initializes a fresh `ModelRuntimeFactory` runtime for each request.
+Saved instructions form the system message. The successful reply is appended to
+the Redis session; failed turns are not appended.
+
+Without payrun context, this path uses the saved model snapshot and does not
+fetch payroll data. Adding a payrun ID in the chat panel routes through the Node
+RAG pipeline, which resolves model settings from the current template options.
+Keep this distinction explicit when changing either runtime.
+
+The demo provider echoes standalone messages and returns calculated comparisons
+without answer-model prose for payrun RAG. Supplying `HF_TOKEN` does not change
+an agent's selected model. Direct gRPC requests remain stateless; adapters own
+session persistence.
 
 ## Configuration and persistence rules
 
@@ -117,22 +469,85 @@ preserves existing agents and backfills available model snapshots.
 `AgentChat` loads a saved agent in its domain and creates a fresh `ModelRuntime`
 for each request. `CompatibleChatModel` supports a configured compatible model
 server; `DemoModel` explicitly echoes messages without inference. Chat history
-is supplied by the client and is not persisted. Model selection changes refresh
+is restored by the GraphQL adapter from Redis (direct gRPC callers supply it).
+Model selection changes refresh
 the snapshot; other edits retain it. The catalog model must still be enabled.
 
-External API calls, alert sending, and outbound
-webhook delivery are not implemented. The GraphQL process also serves the chat
-webhook, `POST /webhook/<domainName>/<agentId>` (`graphql/webhook.js`): it checks the
-agent belongs to the domain and answers with the agent's model when it is connected
-(`HF_TOKEN`), using the payrun as context; otherwise it acknowledges the question.
+General execution of catalog services as model tools, alert sending, and outbound
+webhook delivery are not implemented. Payroll context retrieval and model provider
+calls are implemented through the flows above. `graphql/webhook.js` must load the
+agent within the requested domain before executing it. For Anomaly Detection,
+calculate evidence before deciding whether inference can run, and preserve that
+evidence when the model is unavailable. Other templates acknowledge missing
+model configuration.
+`context.employeeId` scopes anomaly evidence and model inputs to one employee;
+omit it to analyze all employees. Match history by employee ID, company, currency,
+frequency and pay type. Exclude future, overlapping and incomplete runs. Missing
+values and insufficient history must remain explicit. Preserve calculated values
+and source payrun IDs during post-processing; never accept model-supplied amounts
+or invented finding IDs. Model prose is labeled separately and is not verified
+financial evidence. Do not mutate payroll from this pipeline.
+Keep credentials server-side in `HF_TOKEN`; never persist them in agent records,
+put them in `VITE_` variables, log them, or return raw provider errors. Creating a
+token requires the user's provider account. The model dropdown must select a real
+enabled provider model; setting a token must not silently change saved agents.
 Domain filtering and role
 metadata do not provide authentication or authorization.
 
 ## Local server and container setup
 
-One `Dockerfile` at the repository root builds the `backend` and `ui` targets.
-Compose runs three containers: backend (gRPC and GraphQL together), UI, and
-MySQL 8.4. There is no separate Apollo container and no REST server.
+All Docker assets live in `docker/`. `docker/Dockerfile` builds the `backend`,
+`ui`, `trinet-mock`, and `trinet-ui` targets using the repository root as context.
+`docker/Dockerfile.dockerignore` excludes local dependencies, credentials, and
+database files. Do not add Dockerfiles or Docker ignore files inside UI folders.
+The core services are `backend` (gRPC and GraphQL together), `ui`, `db`
+(MySQL 8.4), `redis`, and `vector-db` (PostgreSQL 17 with pgvector). There is no separate Apollo container. The Compose files also define
+two optional demo services: `trinet-mock` and `trinet-ui`.
+
+From the repository root, with Docker Desktop's Linux engine running:
+
+```sh
+docker compose -f docker/docker-compose.yaml up --build -d --wait db backend ui
+docker compose -f docker/docker-compose.yaml ps
+docker compose -f docker/docker-compose.yaml logs --tail=100 ui backend db redis vector-db
+```
+
+On Windows, `docker desktop start` starts Docker Desktop if its engine is stopped.
+Host Python and Node are not required for the container workflow. The expected
+result is five healthy core containers; backend dependencies automatically start
+Redis and PostgreSQL even when the command lists only `db backend ui`. Agent Studio is at
+`http://localhost:5173/ai_studio/` (`STUDIO_BASE_PATH` controls the mount), GraphQL
+is at `http://localhost:4000/`, and gRPC is at `localhost:50051`. MySQL is reachable
+as `db:3306` within Docker and has no published host port. The UI uses backend
+mode and proxies requests under its mount path to the backend.
+
+Use the explicit core service list when only UI, backend, and DB are requested.
+Running `docker compose -f docker/docker-compose.yaml up --build -d --wait` without that list starts all seven
+services, including the TriNet demo at `http://localhost:5174/trinet/` and its
+payroll API at `http://localhost:4100/`. The demo is needed for payrun context.
+`docker/docker-compose.local.yaml` selects the same configuration as the default file.
+
+Rebuild with the same startup command after code changes. For mounted development
+source, use `docker compose -f docker/docker-compose.yaml -f docker/docker-compose.dev.yaml up --build -d --wait db backend ui`;
+restart `backend` after Python, GraphQL, or template changes. Rebuild images after
+dependency changes. Use `docker compose -f docker/docker-compose.yaml stop ui backend db redis vector-db` to stop the core
+services and `docker compose -f docker/docker-compose.yaml up -d --wait db backend ui` to resume them.
+`docker compose -f docker/docker-compose.yaml down` removes the project containers and network, retaining named
+volumes. Never delete database volumes as part of a routine rebuild or upgrade.
+
+Run these commands from the repository root so Compose reads the root `.env`.
+If credentials were supplied in `backend/.env`, retain
+`--env-file backend/.env` on every subsequent `up`/recreation command. Compose
+does not load it automatically. If root `.env` also exists with deployment
+settings, pass `--env-file .env --env-file backend/.env` in that order. Check
+only credential presence, never print token values or resolved Compose config.
+Keep project names (`payroll-local` / `payroll-api-test`) and volume names stable
+when editing the Compose files. Local/test variants extend the main file in the
+same directory. Development bind mounts resolve relative to `docker/`.
+`docker/publish-images.sh` runs Bake from `docker/` with context `..`; it publishes
+images and must not be run as part of local verification. Inspect its build
+configuration with `docker buildx bake -f docker-compose.yaml --print` from `docker/`.
+
 `local_server/run_backend.py` migrates and syncs the database, supervises both
 API processes, and stops the sibling if one exits. `local_server/grpc-client.js`
 provides Apollo's gRPC connection; `graphql/client.js` provides metadata, JSON conversion, and resolver helpers.
@@ -140,8 +555,15 @@ provides Apollo's gRPC connection; `graphql/client.js` provides metadata, JSON c
 `backend/local_server/` is tracked and copied into the image. Its settings use
 MySQL when `MYSQL_HOST` is set, otherwise SQLite for standalone development/tests.
 Credentials come from environment variables. Domain records and agents persist
-in the `mysql_data` Docker volume. Existing SQLite data is not automatically
+in the `mysql_data` Docker volume (`agent_info` stores configured agents). The
+optional TriNet mock uses a separate `trinet_data` volume. PostgreSQL uses
+`vector_data`; embeddings use `embedding_cache`; Redis sessions have no volume. MySQL credentials on
+existing volumes must match their initialized values. Existing SQLite data is not automatically
 imported; never delete the old volume as part of an upgrade.
+
+Keep Docker instructions consistent with the [root README](../README.md),
+[backend README](README.md#start-the-stack), and
+[UI README](../ui-payroll-agent/README.md#run-in-containers).
 
 ## Main files and checks
 
@@ -154,6 +576,10 @@ imported; never delete the old volume as part of an upgrade.
 | `registry/catalog.py`, `registry/configuration.py` | JSON loading and validation |
 | `registry/proto/templates.proto`, `registry/servicers.py` | gRPC contract and implementation |
 | `graphql/aistudio.js`, `graphql/client.js` | GraphQL contract and gRPC adapter |
+| `graphql/redisStore.js` | Expiring conversations, scope checks and request serialization |
+| `graphql/rag/` | Intent model, historical documents, local embeddings, pgvector KNN and answer model |
+| `graphql/rag/ingest-history.js` | Repeatable preload of completed payroll history into PostgreSQL |
+| `graphql/anomalyPipeline.js`, `graphql/anomalyPreprocessor.js`, `graphql/anomalyPostprocessor.js` | Employee history comparisons, model explanations, and response validation |
 | `registry/test_agents.py`, `registry/test_domain_grpc.py`, `registry/test_domain_migration.py` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
 
 From the repository root, after installing `backend/requirements.lock` into a
@@ -171,6 +597,16 @@ The gRPC listener defaults to `127.0.0.1:50051`. Non-loopback listeners require
 TLS unless explicitly started with `--insecure-for-testing`.
 
 Run backend tests with `python backend/manage.py test registry` (SQLite by default).
+Run `npm run test:webhook` from `backend/graphql/` for provider and anomaly pipeline
+and RAG unit tests. With the Compose services running, exercise real Redis and
+pgvector using:
+
+```sh
+docker compose -f docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_TESTS=1 backend node --test graphql/storage.integration.test.js
+```
+
+Cover history isolation, missing data, zero baselines, duplicated lines,
+provider failures and invalid model output without calling a paid provider.
 Run `node --test tests/contract.test.js` from `ui-payroll-agent/` after installing
 Node dependencies. See README.md for Docker checks, MySQL setup, and API examples.
 The old `graphql/schema.test.js` and per-directory Dockerfiles are removed.

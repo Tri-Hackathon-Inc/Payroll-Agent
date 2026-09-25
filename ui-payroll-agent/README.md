@@ -23,12 +23,19 @@ not required; see the [backend README](../backend/README.md#start-the-stack).
 From the **repository root**:
 
 ```bash
-docker compose -f docker-compose.local.yaml up --build -d --wait
-docker compose -f docker-compose.local.yaml ps
+docker compose -f docker/docker-compose.yaml up --build -d --wait db backend ui
+docker compose -f docker/docker-compose.yaml ps db backend ui
 ```
 
 Open [Agent Studio](http://localhost:5173/ai_studio/). The command starts the UI, the
-backend (gRPC plus GraphQL), MySQL, and the TriNet mock. Migrations seed Payroll Services.
+backend (gRPC plus GraphQL), MySQL, Redis, and PostgreSQL/pgvector. All five core services should become healthy;
+migrations seed Payroll Services automatically. See the [root README](../README.md)
+for Docker Desktop startup and database persistence.
+
+The TriNet mock is optional. Run `docker compose -f docker/docker-compose.yaml up --build -d --wait` without
+a service list to also start `trinet-mock` and `trinet-ui`, then open
+http://localhost:5174/trinet/. Use this full demo for **Open in payrun** and payroll
+context. `docker/docker-compose.local.yaml` selects the same configuration as the default.
 
 | Setting | Container value |
 | --- | --- |
@@ -38,21 +45,22 @@ backend (gRPC plus GraphQL), MySQL, and the TriNet mock. Migrations seed Payroll
 | GraphQL Sandbox | `http://localhost:4000/` |
 
 The UI proxies `graphql` and `webhook` under its mount path to the backend's GraphQL
-process, which calls gRPC. There are no REST calls. Agents persist in MySQL.
+process, which calls gRPC for agent data. Agents persist in MySQL.
 
 After UI code changes, rebuild. To inspect logs or stop the stack:
 
 ```bash
-docker compose -f docker-compose.local.yaml up --build -d --wait
-docker compose -f docker-compose.local.yaml logs -f ui backend
-docker compose -f docker-compose.local.yaml down
+docker compose -f docker/docker-compose.yaml up --build -d --wait db backend ui
+docker compose -f docker/docker-compose.yaml logs --tail=100 ui backend db
+docker compose -f docker/docker-compose.yaml stop ui backend db
+docker compose -f docker/docker-compose.yaml up -d --wait db backend ui
 ```
 
-Press Ctrl+C to stop following logs. `down` retains saved agents. See
-[backend container instructions](../backend/README.md#run-in-containers) for
-volume management, template synchronization, and troubleshooting. To run the
-published images without building, use `docker compose up -d --wait` (the default
-`docker-compose.yaml`) after `docker login ghcr.io`.
+Use `docker compose -f docker/docker-compose.yaml down` to remove this project's containers and network; the
+`mysql_data` volume retains saved agents. Avoid `down -v` to keep that data.
+See [backend container instructions](../backend/README.md#start-the-stack) for
+configuration and troubleshooting. The Compose files build local source images;
+no GitHub Container Registry login is required for this workflow.
 
 ## Plug into another host
 
@@ -73,7 +81,7 @@ To mount the UI elsewhere, set the path and point the host's reverse proxy at th
 container with the path unchanged; nothing in the code needs editing:
 
 ```bash
-STUDIO_BASE_PATH=/paycalendar/ai_studio/ docker compose up -d --wait
+STUDIO_BASE_PATH=/paycalendar/ai_studio/ docker compose -f docker/docker-compose.yaml up -d --wait
 ```
 
 ```nginx
@@ -92,7 +100,7 @@ mount with `STUDIO_BASE_PATH=/paycalendar/ai_studio/ npx playwright test`.
 
 ## Run without containers
 
-Start only the backend and database in Docker (`docker compose up -d --wait db backend`
+Start only the backend and database in Docker (`docker compose -f docker/docker-compose.yaml up -d --wait db backend`
 from the repository root; see the [backend README](../backend/README.md#start-the-stack)).
 Then, using Node 22+, run from `ui-payroll-agent/`:
 
@@ -124,18 +132,23 @@ Agent Studio is a single page at `/ai_studio/`; the URL does not change while yo
 5. Select **Create agent**. A confirmation appears on the same page and the
    form closes, ready for the next agent. Clicking outside the form also closes it.
 
-Agents are not opened in the studio: the service uses them. Agents attached to the
+Agents can be tested through **Chat with agent** in **My Agents**. Agents attached to the
 `payrun` page appear in the **TriNet Payruns** app (left panel). **My Agents** is the admin
 view: every agent grouped by service and domain, with search and an **Open in payrun**
 link for payrun agents. The left panel also switches to **Tools & APIs**, **Models**, and
 **Evaluation**; **Services** returns to the service cards.
 
 Saving stores configuration. Select **Chat with agent** under **My Agents** to
-send messages to the saved model. The default demo model echoes messages and is
-clearly labeled. Configure a compatible model server for real generation (see
-the backend README). Chat history lasts until navigation or reload. Failed
-requests retain the message for retry. Anomaly monitoring, external API calls,
-and alert/webhook delivery are not active yet.
+send messages to the saved model. New Anomaly Detection agents default to Llama
+3.3 70B through the backend Hugging Face connection. The optional demo model
+echoes messages and is clearly labeled. Configure provider credentials for generation (see
+the backend README). Redis retains recent turns for follow-ups, with a 30-minute
+inactivity timeout by default. The session ID survives a reload in sessionStorage;
+the displayed transcript resets. **New chat** starts a new conversation.
+Add a payrun ID under **Payroll context for historical comparisons** to use
+historical documents stored in PostgreSQL/pgvector, intent classification and
+a separate answer model. Failed requests retain the message for retry.
+Scheduled anomaly monitoring and alert/webhook delivery are not active yet.
 
 The form loads defaults and options from `getTemplate(id)`. Submitting calls
 `createAgent`. Validation failures preserve form values. The separate webhook chat window is at
@@ -207,8 +220,8 @@ the interpreter is not the repository's `.venv/bin/python`, and set
 For basic checks inside the running UI container, from the repository root:
 
 ```bash
-docker compose -f docker-compose.local.yaml exec ui npm run lint
-docker compose -f docker-compose.local.yaml exec ui npm run build
+docker compose -f docker/docker-compose.local.yaml exec ui npm run lint
+docker compose -f docker/docker-compose.local.yaml exec ui npm run build
 ```
 
 ## Troubleshooting

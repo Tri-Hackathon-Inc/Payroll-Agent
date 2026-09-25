@@ -1,7 +1,7 @@
 {
   "id": "anomaly-detection",
   "name": "Anomaly Detection",
-  "version": 1,
+  "version": 3,
   "description": "Flag unusual payments against historical payrun data.",
   "models": [
     "poc-demo",
@@ -11,12 +11,13 @@
   ],
   "config": {
     "description": "Flag unusual payments against historical payrun data.",
-    "instructions": "Compare payrun inputs against history. Explain unusual values and evidence. Do not change payroll.",
+    "instructions": "Compare each employee's current payments with their historical completed payruns. Explain calculated changes in gross pay, net pay, overtime, bonuses and deductions. Treat duplicate lines and post-termination pay as items for human review. Identify limited history. Do not change payroll.",
     "questions": [
-      "Which payments need review?"
+      "Which payments need review?",
+      "How does this employee's pay compare with their history?"
     ],
     "domain": "Payroll",
-    "model": "poc-demo",
+    "model": "llama-3-3-70b",
     "service": "payrun",
     "page": "payrun",
     "attached_services": [

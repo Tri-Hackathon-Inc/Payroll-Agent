@@ -1,30 +1,44 @@
 # Domain agents backend
 
-The API is gRPC with a GraphQL adapter. There are no REST endpoints.
-One root `Dockerfile` builds the backend and UI targets. Docker Compose runs
-three core services: `backend` (Python gRPC plus Node GraphQL and the agent
-webhook), `ui`, and `db` (MySQL 8.4), plus the temporary TriNet mock (`trinet-mock`
-payroll API and `trinet-ui`). PostgreSQL is not used.
+Catalog and saved-agent operations use gRPC with a GraphQL adapter. The backend
+also serves an HTTP chat webhook.
+`docker/Dockerfile` builds the backend and UI targets. Docker Compose runs
+five core services: `backend` (Python gRPC plus Node GraphQL and the agent
+webhook), `ui`, `db` (MySQL 8.4), `redis` (short conversations), and `vector-db`
+(PostgreSQL/pgvector for long-term semantic information). The temporary TriNet
+mock adds `trinet-mock` (payroll API) and `trinet-ui`.
 
 ## Start the stack
 
-From the repository root:
+Install Docker Desktop with Linux containers and Compose v2, then start its
+engine. On Windows, use `docker desktop start` or open Docker Desktop. Host Python
+and Node are not required. See the [root quick start](../README.md).
+
+From the repository root, start the **UI, backend, and MySQL database**:
 
 ```bash
-docker compose -f docker-compose.local.yaml up --build -d --wait --remove-orphans
-docker compose -f docker-compose.local.yaml ps
+docker compose -f docker/docker-compose.yaml up --build -d --wait db backend ui
+docker compose -f docker/docker-compose.yaml ps
 ```
 
-The default `docker compose up --build -d --wait` uses the same configuration.
-`--remove-orphans` removes the former standalone Apollo container during upgrade;
-it does not delete database volumes.
+Redis and PostgreSQL start as backend dependencies; all five core services should
+report `healthy`. The shared Dockerfile builds `backend`
+and `ui`; MySQL uses its official image. `docker/docker-compose.local.yaml` uses the same
+configuration if explicitly selected with `-f`. Dockerfiles, Compose files,
+ignore rules, and Docker helper scripts are centralized in [docker/](../docker/README.md).
+Run commands from the repository root to load its `.env`.
 
 - UI: http://localhost:5173/ai_studio/ (mount path set by `STUDIO_BASE_PATH`)
 - GraphQL and Sandbox: http://localhost:4000/
 - Agent webhook: `POST http://localhost:4000/webhook/<domain>/<agentId>` (see Agent model calls)
-- TriNet mock UI: http://localhost:5174/trinet/ and its payroll API http://localhost:4100/
 - gRPC: localhost:50051, service `ai_studio_agents.ai_studio`
 - MySQL: `db:3306` inside Docker; no host database port is published.
+- Redis: `redis:6379`; PostgreSQL/pgvector: `vector-db:5432`, both internal only.
+
+The optional TriNet demo adds `trinet-mock` and `trinet-ui`. To include them, run
+`docker compose -f docker/docker-compose.yaml up --build -d --wait` without a service list. Its UI is at
+http://localhost:5174/trinet/ and its payroll API is at http://localhost:4100/.
+Start these services for the payrun UI and webhook payroll context.
 
 MySQL initializes the `payroll` database and development user. Override
 `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD`, and `MYSQL_ROOT_PASSWORD`
@@ -32,7 +46,22 @@ in your environment or a root `.env` file. Defaults are for local development.
 The backend waits for MySQL, applies migrations, syncs the catalog, then starts
 both API processes. If either API process exits, the backend stops the other
 and exits so Docker can restart it. Its health check queries GraphQL through
-gRPC to MySQL. The UI proxies `/graphql` to the backend.
+gRPC to MySQL. The UI proxies `/ai_studio/graphql` and `/ai_studio/webhook/...`
+to the backend under the default mount path.
+
+To rebuild, inspect logs, stop, and resume the core services:
+
+```sh
+docker compose -f docker/docker-compose.yaml up --build -d --wait db backend ui
+docker compose -f docker/docker-compose.yaml logs --tail=100 ui backend db redis vector-db
+docker compose -f docker/docker-compose.yaml stop ui backend db redis vector-db
+docker compose -f docker/docker-compose.yaml up -d --wait db backend ui
+```
+
+`docker compose -f docker/docker-compose.yaml down` removes this project's containers and network while retaining
+the database volumes. Avoid `down -v` when saved agents must be preserved. Existing
+MySQL volumes retain the credentials used at initialization; changing `.env`
+does not update the database user's password.
 
 `backend/local_server/` is tracked and included in the backend image. Fresh
 clones do not need separately provisioned settings. Credentials remain in
@@ -113,8 +142,9 @@ snapshots and survive catalog changes. Domain and service categories must match.
 Model chat is available through `ChatAgent` and the UI's **Chat with agent** action.
 
 External API execution, alerts, and outbound webhook delivery are not implemented.
-Agents answer questions through the chat webhook when their model is connected
-(see Agent model calls); otherwise the webhook acknowledges the question.
+Agents answer questions through the chat webhook when their model is connected.
+Payrun RAG returns calculated evidence even without a model; generic chat without
+a configured model acknowledges the question.
 
 Each model file in `Model_config/` may carry an optional `details` object used by
 the UI model library: `license` (`open-source`, `commercial`, or `demo`), `vendor`,
@@ -131,7 +161,7 @@ live endpoint until their `*_BASE_URL` variables are set.
 with editable draft payruns. It isn't part of Agent Studio or the catalog service.
 See [trinet_mock/README.md](trinet_mock/README.md).
 
-MySQL persists in the `mysql_data` named volume. `docker compose down` retains
+MySQL persists in the `mysql_data` named volume. `docker compose -f docker/docker-compose.yaml down` retains
 it; `down -v` deletes it. The former SQLite `backend_data` volume is not deleted
 or imported automatically by Compose. Export existing domains/groups and agents
 before switching databases if they must be retained. The model rename migration
@@ -142,19 +172,25 @@ continue to use SQLite at `DATABASE_PATH` for development and isolated tests.
 Provision another domain with:
 
 ```bash
-docker compose exec backend python manage.py create_domain hr --label "Human Resources" --domain HR
+docker compose -f docker/docker-compose.yaml exec backend python manage.py create_domain hr --label "Human Resources" --domain HR
 ```
 
 ## Agent model calls
 
-The chat webhook (`POST /webhook/<domain>/<agentId>` with `{ question, context? }`,
+The chat webhook (`POST /webhook/<domain>/<agentId>` with `{ question, context?, sessionId?, requestId? }`,
 served by the backend's GraphQL process) answers with the agent's model when that
-model can be called; otherwise it replies with an acknowledgement that names what is
-missing. Code is in `graphql/`:
+model can be called. Anomaly Detection always calculates evidence first, even
+without a model connection; other templates acknowledge missing configuration.
+Code is in `graphql/`:
 
 | Step | File | What it does |
 | --- | --- | --- |
-| Pre-processing | `payrunContext.js` | When invoked on a payrun (`context.page = "payrun"`), loads that run and the previous completed run from the payroll API (`TRINET_API_URL`) as compact text, including hours, earnings, taxes, and all deductions |
+| Conversation | `redisStore.js` | Restores recent turns and employee/topic focus from an expiring Redis session |
+| Retrieval and answer | `rag/` | Intent model, local embeddings, persistent pgvector documents, filtered KNN and a separate answer model |
+| Payroll data | `payrunContext.js` | Loads the current run and configurable history from `TRINET_API_URL`; RAG defaults to 100 runs, anomaly baselines use up to six |
+| Pre-processing | `anomalyPreprocessor.js` | Groups lines by employee ID, computes historical medians and payment differences, and creates review findings |
+| Anomaly orchestration | `anomalyPipeline.js` | Initializes one `ChatModel` per request, passes calculated evidence, and handles unavailable models |
+| Post-processing | `rag/postprocessor.js`, `anomalyPostprocessor.js` | Validates model JSON, citations and finding references, retains calculated evidence, and formats the chat response |
 | Prompt | `agentPrompt.js` | Agent description and instructions, guardrails (answer only from the data, never change payroll), payroll data, question |
 | Model call | `modelRuntime.js` | OpenAI-compatible `chat/completions` request; measures latency and tokens/s; maps provider errors (bad token, no credits, rate limit, model not served) to clear messages |
 
@@ -163,8 +199,19 @@ Models with provider `huggingface` use the Hugging Face router
 token in `HF_TOKEN`. Create a fine-grained User Access Token with the permission
 "Make calls to Inference Providers" and put `HF_TOKEN=...` in the root `.env`
 (git-ignored); only the backend container reads it and it is never sent to the
-browser. Free accounts get a small monthly credit; beyond it, usage is billed at the
-provider's rate.
+browser. Provider availability, account access and inference credits depend on
+your Hugging Face account. See the [HF chat API documentation](https://huggingface.co/docs/inference-providers/tasks/chat-completion).
+New Anomaly Detection agents default to **Llama 3.3 70B**. Select it explicitly
+when updating an older saved demo agent. A demo agent does not
+automatically switch models when a token is added. After changing `.env`, run
+`docker compose -f docker/docker-compose.yaml up -d --force-recreate backend`
+from the repository root.
+
+For a token stored in `backend/.env`, use
+`docker compose -f docker/docker-compose.yaml --env-file backend/.env up -d --force-recreate --no-deps --wait backend`.
+Keep that `--env-file` option for subsequent starts/recreates. If root `.env`
+also contains database settings, pass `--env-file .env --env-file backend/.env`
+to preserve them. Both files are ignored by Git and excluded from Docker images.
 
 Successful replies add `model`, `metrics` (`latencyMs`, `promptTokens`,
 `completionTokens`, `tokensPerSecond`, `provider`), and `context` (`payrunId`,
@@ -179,6 +226,124 @@ node scripts/benchmark-models.mjs --out docs/model-benchmark.md  # real, billed 
 ```
 
 Findings so far are in [docs/model-evaluation-findings.md](../docs/model-evaluation-findings.md).
+
+### Employee anomaly pipeline
+
+With RAG enabled (the Docker default), all payrun questions use the architecture
+in [AGENTS.md](AGENTS.md#overall-application-flow):
+Redis session -> payroll preprocessing -> intent model -> filtered pgvector KNN
+-> the agent's answer model -> citation/finding validation -> Redis -> chatbox.
+
+PostgreSQL's `payroll_history_documents` table persists historical documents and
+384-dimensional MiniLM vectors; stable content IDs avoid re-embedding unchanged
+history. Retrieval uses [pgvector cosine distance](https://github.com/pgvector/pgvector#querying)
+within the eligible source set, domain/service, employee and topic. It never uses
+the retrieved subset to recompute financial baselines. Local embeddings require
+no API key; the first request downloads public weights to `embedding_cache`.
+
+Set `RAG_INTENT_MODEL_ID` for the first model (default
+`Qwen/Qwen2.5-72B-Instruct`) and select the answer model on the agent. Both hosted
+stages use backend `HF_TOKEN`. Missing credentials use explicit intent rules and
+calculated comparisons. `RAG_TOP_K` defaults to 6; `RAG_HISTORY_LIMIT` defaults
+to 100 (maximum 500), with a response flag when the source limit is reached.
+Set `RAG_ENABLED=false` to use the previous webhook pipeline.
+
+Preload all completed historical payruns (including employees absent from the
+current run) independently of a conversation:
+
+```sh
+docker compose -f docker/docker-compose.yaml --env-file backend/.env exec backend node graphql/rag/ingest-history.js --domain payroll-services --service payrun
+```
+
+`PayrollHistoryIngestor` reads `payruns(status: COMPLETED)` from `TRINET_API_URL`,
+validates source records, and writes earnings, overtime and deduction/tax documents
+with local MiniLM embeddings to PostgreSQL. `--domain` and `--service` must match
+the agent's scope. Repeated runs reuse unchanged document IDs; changed content gets
+a new revision. The command reports inserted/existing counts and accepts `--dry-run`
+for a preview. It does not call a hosted model or change payroll. Re-run it after
+new history arrives; there is no background scheduler. If indexing fails midway,
+the command exits unsuccessfully and can be safely rerun to resume missing inserts.
+
+Preloaded documents use the same IDs as query-time indexing. Chat still fetches
+current source history to constrain retrieval to eligible periods and revisions;
+the retrieval window remains `RAG_HISTORY_LIMIT`. Stale versions, future periods,
+other companies and employees outside the question's scope do not enter the answer.
+
+Redis retains at most 20 recent turns plus focus, with an inactivity timeout of
+`CHAT_SESSION_TTL_SECONDS` (default 1800). Return `session.id` as `sessionId` for
+follow-ups; reuse a `requestId` only when retrying the same request. Sessions are
+bound to browser cookie, domain, agent, channel and payrun/employee context.
+Expired or conflicting sessions require **New chat**. Browser binding is not
+authentication. Redis has no local disk persistence; PostgreSQL's `vector_data`
+volume survives restarts and has no automatic document expiry.
+
+Replies include `session` and `retrieval`: intent status, historical source IDs,
+employee/payrun/topic metadata, cosine distances, citation flags and retrieval
+status (`completed`, `no_results`, `unavailable`). Unavailable retrieval returns
+calculated evidence without calling the answer model. With no matching history,
+the model can answer from current employee data and must identify the history
+limitation without inventing previous payments.
+
+`PayrollAnswerPostprocessor` consumes the raw model response inside the backend.
+It validates the answer text, retrieved source IDs and complete finding coverage,
+then returns `analysis.modelAnswer: { summary, sourceIds, findings }` alongside
+the formatted `reply`. Finding entries contain `findingId`, `explanation` and
+`reviewAction`. Invalid output sets `modelAnswer` to null and retains calculated
+evidence. Both GraphQL and webhook chat receive the postprocessed response.
+The model prompt includes only the employee scope resolved from the UI/query:
+current hours, earnings, taxes, deductions, payment method and employment details,
+plus historical documents and deterministic comparisons.
+
+Use the payrun webhook for an agent whose `templateId` is `anomaly-detection`:
+
+```json
+{
+  "question": "How does this employee's payment compare with their history?",
+  "context": { "page": "payrun", "payrunId": "PR-2026-09-B", "employeeId": "E1002" }
+}
+```
+
+Omit `employeeId` to analyze everyone in the run. An unknown employee is rejected.
+The server loads payroll data; submitted amounts are never used as evidence.
+Only completed runs with earlier pay dates and nonoverlapping earlier periods,
+matching company, currency and frequency, qualify. Employees are matched by ID
+and pay type, with multiple lines summed per payrun. The median uses at most six
+runs; zero, one or two samples are reported as insufficient or limited history.
+Missing numeric values are excluded, never treated as zero.
+
+Both the absolute and percentage thresholds must be met (a zero baseline uses
+only the absolute threshold). These are initial review rules, not a trained
+statistical model or proof of an incorrect payment:
+
+| Metric | Absolute change | Percentage change |
+| --- | --- | --- |
+| Gross / net pay | 100 currency units | 25% |
+| Overtime | 10 hours | 50% |
+| Bonus | 100 currency units | 50% |
+| Health / 401k / garnishment | 25 currency units | 25% |
+
+Negative net pay, multiple payment lines and pay after a termination preceding
+the current period also create review findings. Final pay and split payments may
+be legitimate. Monetary comparisons use cents; the current implementation assumes
+currencies with two decimal places.
+
+The response adds `analysis` with `employees`, `findings`, `thresholds`,
+`historyPayrunIds`, `modelStatus` and `modelMessage`. Each finding retains current
+values, median, difference, percentage (null for zero baseline), source payrun
+IDs and sample count. The model returns JSON comments referencing every finding
+exactly once. Post-processing rejects malformed, missing, extra or duplicate
+finding references and never lets the model replace calculated evidence.
+Narrative explanations and suggested checks are model-generated, not independently
+verified facts. They are labeled separately and no payroll writes occur.
+
+`modelStatus` is `completed`, `not_configured`, `unavailable`, `invalid_response`,
+`not_needed` or `context_limit`. Provider errors/timeouts preserve the calculated
+report; unavailable payroll data returns an error instead of a fabricated result.
+For RAG input larger than 60,000 characters (40,000 in the legacy pipeline), calculated findings remain available
+and the user is asked to select an employee for model explanations. The model
+receives only that employee's evidence when an employee is selected. Raw tokens
+and upstream error bodies are never returned. Tests use simulated providers;
+a real inference call requires your own configured token.
 
 ## Development and checks
 
@@ -201,14 +366,15 @@ enabled model selected before chat.
 `AgentChat` loads this row scoped to the requested domain. `ModelRuntimeFactory`
 initializes a fresh provider client for each request from the saved snapshot,
 then `ModelRuntime.generate(messages)` returns assistant text. There is no
-shared mutable model or conversation state. Changing the selected model refreshes
+shared mutable model instance; the GraphQL adapter persists session state in Redis.
+Changing the selected model refreshes
 its snapshot; other edits retain the model snapshot. Removing/disabling the model
 in the catalog prevents further chat. Snapshot configuration changes otherwise
 require selecting a new model configuration.
 
 ```graphql
 mutation Chat($input: ChatAgentInput!) {
-  chatAgent(input: $input) { agentId modelId output demo }
+  chatAgent(input: $input) { agentId modelId output demo session retrieval analysis }
 }
 ```
 
@@ -227,8 +393,11 @@ Example variables:
 
 History accepts at most 20 complete user/assistant turns; system instructions
 always come from the saved agent. Each message is limited to 10,000 characters
-and the submitted conversation to 100,000. History is held in the browser until
-navigation/reload; the UI sends the most recent 20 turns. Responses render as
+and the submitted conversation to 100,000. The GraphQL adapter stores recent
+history in Redis and returns `session.id`; supply it as `input.sessionId` on
+follow-ups. The UI keeps that ID in sessionStorage across reloads, though displayed
+messages reset. Optional `input.context` with `page: "payrun"`, `payrunId` and
+`employeeId` uses payroll RAG. Direct gRPC remains stateless. Responses render as
 text. The demo provider is an explicitly labeled echo, not an LLM.
 
 For a real local model, edit `templates/Model_config/local-open-source.json`:
@@ -248,26 +417,26 @@ selected on an agent are stored metadata, not callable model tools yet.
 
 The merged model catalog also supports `huggingface` through `HuggingFaceChatModel`,
 using the same `HF_TOKEN` and optional `HF_INFERENCE_BASE_URL` as the payrun webhook.
-The direct chat route uses the persisted snapshot and browser history; the payrun
+The direct chat route uses the persisted snapshot and restored history; the payrun
 webhook remains a separate integration with payroll context and model metrics.
 Migration 0007 joins the agent-info and model-catalog migration branches.
 
 ### Container checks
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up --build -d --wait
+docker compose -f docker/docker-compose.yaml -f docker/docker-compose.dev.yaml up --build -d --wait db backend ui
 ```
 
 The dev override mounts source; UI changes hot reload. Restart `backend` after
 changing Python, GraphQL, or template files. Rebuild after dependency changes.
 
 ```bash
-docker compose exec backend python manage.py check
-docker compose exec backend python manage.py validate_templates
-docker compose exec backend python manage.py makemigrations --check --dry-run
-docker compose exec -e MYSQL_HOST= -e DATABASE_PATH=/tmp/check.sqlite3 backend python manage.py test registry
-docker compose run --rm --no-deps ui npm run build
-docker compose run --rm --no-deps ui npm run lint
+docker compose -f docker/docker-compose.yaml exec backend python manage.py check
+docker compose -f docker/docker-compose.yaml exec backend python manage.py validate_templates
+docker compose -f docker/docker-compose.yaml exec backend python manage.py makemigrations --check --dry-run
+docker compose -f docker/docker-compose.yaml exec -e MYSQL_HOST= -e DATABASE_PATH=/tmp/check.sqlite3 backend python manage.py test registry
+docker compose -f docker/docker-compose.yaml run --rm --no-deps ui npm run build
+docker compose -f docker/docker-compose.yaml run --rm --no-deps ui npm run lint
 ```
 
 Backend tests cover template scoping, agent validation, registry filtering, actual
@@ -277,13 +446,20 @@ backend schema, mock schema, and UI operations. Run `node --test tests/contract.
 both Node packages. Browser tests are `npm run test:browser` from that directory.
 The old GraphQL test file and test Dockerfile are intentionally removed.
 
-`docker-compose.test.yaml` starts the same three services with a temporary MySQL
-data directory and no published ports. It is isolated under `payroll-api-test`.
+`docker/docker-compose.test.yaml` starts the same five core services with temporary MySQL, Redis and PostgreSQL
+data directories and no published ports. It is isolated under `payroll-api-test`.
+
+RAG unit tests use simulated providers. Run real session and vector storage checks
+against the running local Redis and PostgreSQL services with:
+
+```sh
+docker compose -f docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_TESTS=1 backend node --test graphql/storage.integration.test.js
+```
 
 ## Troubleshooting
 
 ```bash
-docker compose -f docker-compose.local.yaml logs --tail=100 db backend
+docker compose -f docker/docker-compose.local.yaml logs --tail=100 db backend
 docker inspect payroll-local-backend-1 --format '{{json .State.Health}}'
 ```
 

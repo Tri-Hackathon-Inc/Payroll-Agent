@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { graphqlRequest } from './graphql/client'
 import { DOMAINS_QUERY, SERVICE_AGENT_REGISTRY_QUERY } from './graphql/operations'
-import { callWebhook } from './agentWebhook'
+import { callWebhook, resetWebhookConversation } from './agentWebhook'
 
 const AVATAR_TONES = ['blue', 'violet', 'orange', 'green']
 
@@ -83,6 +83,7 @@ export default function ChatWindow({ domainName }) {
   }
 
   async function openPicker() {
+    if (sending) return
     setPickerOpen(true)
     setPickerError('')
     if (domain) {
@@ -125,7 +126,7 @@ export default function ChatWindow({ domainName }) {
     setMessage('')
     setSending(true)
     try {
-      const response = await callWebhook({ domain, agent: selectedAgent, question })
+      const response = await callWebhook({ domain, agent: selectedAgent, question, conversation: true })
       setMessages(current => [...current, { id: response.id, role: 'agent', text: response.reply, agent: selectedAgent }])
     } catch (error) {
       setSendError(error.message || 'The webhook could not be reached.')
@@ -143,6 +144,11 @@ export default function ChatWindow({ domainName }) {
   return <section className="chat-workspace">
     <header className="chat-header">
       <div><p className="eyebrow mb-2">{domain?.label || 'Select a domain'} · Connected workspace</p><h1>Talk to your agents</h1><p className="chat-subtitle mb-0">Choose a specialist, ask a question, and route it to your connected tools.</p></div>
+      {selectedAgent && <button type="button" className="btn btn-outline-secondary" disabled={sending} onClick={() => {
+        resetWebhookConversation({ domain, agent: selectedAgent })
+        setMessages([])
+        setSendError('')
+      }}>New chat</button>}
     </header>
     <div className="chat-panel">
       <div className="chat-thread" aria-live="polite">
@@ -150,7 +156,7 @@ export default function ChatWindow({ domainName }) {
         {sending && <div className="chat-message agent"><AgentAvatar agent={selectedAgent} /><div><div className="message-author">{selectedAgent.name}</div><div className="message-bubble typing-indicator"><span /><span /><span /></div></div></div>}
       </div>
       <div className="chat-composer-wrap">
-        {selectedAgent && <div className="selected-agent-bar"><div className="d-flex align-items-center gap-2"><AgentAvatar agent={selectedAgent} /><span><strong>{selectedAgent.name}</strong></span></div><button type="button" className="agent-clear" onClick={() => setSelectedAgent(null)} aria-label={`Remove ${selectedAgent.name}`}><i className="bi bi-x-lg" /></button></div>}
+        {selectedAgent && <div className="selected-agent-bar"><div className="d-flex align-items-center gap-2"><AgentAvatar agent={selectedAgent} /><span><strong>{selectedAgent.name}</strong></span></div><button type="button" className="agent-clear" disabled={sending} onClick={() => setSelectedAgent(null)} aria-label={`Remove ${selectedAgent.name}`}><i className="bi bi-x-lg" /></button></div>}
         {selectedAgent?.questions.length > 0 && <div className="question-pills" aria-label={`${selectedAgent.name} suggested questions`}>{selectedAgent.questions.map(question => <button type="button" className="question-pill" key={question} onClick={() => setMessage(question)}>{question}</button>)}</div>}
         <form className="chat-composer" onSubmit={sendMessage}>
           <div className="composer-main">{selectedAgent && <span className="composer-mention">@{selectedAgent.name.replace(/\s+/g, '')}</span>}<input ref={inputRef} value={message} onChange={handleMessageChange} placeholder={selectedAgent ? `Message ${selectedAgent.name}…` : 'Type @ to choose a domain and agent…'} aria-label="Message an agent" /><button type="submit" className="send-button" disabled={!message.trim() || !selectedAgent || sending} aria-label="Send message"><i className="bi bi-arrow-up" /></button></div>

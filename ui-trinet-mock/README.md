@@ -33,11 +33,21 @@ The webhook body the Payroll Assistant sends:
 { "source": "trinet-payrun-mock", "question": "Which payments need review?",
   "domain": { "name": "payroll-services", "label": "Payroll Services" },
   "agent": { "id": "<agent id>", "name": "Payrun Anomaly Check" },
-  "context": { "page": "payrun", "payrunId": "PR-2026-09-B", "payrunStatus": "PENDING_APPROVAL", "payDate": "2026-10-05" } }
+  "context": { "page": "payrun", "payrunId": "PR-2026-09-B", "employeeId": null },
+  "requestId": "<unique-request-id>" }
 ```
 
-Agent execution isn't active yet, so replies only confirm that the question and
-context arrived.
+The backend restores recent conversation turns from Redis, interprets query intent,
+and retrieves historical payroll documents from PostgreSQL/pgvector using filtered
+KNN. A separate answer model explains retrieved sources and calculated comparisons.
+Missing model credentials return calculated evidence with an explicit status.
+
+Replies include `session.id`, sent back as `sessionId` on follow-ups. The UI retains
+it in sessionStorage per domain, agent, payrun and employee selection. Sessions
+expire after 30 minutes of inactivity by default. **New chat** starts a fresh
+session. Expand **Historical sources** under a reply to see its retrieved records.
+PostgreSQL retains documents and embeddings across restarts; Redis conversations
+are temporary. See [the application flows](../backend/AGENTS.md#overall-application-flow).
 
 ## Run locally
 
@@ -49,7 +59,10 @@ Start the mock payroll API and Agent Studio first. Then run this app:
 cd ui-trinet-mock && npm ci && npm run dev        # http://localhost:5174/trinet/
 ```
 
-The Compose stacks start all three services (`trinet-mock`, `ui`, `trinet-ui`).
+Docker configuration is centralized in [docker/](../docker/README.md); this UI
+folder contains no Docker files. From the repository root, run
+`docker compose -f docker/docker-compose.yaml up --build -d --wait` to start the
+full demo, including `trinet-mock`, `ui`, and `trinet-ui`.
 
 ## Checks
 

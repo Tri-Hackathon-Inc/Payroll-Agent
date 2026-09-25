@@ -26,6 +26,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [lineId, setLineId] = useState(null)
   const [assistantOpen, setAssistantOpen] = useState(false)
+  const [assistantSelection, setAssistantSelection] = useState(null)
   const [notice, setNotice] = useState('')
   const [reloadDetail, setReloadDetail] = useState(0)
   const payrunId = query.payrun || null
@@ -70,6 +71,7 @@ export default function App() {
     setQuery(readQuery())
     setLineId(null)
     setAssistantOpen(false)
+    setAssistantSelection(null)
     setError('')
     setNotice('')
   }
@@ -78,6 +80,7 @@ export default function App() {
   function saved(updatedRun, savedLineId) {
     const line = updatedRun.lines.find((item) => item.lineId === savedLineId)
     setDetail(updatedRun)
+    setAssistantSelection({ payrunId: updatedRun.id, employeeId: line.employeeId })
     setLineId(null)
     setNotice(`${line.name}'s pay was saved. Net pay is now ${money.format(line.net)}.`)
   }
@@ -90,6 +93,8 @@ export default function App() {
 
   const run = detail && detail.id === payrunId ? detail : null
   const drawerLine = run?.lines.find((line) => line.lineId === lineId)
+  const assistantEmployeeId = assistantSelection && assistantSelection.payrunId === run?.id ? assistantSelection.employeeId : ''
+  const assistantEmployee = run?.lines.find((line) => line.employeeId === assistantEmployeeId)
 
   return <div className="tn-app">
     <header className="tn-header"><span className="tn-logo">TriNet</span><span className="tn-mock-tag">Mock</span></header>
@@ -98,13 +103,21 @@ export default function App() {
         : !payrunId ? (payruns ? <PayrollList payruns={payruns} onOpen={go} /> : <Loading>Loading payrolls…</Loading>)
         : !run ? <Loading>Loading payroll…</Loading>
         : <PayrollDetail run={run} notice={notice} onDismissNotice={() => setNotice('')} onBack={() => go(null)}
-          onSelectLine={(id) => { setAssistantOpen(false); setNotice(''); setLineId(id) }} />}
+          onSelectLine={(id) => {
+            setAssistantSelection({ payrunId: run.id, employeeId: run.lines.find((line) => line.lineId === id).employeeId })
+            setAssistantOpen(false)
+            setNotice('')
+            setLineId(id)
+          }} />}
     </main>
     {drawerLine && <EmployeeDrawer key={`${drawerLine.lineId}-${run.version}`} line={drawerLine} run={run}
       onClose={() => setLineId(null)} onSaved={saved} onReload={reload} />}
-    {run && domain && assistantOpen && <AssistantPanel domain={domain} run={run} onClose={() => setAssistantOpen(false)} />}
+    {run && domain && assistantOpen && <AssistantPanel key={`${domain.name}:${run.id}:${run.version}`} domain={domain} run={run}
+      employeeId={assistantEmployeeId}
+      onEmployeeChange={(employeeId) => setAssistantSelection({ payrunId: run.id, employeeId })}
+      onClose={() => setAssistantOpen(false)} />}
     {run && domain && !assistantOpen && <button type="button" className="tn-assistant-launcher" onClick={() => { setLineId(null); setAssistantOpen(true) }}>
-      <i className="bi bi-stars" />Payroll Assistant
+      <i className="bi bi-stars" />Payroll Assistant{assistantEmployee && ` · ${assistantEmployee.name}`}
     </button>}
   </div>
 }

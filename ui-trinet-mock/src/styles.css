@@ -89,6 +89,7 @@ button { cursor: pointer; }
 .tn-message { font-size: 13px; line-height: 1.5; padding: 8px 12px; border-radius: 12px; max-width: 92%; }
 .tn-message.user  { align-self: flex-end; background: #1c2734; color: #fff; }
 .tn-message.agent { align-self: flex-start; background: #f1f5f9; color: #1c2734; border: 1px solid #e2e8f0; }
+.tn-message-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Edit Employee Pay */
 .tn-btn-outline { padding: 9px 14px; border: 1.5px solid var(--tn-orange); border-radius: 4px; background: #fff; color: var(--tn-orange); font-size: 13px; font-weight: 700; }

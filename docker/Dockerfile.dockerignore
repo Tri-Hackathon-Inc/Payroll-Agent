@@ -14,3 +14,5 @@
 **/.DS_Store
 .local-data/
 **/.not_include
+**/npm-debug.log*
+backend/trinet_mock/*.test.js

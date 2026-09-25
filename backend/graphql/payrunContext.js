@@ -1,14 +1,14 @@
-// Pre-processing step: loads the payrun the agent was invoked on (and the previous completed run
-// as history for anomaly checks) from the payroll API and formats it as compact text context.
+// Loads current payroll and configurable completed history (six runs by default). Raw data feeds anomaly
+// preprocessing; the compact text representation is for other agent templates.
 
-const PAYRUN_FIELDS = `id name company payDate periodStart periodEnd status currency
+const PAYRUN_FIELDS = `id name company frequency payDate periodStart periodEnd status currency version
   totals { employees gross taxes deductions net }
-  lines { employeeId name department payType employmentStatus hours { regular overtime }
+  lines { lineId employeeId name department payType employmentStatus terminationDate hours { regular overtime }
     earnings { regular overtime bonus reimbursement } gross
     taxes { federal state socialSecurity medicare } deductions { health retirement401k garnishment } net paymentMethod }`;
-const QUERY = `query AgentContext($id: ID!) {
+const QUERY = `query AgentContext($id: ID!, $historyLimit: Int!) {
   payrun(id: $id) { ${PAYRUN_FIELDS} }
-  payrunHistory(limit: 1, before: $id) { ${PAYRUN_FIELDS} }
+  payrunHistory(limit: $historyLimit, before: $id) { ${PAYRUN_FIELDS} }
 }`;
 const MAX_CONTEXT_CHARS = 12000;
 
@@ -31,25 +31,26 @@ function formatRun(run, label) {
   ].join('\n');
 }
 
-// Returns { text, payrunId } or null when there is no payrun context to load.
-async function loadPayrunContext(invocation, { endpoint = process.env.TRINET_API_URL, fetchImpl = fetch } = {}) {
+// Raw runs are retained for analysis; the text cap applies only to generic chat prompts.
+async function loadPayrunContext(invocation, { endpoint = process.env.TRINET_API_URL, fetchImpl = fetch, historyLimit = 6 } = {}) {
   if (invocation?.page !== 'payrun' || !invocation.payrunId || !endpoint) return null;
   const response = await fetchImpl(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query: QUERY, variables: { id: invocation.payrunId } }),
+    body: JSON.stringify({ query: QUERY, variables: { id: invocation.payrunId, historyLimit: Math.max(1, Math.min(historyLimit, 500)) } }),
     signal: AbortSignal.timeout(10000),
   });
   const body = await response.json();
   if (!response.ok || body.errors?.length || !body.data?.payrun) {
-    throw new Error(body.errors?.[0]?.message || `Payroll API returned HTTP ${response.status}.`);
+    throw new Error('The requested payrun and history could not be loaded.');
   }
   const sections = [formatRun(body.data.payrun, 'Current payrun')];
-  const previous = body.data.payrunHistory?.[0];
-  if (previous) sections.push(formatRun(previous, 'Previous completed payrun (history)'));
+  const history = body.data.payrunHistory || [];
+  history.forEach((previous, index) => sections.push(formatRun(previous,
+    index === 0 ? 'Previous completed payrun (history)' : 'Earlier completed payrun (history)')));
   let text = sections.join('\n\n');
   if (text.length > MAX_CONTEXT_CHARS) text = `${text.slice(0, MAX_CONTEXT_CHARS)}\n[context truncated]`;
-  return { text, payrunId: invocation.payrunId };
+  return { text, payrunId: invocation.payrunId, current: body.data.payrun, history };
 }
 
-module.exports = { loadPayrunContext, formatRun };
+module.exports = { loadPayrunContext, formatRun, PAYRUN_FIELDS };

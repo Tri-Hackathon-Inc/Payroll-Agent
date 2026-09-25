@@ -58,6 +58,8 @@ class AgentWorkflowTests(TestCase):
 
     def test_template_details_contain_form_defaults_and_options(self):
         template = services.get_template("anomaly-detection")
+        self.assertEqual(template["config"]["model"], "llama-3-3-70b")
+        self.assertEqual(template["model_config"]["provider"], "huggingface")
         self.assertEqual(template["config"]["model"], template["model_config"]["id"])
         self.assertTrue(template["model_options"])
         self.assertTrue(all(item["enabled"] for item in template["model_options"]))
@@ -102,7 +104,7 @@ class AgentWorkflowTests(TestCase):
         self.assertEqual(
             saved.config, services.get_domain_agents("payroll-services")[0]["config"]
         )
-        self.assertEqual(saved.template_version, 1)
+        self.assertEqual(saved.template_version, Template.objects.get(pk="anomaly-detection").version)
         self.assertNotEqual(
             saved.config, Template.objects.get(pk="anomaly-detection").config
         )
@@ -178,7 +180,7 @@ class AgentWorkflowTests(TestCase):
             shutil.copytree(settings.TEMPLATE_CONFIG_DIR, root)
             path = root / "anomaly-detection.json"
             template = json.loads(path.read_text())
-            template["version"] = 2
+            template["version"] += 1
             template["config"]["instructions"] = "New defaults"
             path.write_text(json.dumps(template))
             with override_settings(TEMPLATE_CONFIG_DIR=root):
@@ -190,7 +192,7 @@ class AgentWorkflowTests(TestCase):
                 path.unlink()
                 services.sync_templates()
         saved = Agent.objects.get(pk=agent["id"])
-        self.assertEqual(saved.template_version, 1)
+        self.assertEqual(saved.template_version, agent["template_version"])
         self.assertEqual(saved.config, agent["config"])
 
     def test_model_details_are_synced_and_returned(self):
@@ -245,7 +247,7 @@ class AgentWorkflowTests(TestCase):
 
         cases = [
             ("anomaly-detection.json", "models", ["no-such-model"]),
-            ("anomaly-detection.json", "models", ["llama-3-3-70b"]),  # default poc-demo missing
+            ("anomaly-detection.json", "models", ["poc-demo"]),  # default Llama missing
             ("Model_config/qwen-2-5-72b.json", "benchmarks", [{"name": "MMLU", "score": 1}]),
             ("Model_config/qwen-2-5-72b.json", "benchmarks", [{"name": "MMLU", "score": "high", "source": "https://x.org"}]),
         ]

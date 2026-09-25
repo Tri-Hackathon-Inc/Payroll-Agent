@@ -119,3 +119,16 @@ test('answerQuestion still answers when the payroll context cannot be loaded', a
   assert.equal(answer.reply, 'No payroll data was provided.');
   assert.equal(answer.context.error, 'Payroll API down.');
 });
+
+test('generic webhook follow-ups pass restored session history before the new question', async () => {
+  let messages;
+  const url = await standIn(request => {
+    messages = request.body.messages;
+    return { json: { choices: [{ message: { content: 'A follow-up answer.' } }] } };
+  });
+  const history = [{ role: 'user', content: 'Review Luis.' }, { role: 'assistant', content: 'Please select his payrun.' }];
+  await answerQuestion({ agent: { name: 'General assistant' }, config: { instructions: 'Answer.' }, model,
+    question: 'Which one?', conversation: { history } }, { env: { HF_TOKEN: 'test', HF_INFERENCE_BASE_URL: url } });
+  assert.deepEqual(messages.slice(1, 3), history);
+  assert.match(messages.at(-1).content, /Which one\?/);
+});

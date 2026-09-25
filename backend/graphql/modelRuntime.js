@@ -5,7 +5,9 @@
 const HF_ROUTER_URL = 'https://router.huggingface.co/v1';
 const PROVIDERS = new Set(['huggingface', 'openai-compatible']);
 
-class ModelUnavailable extends Error {}
+class ModelUnavailable extends Error {
+  constructor(message) { super(message); this.status = 502; }
+}
 
 // Why a model cannot be called right now, or null when it can.
 function unavailableReason(model, env = process.env) {
@@ -24,10 +26,11 @@ function upstreamError(status, detail) {
     404: 'the model is not served by any available provider',
     429: 'the provider rate limit was reached; try again shortly',
   }[status] || `the provider returned HTTP ${status}`;
-  return new ModelUnavailable(`Model call failed: ${reason}.${detail ? ` (${detail})` : ''}`);
+  // Upstream messages may echo credentials or payroll inputs; never return them.
+  return new ModelUnavailable(`Model call failed: ${reason}.`);
 }
 
-async function callModel(model, messages, { env = process.env, fetchImpl = fetch, timeoutMs } = {}) {
+async function callModel(model, messages, { env = process.env, fetchImpl = fetch, timeoutMs, responseFormat } = {}) {
   const reason = unavailableReason(model, env);
   if (reason) throw new ModelUnavailable(reason);
   const baseUrl = (env[model.endpointEnv] || HF_ROUTER_URL).replace(/\/+$/, '');
@@ -43,8 +46,10 @@ async function callModel(model, messages, { env = process.env, fetchImpl = fetch
         messages,
         temperature: parameters.temperature ?? 0.2,
         max_tokens: parameters.max_tokens ?? 1024,
+        ...(responseFormat ? { response_format: responseFormat } : {}),
       }),
       signal: AbortSignal.timeout(timeoutMs || Number(env.MODEL_TIMEOUT_MS) || 60000),
+      redirect: 'error',
     });
   } catch (error) {
     throw new ModelUnavailable(error.name === 'TimeoutError' ? 'Model call timed out.' : 'Model provider could not be reached.');
@@ -55,7 +60,8 @@ async function callModel(model, messages, { env = process.env, fetchImpl = fetch
     throw upstreamError(response.status, detail && String(detail).slice(0, 200));
   }
   const latencyMs = Math.round(performance.now() - started);
-  const text = body.choices?.[0]?.message?.content?.trim();
+  const content = body.choices?.[0]?.message?.content;
+  const text = typeof content === 'string' ? content.trim() : '';
   if (!text) throw new ModelUnavailable('Model returned an empty answer.');
   const completionTokens = body.usage?.completion_tokens ?? null;
   return {
@@ -71,4 +77,16 @@ async function callModel(model, messages, { env = process.env, fetchImpl = fetch
   };
 }
 
-module.exports = { callModel, unavailableReason, ModelUnavailable, HF_ROUTER_URL };
+// One client per request; credentials remain in server memory, never in agent configuration.
+class ChatModel {
+  constructor(configuration, dependencies = {}) {
+    this.configuration = configuration;
+    this.dependencies = dependencies;
+  }
+
+  generate(messages, options = {}) {
+    return callModel(this.configuration, messages, { ...this.dependencies, ...options });
+  }
+}
+
+module.exports = { ChatModel, callModel, unavailableReason, ModelUnavailable, HF_ROUTER_URL };

@@ -29,3 +29,22 @@ RUN npm ci
 COPY ui-payroll-agent/ ./
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Optional TriNet payroll API and UI. All targets use the repository root context.
+FROM node:22-bookworm-slim AS trinet-mock
+WORKDIR /app
+COPY backend/trinet_mock/package.json backend/trinet_mock/package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+COPY backend/trinet_mock/*.js backend/trinet_mock/schema.graphql backend/trinet_mock/schema.sql ./
+COPY backend/trinet_mock/seed ./seed
+EXPOSE 4100
+ENV HOST=0.0.0.0 PORT=4100
+CMD ["node", "--disable-warning=ExperimentalWarning", "server.js"]
+
+FROM node:22-alpine AS trinet-ui
+WORKDIR /app
+COPY ui-trinet-mock/package.json ui-trinet-mock/package-lock.json ./
+RUN npm ci
+COPY ui-trinet-mock/ ./
+EXPOSE 5174
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

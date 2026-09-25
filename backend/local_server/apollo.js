@@ -4,6 +4,7 @@ const { createRequire } = require('node:module');
 const graphqlRequire = createRequire(path.join(__dirname, '../graphql/package.json'));
 const settings = require('./apollo-settings.json');
 const http = require('node:http');
+const { randomBytes } = require('node:crypto');
 const { ApolloServer, HeaderMap } = graphqlRequire('@apollo/server');
 const { ApolloServerPluginLandingPageLocalDefault } = graphqlRequire('@apollo/server/plugin/landingPage/default');
 const { createGrpcDataSource } = require('./grpc-client');
@@ -57,7 +58,11 @@ async function main() {
     await server.start();
     const httpServer = http.createServer(async (req, res) => {
       const url = new URL(req.url, 'http://localhost');
-      const context = { dataSources: { grpc }, context: { headers: req.headers } };
+      // Bind session IDs to an opaque browser cookie as well as the domain and agent.
+      const cookieOwner = req.headers.cookie?.match(/(?:^|;\s*)payroll_client=([a-f0-9]{64})(?:;|$)/)?.[1];
+      const sessionOwner = cookieOwner || randomBytes(32).toString('hex');
+      if (!cookieOwner) res.setHeader('Set-Cookie', `payroll_client=${sessionOwner}; HttpOnly; SameSite=Lax; Path=/`);
+      const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner } };
       try {
         if (isWebhookRequest(url.pathname)) await handleWebhook(req, res, url.pathname, context);
         else await handleGraphQL(server, req, res, url, context);

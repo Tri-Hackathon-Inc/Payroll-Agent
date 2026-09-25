@@ -1,0 +1,23 @@
+# From the repository root: docker compose -f docker/docker-compose.yaml -f docker/docker-compose.dev.yaml up --build
+services:
+  backend:
+    volumes:
+      - ../backend/registry:/app/registry:ro
+      - ../backend/templates:/app/templates:ro
+      - ../backend/local_server:/app/local_server:ro
+      - ../backend/graphql/aistudio.js:/app/graphql/aistudio.js:ro
+      - ../backend/graphql/client.js:/app/graphql/client.js:ro
+      - ../backend/graphql/webhook.js:/app/graphql/webhook.js:ro
+      - ../backend/graphql/modelRuntime.js:/app/graphql/modelRuntime.js:ro
+      - ../backend/graphql/payrunContext.js:/app/graphql/payrunContext.js:ro
+      - ../backend/graphql/agentPrompt.js:/app/graphql/agentPrompt.js:ro
+      - ../backend/graphql/anomalyPreprocessor.js:/app/graphql/anomalyPreprocessor.js:ro
+      - ../backend/graphql/anomalyPostprocessor.js:/app/graphql/anomalyPostprocessor.js:ro
+      - ../backend/graphql/anomalyPipeline.js:/app/graphql/anomalyPipeline.js:ro
+      - ../backend/graphql/redisStore.js:/app/graphql/redisStore.js:ro
+      - ../backend/graphql/rag:/app/graphql/rag:ro
+  ui:
+    volumes:
+      - ../ui-payroll-agent/src:/app/src:ro
+      - ../ui-payroll-agent/mock:/app/mock:ro
+      - ../ui-payroll-agent/graphql:/app/graphql:ro

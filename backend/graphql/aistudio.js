@@ -1,5 +1,6 @@
 const path = require('node:path');
 const { createRpcResolver, encodeStruct, decodeStruct, jsonResolver } = require('./client');
+const { withConversation, failure } = require('./redisStore');
 
 const catalogRpc = {
   protoPath: path.join(__dirname, '../registry/proto/templates.proto'),
@@ -75,8 +76,11 @@ const typeDefs = `
     domainName: String!
     message: String!
     history: [ChatMessageInput!]
+    sessionId: String
+    requestId: String
+    context: JSON
   }
-  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean! }
+  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
   type Mutation {
     chatAgent(input: ChatAgentInput!): ChatReply!
     createAgent(input: CreateAgentInput!): Agent!
@@ -105,10 +109,26 @@ const resolvers = {
       value => value.agents || []),
   },
   Mutation: {
-    chatAgent: rpcResolver('ChatAgent', ({ input }) => ({
-      agent_id: input.agentId, domain_name: input.domainName,
-      message: input.message, history: input.history || [],
-    })),
+    chatAgent: async (root, { input }, context) => withConversation({
+      sessionId: input.sessionId, requestId: input.requestId, question: input.message, history: input.history || [],
+      scope: { domainName: input.domainName, agentId: input.agentId, channel: 'studio', owner: context.context?.sessionOwner },
+      context: input.context || {},
+    }, async conversation => {
+      if (conversation.context?.payrunId) {
+        const agents = await resolvers.Query.getServiceAgentRegistry(null, { domainName: input.domainName }, context);
+        const agent = agents.find(item => item.id === input.agentId);
+        if (!agent) throw failure('Agent not found in this domain.', 400);
+        const { answerQuestion, agentModel } = require('./webhook');
+        const config = resolvers.Agent.config(agent), model = await agentModel(agent, config, context);
+        const { focus, ...result } = await answerQuestion({ agent, config, model, question: input.message,
+          invocation: { ...conversation.context, page: 'payrun' }, domainName: input.domainName, conversation });
+        return { focus, answer: { agent_id: agent.id, model_id: model?.modelId || config.model,
+          output: result.reply, demo: false, retrieval: result.retrieval, analysis: result.analysis } };
+      }
+      const invoke = rpcResolver('ChatAgent', () => ({ agent_id: input.agentId, domain_name: input.domainName,
+        message: input.message, history: conversation.history }));
+      return { answer: await invoke(root, {}, context) };
+    }),
     createAgent: rpcResolver('CreateAgent', ({ input }) => ({
       domain_name: input.domainName, template_id: input.templateId,
       name: input.name, config: encodeStruct(input.config),

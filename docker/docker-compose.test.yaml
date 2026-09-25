@@ -1,6 +1,22 @@
 # Isolated MySQL stack without published ports or persistent database data.
 name: payroll-api-test
 services:
+  redis:
+    extends:
+      file: docker-compose.yaml
+      service: redis
+    volumes: !reset []
+    tmpfs:
+      - /data
+    restart: "no"
+  vector-db:
+    extends:
+      file: docker-compose.yaml
+      service: vector-db
+    volumes: !reset []
+    tmpfs:
+      - /var/lib/postgresql/data
+    restart: "no"
   db:
     extends:
       file: docker-compose.yaml
@@ -14,6 +30,9 @@ services:
       file: docker-compose.yaml
       service: backend
     ports: !reset []
+    volumes: !reset []
+    tmpfs:
+      - /models
     restart: "no"
   ui:
     extends:

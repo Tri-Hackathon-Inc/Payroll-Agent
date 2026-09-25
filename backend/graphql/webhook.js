@@ -2,11 +2,14 @@
 // context describes where the host app invoked the agent, e.g. { page: 'payrun', payrunId }.
 // Looks the agent up through the same gRPC resolvers as GraphQL. When the agent's model can be
 // called (see modelRuntime), the question is answered with the payrun as context; otherwise the
-// reply acknowledges the question with the agent's setup.
+// reply acknowledges the question with the agent's setup. Anomaly Detection instead returns
+// calculated employee history comparisons with an explicit model status.
 const { resolvers } = require('./aistudio');
 const { buildMessages } = require('./agentPrompt');
 const { callModel, unavailableReason, ModelUnavailable } = require('./modelRuntime');
 const { loadPayrunContext } = require('./payrunContext');
+const { AnomalyDetectionPipeline } = require('./anomalyPipeline');
+const { withConversation } = require('./redisStore');
 
 const WEBHOOK_PATH = /^\/webhook\/([^/]+)\/([^/]+)\/?$/;
 const MAX_BODY = 64 * 1024;
@@ -46,7 +49,15 @@ async function agentModel(agent, config, context) {
 
 // Answers with the model when it is connected; otherwise acknowledges. deps allows tests to
 // replace the environment, fetch, and the payroll context loader.
-async function answerQuestion({ agent, config, model, question, invocation }, deps = {}) {
+async function answerQuestion({ agent, config, model, question, invocation, domainName, conversation }, deps = {}) {
+  const env = deps.env || process.env;
+  if (invocation?.page === 'payrun' && env.RAG_ENABLED !== 'false' && (env.REDIS_URL || deps.vectorStore)) {
+    const { PayrollRagPipeline } = require('./rag/pipeline');
+    return new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation });
+  }
+  if ((agent.template_id || agent.templateId) === 'anomaly-detection') {
+    return new AnomalyDetectionPipeline(deps).run({ config, model, question, invocation });
+  }
   const acknowledgement = `${agent.name} received your question: "${question}". `
     + `It is configured with model ${config.model} and service ${config.service}. `
     + describeContext(invocation);
@@ -59,7 +70,7 @@ async function answerQuestion({ agent, config, model, question, invocation }, de
   } catch (error) {
     contextError = error.message;
   }
-  const messages = buildMessages({ agentName: agent.name, config, question, context: payrunContext });
+  const messages = buildMessages({ agentName: agent.name, config, question, context: payrunContext, history: conversation?.history });
   const { text, metrics } = await callModel(model, messages, deps);
   return {
     reply: text,
@@ -77,8 +88,9 @@ async function handleWebhook(req, res, pathname, context) {
   if (req.method !== 'POST') return send(res, 405, { message: 'Use POST.' });
   const [, domainName, agentId] = pathname.match(WEBHOOK_PATH).map(decodeURIComponent);
   try {
-    const { question, context: invocation } = await readJson(req);
+    const { question, context: invocation, sessionId, requestId } = await readJson(req);
     if (typeof question !== 'string' || !question.trim()) return send(res, 400, { message: 'A question is required.' });
+    if (question.length > 10000) return send(res, 400, { message: 'Questions must be at most 10,000 characters.' });
 
     const agents = await resolvers.Query.getServiceAgentRegistry(null, { domainName }, context);
     const agent = agents.find(item => item.id === agentId);
@@ -86,7 +98,13 @@ async function handleWebhook(req, res, pathname, context) {
 
     const config = resolvers.Agent.config(agent);
     const model = await agentModel(agent, config, context);
-    const answer = await answerQuestion({ agent, config, model, question: question.trim(), invocation });
+    const answer = await withConversation({ sessionId, requestId, question: question.trim(),
+      scope: { domainName, agentId, channel: 'payroll', owner: context.context?.sessionOwner },
+      context: invocation || {} }, async conversation => {
+      const { focus, ...result } = await answerQuestion({ agent, config, model, question: question.trim(),
+        invocation: conversation.context, domainName, conversation });
+      return { answer: result, focus };
+    });
     return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...answer });
   } catch (error) {
     if (error instanceof ModelUnavailable) return send(res, 502, { message: error.message });
@@ -95,4 +113,4 @@ async function handleWebhook(req, res, pathname, context) {
   }
 }
 
-module.exports = { isWebhookRequest, handleWebhook, answerQuestion };
+module.exports = { isWebhookRequest, handleWebhook, answerQuestion, agentModel };
