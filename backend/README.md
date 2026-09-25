@@ -2,8 +2,9 @@
 
 The API is gRPC with a GraphQL adapter. There are no REST endpoints.
 One root `Dockerfile` builds the backend and UI targets. Docker Compose runs
-exactly three services: `backend` (Python gRPC plus Node GraphQL), `ui`, and `db`
-(MySQL 8.4). PostgreSQL is not used.
+three core services: `backend` (Python gRPC plus Node GraphQL and the agent
+webhook), `ui`, and `db` (MySQL 8.4), plus the temporary TriNet mock (`trinet-mock`
+payroll API and `trinet-ui`). PostgreSQL is not used.
 
 ## Start the stack
 
@@ -18,8 +19,10 @@ The default `docker compose up --build -d --wait` uses the same configuration.
 `--remove-orphans` removes the former standalone Apollo container during upgrade;
 it does not delete database volumes.
 
-- UI: http://localhost:5173/ai-studio
+- UI: http://localhost:5173/ai_studio/ (mount path set by `STUDIO_BASE_PATH`)
 - GraphQL and Sandbox: http://localhost:4000/
+- Agent webhook: `POST http://localhost:4000/webhook/<domain>/<agentId>` (see Agent model calls)
+- TriNet mock UI: http://localhost:5174/trinet/ and its payroll API http://localhost:4100/
 - gRPC: localhost:50051, service `ai_studio_agents.ai_studio`
 - MySQL: `db:3306` inside Docker; no host database port is published.
 
@@ -106,8 +109,24 @@ JSON in `templates/`, `templates/Model_config/`, and `templates/services.json`
 is the authoritative template/model/service catalog. `sync_templates` validates
 and projects it into the database. Agent configuration and template version are
 snapshots and survive catalog changes. Domain and service categories must match.
-External API execution, model execution, alerts, and webhook delivery are not
-implemented; this application saves and retrieves configuration.
+External API execution, alerts, and outbound webhook delivery are not implemented.
+Agents answer questions through the chat webhook when their model is connected
+(see Agent model calls); otherwise the webhook acknowledges the question.
+
+Each model file in `Model_config/` may carry an optional `details` object used by
+the UI model library: `license` (`open-source`, `commercial`, or `demo`), `vendor`,
+`context_window`, `description`, `strengths`, `best_for`, and `benchmarks`
+(published scores only, each `{name, score, source}` with an https source link).
+A template may list the models it offers in a top-level `models` array (it must
+include its default `config.model`); without it every enabled model is offered.
+Creating or updating an agent with a model its template does not offer is rejected.
+`services.json` also lists four demo notification/observability tools
+(`slack-webhook`, `email-notification`, `alert-manager`, `opensearch-sink`) with no
+live endpoint until their `*_BASE_URL` variables are set.
+
+`trinet_mock/` is a temporary GraphQL service that mocks the TriNet payroll API,
+with editable draft payruns. It isn't part of Agent Studio or the catalog service.
+See [trinet_mock/README.md](trinet_mock/README.md).
 
 MySQL persists in the `mysql_data` named volume. `docker compose down` retains
 it; `down -v` deletes it. The former SQLite `backend_data` volume is not deleted
@@ -122,6 +141,41 @@ Provision another domain with:
 ```bash
 docker compose exec backend python manage.py create_domain hr --label "Human Resources" --domain HR
 ```
+
+## Agent model calls
+
+The chat webhook (`POST /webhook/<domain>/<agentId>` with `{ question, context? }`,
+served by the backend's GraphQL process) answers with the agent's model when that
+model can be called; otherwise it replies with an acknowledgement that names what is
+missing. Code is in `graphql/`:
+
+| Step | File | What it does |
+| --- | --- | --- |
+| Pre-processing | `payrunContext.js` | When invoked on a payrun (`context.page = "payrun"`), loads that run and the previous completed run from the payroll API (`TRINET_API_URL`) as compact text, including hours, earnings, taxes, and all deductions |
+| Prompt | `agentPrompt.js` | Agent description and instructions, guardrails (answer only from the data, never change payroll), payroll data, question |
+| Model call | `modelRuntime.js` | OpenAI-compatible `chat/completions` request; measures latency and tokens/s; maps provider errors (bad token, no credits, rate limit, model not served) to clear messages |
+
+Models with provider `huggingface` use the Hugging Face router
+(`https://router.huggingface.co/v1`, override with `HF_INFERENCE_BASE_URL`) and the
+token in `HF_TOKEN`. Create a fine-grained User Access Token with the permission
+"Make calls to Inference Providers" and put `HF_TOKEN=...` in the root `.env`
+(git-ignored); only the backend container reads it and it is never sent to the
+browser. Free accounts get a small monthly credit; beyond it, usage is billed at the
+provider's rate.
+
+Successful replies add `model`, `metrics` (`latencyMs`, `promptTokens`,
+`completionTokens`, `tokensPerSecond`, `provider`), and `context` (`payrunId`,
+`characters`, `error`) to the JSON. `npm run test:webhook` in `graphql/` tests these
+modules against local stand-in servers. To compare models on the Evaluation suites
+(checks against the planted anomalies in payrun PR-2026-09-B, plus latency and
+tokens/s), with the stack up:
+
+```bash
+node scripts/benchmark-models.mjs --dry-run                    # planned calls only
+node scripts/benchmark-models.mjs --out docs/model-benchmark.md  # real, billed calls
+```
+
+Findings so far are in [docs/model-evaluation-findings.md](../docs/model-evaluation-findings.md).
 
 ## Development and checks
 

@@ -10,6 +10,48 @@ class CatalogError(Exception):
     pass
 
 
+MODEL_LICENSES = ("open-source", "commercial", "demo")
+
+
+def validate_model_details(details):
+    """Optional display metadata for the model library."""
+    if not isinstance(details, dict):
+        raise ValueError("Model details must be an object.")
+    if "license" in details and details["license"] not in MODEL_LICENSES:
+        raise ValueError(f"Model license must be one of {', '.join(MODEL_LICENSES)}.")
+    for field in ("description", "context_window"):
+        if field in details and not isinstance(details[field], str):
+            raise ValueError(f"Model {field} must be text.")
+    for field in ("strengths", "best_for"):
+        value = details.get(field, [])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"Model {field} must be a list of text.")
+    benchmarks = details.get("benchmarks", [])
+    if not isinstance(benchmarks, list):
+        raise ValueError("Model benchmarks must be a list.")
+    for benchmark in benchmarks:
+        # Published scores only, each traceable to its source.
+        if (
+            not isinstance(benchmark, dict)
+            or not isinstance(benchmark.get("name"), str)
+            or type(benchmark.get("score")) not in (int, float)
+            or not isinstance(benchmark.get("source"), str)
+            or not benchmark["source"].startswith("https://")
+        ):
+            raise ValueError("Benchmarks need a name, a numeric score, and an https source.")
+
+
+def validate_supported_models(template, model_configs):
+    supported = template.get("models", [])
+    enabled = {item["id"] for item in model_configs if item["enabled"]}
+    if not isinstance(supported, list) or not all(isinstance(item, str) for item in supported):
+        raise ValueError("Template models must be a list of model IDs.")
+    if any(item not in enabled for item in supported):
+        raise ValueError("Template models must reference enabled model configurations.")
+    if supported and template["config"]["model"] not in supported:
+        raise ValueError("The template's default model must be one of its models.")
+
+
 def load_catalog():
     root = settings.TEMPLATE_CONFIG_DIR
     try:
@@ -57,6 +99,7 @@ def load_catalog():
                         )
                     if not isinstance(entry.get("parameters"), dict):
                         raise ValueError("Model parameters must be an object.")
+                    validate_model_details(entry.get("details", {}))
                     for field in ("endpoint_env", "credential_env"):
                         value = entry.get(field, "")
                         if not isinstance(value, str) or (
@@ -97,6 +140,7 @@ def load_catalog():
             if not isinstance(template.get("description"), str):
                 raise ValueError("Template description must be text.")
             validate_config(template.get("config"), catalogs)
+            validate_supported_models(template, catalogs["model_configs"])
         return catalogs
     except (OSError, ValueError, TypeError, KeyError) as error:
         raise CatalogError(f"Invalid template catalog: {error}") from error

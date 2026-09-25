@@ -3,6 +3,12 @@
   "name": "General Query",
   "version": 1,
   "description": "Answer questions using attached payroll services.",
+  "models": [
+    "poc-demo",
+    "qwen-2-5-72b",
+    "llama-3-3-70b",
+    "bedrock-claude"
+  ],
   "config": {
     "description": "Answer questions using attached payroll services.",
     "instructions": "Answer from available payroll context and attached service data. State when information is missing.",

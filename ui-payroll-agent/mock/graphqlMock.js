@@ -79,12 +79,38 @@ export function createMockExecutor() {
     variableValues: request.variables, operationName: request.operationName })
 }
 
-export function graphqlMock() {
+const AGENTS_QUERY = 'query ($domainName: String!) { getServiceAgentRegistry(domainName: $domainName) { id name config } }'
+
+// Mirrors describeContext in backend/graphql/webhook.js.
+const describeContext = context => context?.page
+  ? `Invoked from the ${context.page} page${context.payrunId ? ` for payrun ${context.payrunId}` : ''}. ` : ''
+
+// Mock of the Apollo chat webhook: POST <webhookPath>/<domainName>/<agentId> with { question }.
+async function mockWebhook(execute, req, res) {
+  const send = (status, body) => { res.statusCode = status; res.end(JSON.stringify(body)) }
+  res.setHeader('Content-Type', 'application/json')
+  const [domainName, agentId] = req.url.split('?')[0].split('/').filter(Boolean).map(decodeURIComponent)
+  if (req.method !== 'POST' || !domainName || !agentId) return send(404, { message: 'Use POST /webhook/<domain>/<agentId>.' })
+  let body = ''
+  for await (const chunk of req) body += chunk
+  let question, context
+  try { ({ question, context } = JSON.parse(body || '{}')) } catch { return send(400, { message: 'Request body must be JSON.' }) }
+  if (typeof question !== 'string' || !question.trim()) return send(400, { message: 'A question is required.' })
+  const result = await execute({ query: AGENTS_QUERY, variables: { domainName } })
+  if (result.errors) return send(404, { message: result.errors[0].message })
+  const agent = result.data.getServiceAgentRegistry.find(item => item.id === agentId)
+  if (!agent) return send(404, { message: `Agent ${agentId} was not found for ${domainName}.` })
+  send(200, { agent: { id: agent.id, name: agent.name },
+    reply: `${agent.name} received your question: "${question.trim()}". It is configured with model ${agent.config.model} and service ${agent.config.service}. ${describeContext(context)}Agent execution is not active yet, so no answer was generated.` })
+}
+
+export function graphqlMock(path = '/graphql', webhookPath = '/webhook') {
   const execute = createMockExecutor()
   return {
     name: 'graphql-mock',
     configureServer(server) {
-      server.middlewares.use('/graphql', async (req, res) => {
+      server.middlewares.use(webhookPath, (req, res) => mockWebhook(execute, req, res))
+      server.middlewares.use(path, async (req, res) => {
         res.setHeader('Content-Type', 'application/json')
         try {
           let body = ''

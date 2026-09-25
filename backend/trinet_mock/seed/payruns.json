@@ -1,0 +1,1318 @@
+{
+  "payruns": [
+    {
+      "id": "PR-2026-09-B",
+      "name": "Sep 16 – 30, 2026",
+      "company": "Northwind Labs (sample)",
+      "frequency": "semi-monthly",
+      "currency": "USD",
+      "periodStart": "2026-09-16",
+      "periodEnd": "2026-09-30",
+      "payDate": "2026-10-05",
+      "status": "pending-approval",
+      "totals": {
+        "employees": 10,
+        "gross": 62504,
+        "taxes": 14228.72,
+        "deductions": 3664.88,
+        "employerTaxes": 4640.04,
+        "net": 44610.4
+      },
+      "version": 1,
+      "lines": [
+        {
+          "lineId": "PR-2026-09-B-L01",
+          "employeeId": "E1001",
+          "name": "Maya Chen",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 5000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 5000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 5000,
+          "taxes": {
+            "federal": 600,
+            "state": 250,
+            "socialSecurity": 310,
+            "medicare": 72.5
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 300,
+            "garnishment": 0
+          },
+          "net": 3287.5,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L02",
+          "employeeId": "E1002",
+          "name": "Luis Ortega",
+          "department": "Operations",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 32,
+          "hours": {
+            "regular": 80,
+            "overtime": 46
+          },
+          "earnings": {
+            "regular": 2560,
+            "overtime": 2208,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4768,
+          "taxes": {
+            "federal": 572.16,
+            "state": 238.4,
+            "socialSecurity": 295.62,
+            "medicare": 69.14
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 190.72,
+            "garnishment": 0
+          },
+          "net": 3251.96,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L03",
+          "employeeId": "E1003",
+          "name": "Priya Nair",
+          "department": "Finance",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 4000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4000,
+          "taxes": {
+            "federal": 480,
+            "state": 200,
+            "socialSecurity": 248,
+            "medicare": 58
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 200,
+            "garnishment": 0
+          },
+          "net": 2634,
+          "paymentMethod": "Live Check"
+        },
+        {
+          "lineId": "PR-2026-09-B-L04",
+          "employeeId": "E1004",
+          "name": "Daniel Brooks",
+          "department": "Sales",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3500,
+            "overtime": 0,
+            "bonus": 25000,
+            "reimbursement": 0
+          },
+          "gross": 28500,
+          "taxes": {
+            "federal": 3420,
+            "state": 1425,
+            "socialSecurity": 1767,
+            "medicare": 413.25
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 855,
+            "garnishment": 0
+          },
+          "net": 20469.75,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L05",
+          "employeeId": "E1005",
+          "name": "Aisha Karim",
+          "department": "Support",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 26,
+          "hours": {
+            "regular": 80,
+            "overtime": 3
+          },
+          "earnings": {
+            "regular": 2080,
+            "overtime": 117,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2197,
+          "taxes": {
+            "federal": 263.64,
+            "state": 109.85,
+            "socialSecurity": 136.21,
+            "medicare": 31.86
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 65.91,
+            "garnishment": 0
+          },
+          "net": 1469.53,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L06",
+          "employeeId": "E1005",
+          "name": "Aisha Karim",
+          "department": "Support",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 26,
+          "hours": {
+            "regular": 80,
+            "overtime": 3
+          },
+          "earnings": {
+            "regular": 2080,
+            "overtime": 117,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2197,
+          "taxes": {
+            "federal": 263.64,
+            "state": 109.85,
+            "socialSecurity": 136.21,
+            "medicare": 31.86
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 65.91,
+            "garnishment": 0
+          },
+          "net": 1469.53,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L07",
+          "employeeId": "E1006",
+          "name": "Tom Becker",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "terminated",
+          "terminationDate": "2026-09-12",
+          "periodSalary": 4500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4500,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4500,
+          "taxes": {
+            "federal": 540,
+            "state": 225,
+            "socialSecurity": 279,
+            "medicare": 65.25
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 225,
+            "garnishment": 0
+          },
+          "net": 2985.75,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L08",
+          "employeeId": "E1007",
+          "name": "Grace Liu",
+          "department": "People Ops",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3250,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3250,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 3250,
+          "taxes": {
+            "federal": 390,
+            "state": 162.5,
+            "socialSecurity": 201.5,
+            "medicare": 47.13
+          },
+          "deductions": {
+            "health": 0,
+            "retirement401k": 130,
+            "garnishment": 0
+          },
+          "net": 2318.87,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-B-L09",
+          "employeeId": "E1008",
+          "name": "Sam Patel",
+          "department": "Warehouse",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 24,
+          "hours": {
+            "regular": 80,
+            "overtime": 2
+          },
+          "earnings": {
+            "regular": 1920,
+            "overtime": 72,
+            "bonus": 0,
+            "reimbursement": 1850
+          },
+          "gross": 3842,
+          "taxes": {
+            "federal": 239.04,
+            "state": 99.6,
+            "socialSecurity": 123.5,
+            "medicare": 28.88
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 39.84,
+            "garnishment": 0
+          },
+          "net": 3191.14,
+          "paymentMethod": "Live Check"
+        },
+        {
+          "lineId": "PR-2026-09-B-L10",
+          "employeeId": "E1009",
+          "name": "Jordan Reyes",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "new-hire",
+          "hireDate": "2026-09-16",
+          "periodSalary": 4250,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4250,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4250,
+          "taxes": {
+            "federal": 0,
+            "state": 0,
+            "socialSecurity": 263.5,
+            "medicare": 61.63
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 212.5,
+            "garnishment": 0
+          },
+          "net": 3532.37,
+          "paymentMethod": "Direct Deposit"
+        }
+      ]
+    },
+    {
+      "id": "PR-2026-09-A",
+      "name": "Sep 1 – 15, 2026",
+      "company": "Northwind Labs (sample)",
+      "frequency": "semi-monthly",
+      "currency": "USD",
+      "periodStart": "2026-09-01",
+      "periodEnd": "2026-09-15",
+      "payDate": "2026-09-18",
+      "status": "completed",
+      "totals": {
+        "employees": 8,
+        "gross": 27946,
+        "taxes": 6888.69,
+        "deductions": 2429.44,
+        "employerTaxes": 2137.87,
+        "net": 18627.87
+      },
+      "version": 1,
+      "lines": [
+        {
+          "lineId": "PR-2026-09-A-L01",
+          "employeeId": "E1001",
+          "name": "Maya Chen",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 5000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 5000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 5000,
+          "taxes": {
+            "federal": 600,
+            "state": 250,
+            "socialSecurity": 310,
+            "medicare": 72.5
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 300,
+            "garnishment": 0
+          },
+          "net": 3287.5,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-A-L02",
+          "employeeId": "E1002",
+          "name": "Luis Ortega",
+          "department": "Operations",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 32,
+          "hours": {
+            "regular": 80,
+            "overtime": 6
+          },
+          "earnings": {
+            "regular": 2560,
+            "overtime": 288,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2848,
+          "taxes": {
+            "federal": 341.76,
+            "state": 142.4,
+            "socialSecurity": 176.58,
+            "medicare": 41.3
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 113.92,
+            "garnishment": 0
+          },
+          "net": 1882.04,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-A-L03",
+          "employeeId": "E1003",
+          "name": "Priya Nair",
+          "department": "Finance",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 4000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4000,
+          "taxes": {
+            "federal": 480,
+            "state": 200,
+            "socialSecurity": 248,
+            "medicare": 58
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 200,
+            "garnishment": 0
+          },
+          "net": 2634,
+          "paymentMethod": "Live Check"
+        },
+        {
+          "lineId": "PR-2026-09-A-L04",
+          "employeeId": "E1004",
+          "name": "Daniel Brooks",
+          "department": "Sales",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3500,
+            "overtime": 0,
+            "bonus": 620,
+            "reimbursement": 0
+          },
+          "gross": 4120,
+          "taxes": {
+            "federal": 494.4,
+            "state": 206,
+            "socialSecurity": 255.44,
+            "medicare": 59.74
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 123.6,
+            "garnishment": 0
+          },
+          "net": 2830.82,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-A-L05",
+          "employeeId": "E1005",
+          "name": "Aisha Karim",
+          "department": "Support",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 26,
+          "hours": {
+            "regular": 80,
+            "overtime": 4
+          },
+          "earnings": {
+            "regular": 2080,
+            "overtime": 156,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2236,
+          "taxes": {
+            "federal": 268.32,
+            "state": 111.8,
+            "socialSecurity": 138.63,
+            "medicare": 32.42
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 67.08,
+            "garnishment": 0
+          },
+          "net": 1497.75,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-A-L06",
+          "employeeId": "E1006",
+          "name": "Tom Becker",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "terminated",
+          "terminationDate": "2026-09-12",
+          "periodSalary": 4500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4500,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4500,
+          "taxes": {
+            "federal": 540,
+            "state": 225,
+            "socialSecurity": 279,
+            "medicare": 65.25
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 225,
+            "garnishment": 0
+          },
+          "net": 2985.75,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-A-L07",
+          "employeeId": "E1007",
+          "name": "Grace Liu",
+          "department": "People Ops",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3250,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3250,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 3250,
+          "taxes": {
+            "federal": 390,
+            "state": 162.5,
+            "socialSecurity": 201.5,
+            "medicare": 47.13
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 130,
+            "garnishment": 0
+          },
+          "net": 2168.87,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-09-A-L08",
+          "employeeId": "E1008",
+          "name": "Sam Patel",
+          "department": "Warehouse",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 24,
+          "hours": {
+            "regular": 80,
+            "overtime": 2
+          },
+          "earnings": {
+            "regular": 1920,
+            "overtime": 72,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 1992,
+          "taxes": {
+            "federal": 239.04,
+            "state": 99.6,
+            "socialSecurity": 123.5,
+            "medicare": 28.88
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 39.84,
+            "garnishment": 0
+          },
+          "net": 1341.14,
+          "paymentMethod": "Live Check"
+        }
+      ]
+    },
+    {
+      "id": "PR-2026-08-B",
+      "name": "Aug 16 – 31, 2026",
+      "company": "Northwind Labs (sample)",
+      "frequency": "semi-monthly",
+      "currency": "USD",
+      "periodStart": "2026-08-16",
+      "periodEnd": "2026-08-31",
+      "payDate": "2026-09-04",
+      "status": "completed",
+      "totals": {
+        "employees": 8,
+        "gross": 27892,
+        "taxes": 6866.75,
+        "deductions": 2425.21,
+        "employerTaxes": 2131.06,
+        "net": 18600.04
+      },
+      "version": 1,
+      "lines": [
+        {
+          "lineId": "PR-2026-08-B-L01",
+          "employeeId": "E1001",
+          "name": "Maya Chen",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 5000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 5000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 5000,
+          "taxes": {
+            "federal": 600,
+            "state": 250,
+            "socialSecurity": 310,
+            "medicare": 72.5
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 300,
+            "garnishment": 0
+          },
+          "net": 3287.5,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-B-L02",
+          "employeeId": "E1002",
+          "name": "Luis Ortega",
+          "department": "Operations",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 32,
+          "hours": {
+            "regular": 80,
+            "overtime": 2
+          },
+          "earnings": {
+            "regular": 2560,
+            "overtime": 96,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2656,
+          "taxes": {
+            "federal": 318.72,
+            "state": 132.8,
+            "socialSecurity": 164.67,
+            "medicare": 38.51
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 106.24,
+            "garnishment": 0
+          },
+          "net": 1745.06,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-B-L03",
+          "employeeId": "E1003",
+          "name": "Priya Nair",
+          "department": "Finance",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 4000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4000,
+          "taxes": {
+            "federal": 480,
+            "state": 200,
+            "socialSecurity": 248,
+            "medicare": 58
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 200,
+            "garnishment": 0
+          },
+          "net": 2634,
+          "paymentMethod": "Live Check"
+        },
+        {
+          "lineId": "PR-2026-08-B-L04",
+          "employeeId": "E1004",
+          "name": "Daniel Brooks",
+          "department": "Sales",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3500,
+            "overtime": 0,
+            "bonus": 850,
+            "reimbursement": 0
+          },
+          "gross": 4350,
+          "taxes": {
+            "federal": 522,
+            "state": 217.5,
+            "socialSecurity": 269.7,
+            "medicare": 63.08
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 130.5,
+            "garnishment": 0
+          },
+          "net": 2997.22,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-B-L05",
+          "employeeId": "E1005",
+          "name": "Aisha Karim",
+          "department": "Support",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 26,
+          "hours": {
+            "regular": 78,
+            "overtime": 3
+          },
+          "earnings": {
+            "regular": 2028,
+            "overtime": 117,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2145,
+          "taxes": {
+            "federal": 257.4,
+            "state": 107.25,
+            "socialSecurity": 132.99,
+            "medicare": 31.1
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 64.35,
+            "garnishment": 0
+          },
+          "net": 1431.91,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-B-L06",
+          "employeeId": "E1006",
+          "name": "Tom Becker",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 4500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4500,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4500,
+          "taxes": {
+            "federal": 540,
+            "state": 225,
+            "socialSecurity": 279,
+            "medicare": 65.25
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 225,
+            "garnishment": 0
+          },
+          "net": 2985.75,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-B-L07",
+          "employeeId": "E1007",
+          "name": "Grace Liu",
+          "department": "People Ops",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3250,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3250,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 3250,
+          "taxes": {
+            "federal": 390,
+            "state": 162.5,
+            "socialSecurity": 201.5,
+            "medicare": 47.13
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 130,
+            "garnishment": 0
+          },
+          "net": 2168.87,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-B-L08",
+          "employeeId": "E1008",
+          "name": "Sam Patel",
+          "department": "Warehouse",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 24,
+          "hours": {
+            "regular": 80,
+            "overtime": 1
+          },
+          "earnings": {
+            "regular": 1920,
+            "overtime": 36,
+            "bonus": 0,
+            "reimbursement": 35
+          },
+          "gross": 1991,
+          "taxes": {
+            "federal": 234.72,
+            "state": 97.8,
+            "socialSecurity": 121.27,
+            "medicare": 28.36
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 39.12,
+            "garnishment": 0
+          },
+          "net": 1349.73,
+          "paymentMethod": "Live Check"
+        }
+      ]
+    },
+    {
+      "id": "PR-2026-08-A",
+      "name": "Aug 1 – 15, 2026",
+      "company": "Northwind Labs (sample)",
+      "frequency": "semi-monthly",
+      "currency": "USD",
+      "periodStart": "2026-08-01",
+      "periodEnd": "2026-08-15",
+      "payDate": "2026-08-20",
+      "status": "completed",
+      "totals": {
+        "employees": 8,
+        "gross": 27780,
+        "taxes": 6847.77,
+        "deductions": 2424.22,
+        "employerTaxes": 2125.17,
+        "net": 18508.01
+      },
+      "version": 1,
+      "lines": [
+        {
+          "lineId": "PR-2026-08-A-L01",
+          "employeeId": "E1001",
+          "name": "Maya Chen",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 5000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 5000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 5000,
+          "taxes": {
+            "federal": 600,
+            "state": 250,
+            "socialSecurity": 310,
+            "medicare": 72.5
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 300,
+            "garnishment": 0
+          },
+          "net": 3287.5,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-A-L02",
+          "employeeId": "E1002",
+          "name": "Luis Ortega",
+          "department": "Operations",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 32,
+          "hours": {
+            "regular": 80,
+            "overtime": 4
+          },
+          "earnings": {
+            "regular": 2560,
+            "overtime": 192,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2752,
+          "taxes": {
+            "federal": 330.24,
+            "state": 137.6,
+            "socialSecurity": 170.62,
+            "medicare": 39.9
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 110.08,
+            "garnishment": 0
+          },
+          "net": 1813.56,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-A-L03",
+          "employeeId": "E1003",
+          "name": "Priya Nair",
+          "department": "Finance",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 4000,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4000,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4000,
+          "taxes": {
+            "federal": 480,
+            "state": 200,
+            "socialSecurity": 248,
+            "medicare": 58
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 200,
+            "garnishment": 0
+          },
+          "net": 2634,
+          "paymentMethod": "Live Check"
+        },
+        {
+          "lineId": "PR-2026-08-A-L04",
+          "employeeId": "E1004",
+          "name": "Daniel Brooks",
+          "department": "Sales",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3500,
+            "overtime": 0,
+            "bonus": 700,
+            "reimbursement": 0
+          },
+          "gross": 4200,
+          "taxes": {
+            "federal": 504,
+            "state": 210,
+            "socialSecurity": 260.4,
+            "medicare": 60.9
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 126,
+            "garnishment": 0
+          },
+          "net": 2888.7,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-A-L05",
+          "employeeId": "E1005",
+          "name": "Aisha Karim",
+          "department": "Support",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 26,
+          "hours": {
+            "regular": 80,
+            "overtime": 2
+          },
+          "earnings": {
+            "regular": 2080,
+            "overtime": 78,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 2158,
+          "taxes": {
+            "federal": 258.96,
+            "state": 107.9,
+            "socialSecurity": 133.8,
+            "medicare": 31.29
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 64.74,
+            "garnishment": 0
+          },
+          "net": 1441.31,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-A-L06",
+          "employeeId": "E1006",
+          "name": "Tom Becker",
+          "department": "Engineering",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 4500,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 4500,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 4500,
+          "taxes": {
+            "federal": 540,
+            "state": 225,
+            "socialSecurity": 279,
+            "medicare": 65.25
+          },
+          "deductions": {
+            "health": 180,
+            "retirement401k": 225,
+            "garnishment": 0
+          },
+          "net": 2985.75,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-A-L07",
+          "employeeId": "E1007",
+          "name": "Grace Liu",
+          "department": "People Ops",
+          "payType": "salary",
+          "employmentStatus": "active",
+          "periodSalary": 3250,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 3250,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 3250,
+          "taxes": {
+            "federal": 390,
+            "state": 162.5,
+            "socialSecurity": 201.5,
+            "medicare": 47.13
+          },
+          "deductions": {
+            "health": 150,
+            "retirement401k": 130,
+            "garnishment": 0
+          },
+          "net": 2168.87,
+          "paymentMethod": "Direct Deposit"
+        },
+        {
+          "lineId": "PR-2026-08-A-L08",
+          "employeeId": "E1008",
+          "name": "Sam Patel",
+          "department": "Warehouse",
+          "payType": "hourly",
+          "employmentStatus": "active",
+          "hourlyRate": 24,
+          "hours": {
+            "regular": 80,
+            "overtime": 0
+          },
+          "earnings": {
+            "regular": 1920,
+            "overtime": 0,
+            "bonus": 0,
+            "reimbursement": 0
+          },
+          "gross": 1920,
+          "taxes": {
+            "federal": 230.4,
+            "state": 96,
+            "socialSecurity": 119.04,
+            "medicare": 27.84
+          },
+          "deductions": {
+            "health": 120,
+            "retirement401k": 38.4,
+            "garnishment": 0
+          },
+          "net": 1288.32,
+          "paymentMethod": "Live Check"
+        }
+      ]
+    }
+  ],
+  "employees": [
+    {
+      "employeeId": "E1001",
+      "name": "Maya Chen",
+      "department": "Engineering",
+      "payType": "salary",
+      "retirementRate": 0.06,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1002",
+      "name": "Luis Ortega",
+      "department": "Operations",
+      "payType": "hourly",
+      "retirementRate": 0.04,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1003",
+      "name": "Priya Nair",
+      "department": "Finance",
+      "payType": "salary",
+      "retirementRate": 0.05,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1004",
+      "name": "Daniel Brooks",
+      "department": "Sales",
+      "payType": "salary",
+      "retirementRate": 0.03,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1005",
+      "name": "Aisha Karim",
+      "department": "Support",
+      "payType": "hourly",
+      "retirementRate": 0.03,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1006",
+      "name": "Tom Becker",
+      "department": "Engineering",
+      "payType": "salary",
+      "retirementRate": 0.05,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1007",
+      "name": "Grace Liu",
+      "department": "People Ops",
+      "payType": "salary",
+      "retirementRate": 0.04,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1008",
+      "name": "Sam Patel",
+      "department": "Warehouse",
+      "payType": "hourly",
+      "retirementRate": 0.02,
+      "withholding": {
+        "federal": 0.12,
+        "state": 0.05
+      }
+    },
+    {
+      "employeeId": "E1009",
+      "name": "Jordan Reyes",
+      "department": "Engineering",
+      "payType": "salary",
+      "retirementRate": 0.05,
+      "withholding": {
+        "federal": 0,
+        "state": 0
+      }
+    }
+  ]
+}

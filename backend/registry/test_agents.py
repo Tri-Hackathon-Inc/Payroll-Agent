@@ -79,6 +79,13 @@ class AgentWorkflowTests(TestCase):
             with self.subTest(value=value), self.assertRaises(services.InvalidInput):
                 services.list_templates(value)
 
+    def test_template_list_carries_the_same_options_as_details(self):
+        for listed in services.get_domain_agents_templates("payroll-services"):
+            detail = services.get_template(listed["id"])
+            self.assertEqual(listed["model_options"], detail["model_options"])
+            self.assertEqual(listed["service_options"], detail["service_options"])
+            self.assertTrue(listed["service_options"])
+
     def test_create_merges_defaults_and_persists_configuration(self):
         agent = self.create(
             {
@@ -185,6 +192,74 @@ class AgentWorkflowTests(TestCase):
         saved = Agent.objects.get(pk=agent["id"])
         self.assertEqual(saved.template_version, 1)
         self.assertEqual(saved.config, agent["config"])
+
+    def test_model_details_are_synced_and_returned(self):
+        models = {item["id"]: item for item in services.list_model_configs()}
+        self.assertEqual(models["qwen-2-5-72b"]["details"]["license"], "open-source")
+        self.assertEqual(models["mistral-large"]["details"]["license"], "commercial")
+        options = services.get_template("summarizer")["model_options"]
+        self.assertIn("qwen-2-5-72b", [item["id"] for item in options])
+
+    def test_invalid_model_details_are_rejected(self):
+        from .catalog import CatalogError, load_catalog
+
+        for details in ({"license": "free"}, {"strengths": "fast"}, []):
+            with TemporaryDirectory() as directory:
+                root = Path(directory) / "templates"
+                shutil.copytree(settings.TEMPLATE_CONFIG_DIR, root)
+                path = root / "Model_config" / "poc-demo.json"
+                model = json.loads(path.read_text())
+                model["details"] = details
+                path.write_text(json.dumps(model))
+                with override_settings(TEMPLATE_CONFIG_DIR=root):
+                    with self.assertRaises(CatalogError):
+                        load_catalog()
+
+    def test_templates_offer_only_their_supported_models(self):
+        offered = {
+            item["id"]: [model["id"] for model in item["model_options"]]
+            for item in services.get_domain_agents_templates("payroll-services")
+        }
+        self.assertEqual(
+            offered["anomaly-detection"],
+            ["bedrock-claude", "llama-3-3-70b", "mistral-large", "poc-demo"],
+        )
+        self.assertNotIn("qwen-2-5-72b", offered["anomaly-detection"])
+        self.assertIn("qwen-2-5-72b", offered["summarizer"])
+
+    def test_agents_cannot_use_a_model_the_template_does_not_offer(self):
+        with self.assertRaisesMessage(services.InvalidInput, "not offered by this template"):
+            self.create({"model": "qwen-2-5-72b"})
+        agent = self.create({"model": "llama-3-3-70b"})
+        self.assertEqual(agent["config"]["model"], "llama-3-3-70b")
+        with self.assertRaisesMessage(services.InvalidInput, "not offered by this template"):
+            services.update_agent(agent["id"], "payroll-services", "Payroll review", {"model": "qwen-2-5-72b"})
+
+    def test_published_benchmarks_have_sources(self):
+        qwen = {item["id"]: item for item in services.list_model_configs()}["qwen-2-5-72b"]
+        self.assertTrue(qwen["details"]["benchmarks"])
+        self.assertTrue(all(item["source"].startswith("https://") for item in qwen["details"]["benchmarks"]))
+
+    def test_invalid_template_models_and_benchmarks_are_rejected(self):
+        from .catalog import CatalogError, load_catalog
+
+        cases = [
+            ("anomaly-detection.json", "models", ["no-such-model"]),
+            ("anomaly-detection.json", "models", ["llama-3-3-70b"]),  # default poc-demo missing
+            ("Model_config/qwen-2-5-72b.json", "benchmarks", [{"name": "MMLU", "score": 1}]),
+            ("Model_config/qwen-2-5-72b.json", "benchmarks", [{"name": "MMLU", "score": "high", "source": "https://x.org"}]),
+        ]
+        for file, field, value in cases:
+            with TemporaryDirectory() as directory:
+                root = Path(directory) / "templates"
+                shutil.copytree(settings.TEMPLATE_CONFIG_DIR, root)
+                path = root / file
+                data = json.loads(path.read_text())
+                (data["details"] if field == "benchmarks" else data)[field] = value
+                path.write_text(json.dumps(data))
+                with override_settings(TEMPLATE_CONFIG_DIR=root):
+                    with self.assertRaises(CatalogError):
+                        load_catalog()
 
     def test_no_django_http_routes(self):
         self.assertFalse(hasattr(settings, "ROOT_URLCONF"))

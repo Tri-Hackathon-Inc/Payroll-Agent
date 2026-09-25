@@ -1,0 +1,106 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+
+:root { font-family: 'DM Sans', sans-serif; color: #1f2933; background: #f7f8fa; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+
+/* TriNet payroll screens, styled after rfcs/payroll-ui-reference */
+.tn-app { --tn-orange: #c4501b; --tn-orange-dark: #a8431a; --tn-blue: #1f5fd6; --tn-ink: #1f2933; --tn-muted: #5b6573; --tn-line: #e3e6ea;
+  min-height: 100vh; background: #f7f8fa; color: var(--tn-ink); }
+.tn-header { display: flex; align-items: center; gap: 10px; height: 64px; padding: 0 48px; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.12); position: sticky; top: 0; z-index: 10; }
+.tn-logo { font: 700 22px/1 'DM Sans', sans-serif; color: var(--tn-orange); letter-spacing: -.02em; }
+.tn-mock-tag { padding: 2px 8px; border-radius: 99px; background: #fef3c7; color: #92400e; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.tn-main { padding: 40px 24px 96px; }
+.tn-page { max-width: 924px; margin: 0 auto; }
+.tn-page-wide { max-width: 1690px; }
+.tn-breadcrumb { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; font-size: 14px; }
+.tn-breadcrumb i { font-size: 10px; color: #9aa3ae; }
+.tn-title { font-size: 22px; font-weight: 700; }
+.tn-subtitle { font-size: 19px; font-weight: 600; }
+.tn-card { background: #fff; border: 1px solid var(--tn-line); border-radius: 4px; }
+.tn-btn-primary { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border: 0; border-radius: 4px; background: var(--tn-orange); color: #fff; font-size: 13px; font-weight: 700; }
+.tn-btn-primary:hover:not(:disabled) { background: var(--tn-orange-dark); }
+.tn-btn-primary:disabled { opacity: .55; cursor: not-allowed; }
+.tn-btn-muted { padding: 9px 14px; border: 0; border-radius: 4px; background: #eef0f3; color: var(--tn-ink); font-size: 13px; font-weight: 600; }
+.tn-filter-menu { position: absolute; right: 0; top: 48px; z-index: 5; display: flex; flex-direction: column; min-width: 180px; padding: 6px; background: #fff; border: 1px solid var(--tn-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(15,23,42,.12); }
+.tn-filter-menu button { padding: 8px 10px; border: 0; border-radius: 4px; background: none; text-align: left; font-size: 13px; }
+.tn-filter-menu button:hover, .tn-filter-menu button.active { background: #f1f3f6; }
+.tn-link { padding: 0; border: 0; background: none; color: var(--tn-blue); text-align: left; }
+.tn-link:hover { text-decoration: underline; }
+.tn-payroll-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 26px 32px; border: 1px solid var(--tn-line); border-radius: 4px; box-shadow: 0 2px 6px rgba(15,23,42,.08); }
+.tn-payroll-name { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+.tn-meta { font-size: 13px; color: var(--tn-muted); line-height: 1.6; }
+.tn-sep { margin: 0 10px; color: #9aa3ae; }
+.tn-cost { font-size: 17px; font-weight: 500; margin-bottom: 6px; }
+.tn-status { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; }
+.tn-dot { width: 12px; height: 12px; border-radius: 50%; background: #aab2bd; }
+.tn-status-completed .tn-dot { background: #2f9e6b; }
+.tn-empty { padding: 40px 0 48px; text-align: center; }
+.tn-empty i { font-size: 26px; color: var(--tn-orange); }
+.tn-empty h3 { margin: 12px 0; font-size: 17px; font-weight: 500; }
+.tn-empty p { max-width: 540px; margin: 0 auto; color: var(--tn-muted); }
+.tn-warning { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; padding: 16px 20px; border: 1px solid #f4c9a0; border-radius: 4px; background: #fff6ee; font-size: 14px; font-weight: 500; }
+.tn-warning > i { color: #e08a2c; font-size: 18px; }
+.tn-back { display: inline-flex; align-items: center; margin-bottom: 14px; font-size: 17px; font-weight: 500; }
+.tn-badge-outline { padding: 2px 8px; border: 1.5px solid var(--tn-ink); border-radius: 3px; font-size: 12px; font-weight: 700; }
+.tn-dates { margin-bottom: 28px; font-size: 16px; }
+.tn-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 28px; }
+.tn-tile { padding: 22px 22px 24px; background: #fff; border: 1px solid var(--tn-line); border-radius: 2px; }
+.tn-tile-label { margin-bottom: 8px; font-size: 12px; color: var(--tn-muted); text-transform: uppercase; }
+.tn-tile-value { font-size: 22px; font-weight: 600; }
+.tn-table-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 6px 6px 20px; border-bottom: 1px solid var(--tn-line); }
+.tn-search { display: flex; align-items: center; gap: 8px; width: min(360px, 100%); padding: 8px 12px; border: 1px solid #c8ced6; border-radius: 3px; color: var(--tn-muted); }
+.tn-search input { flex: 1; min-width: 0; border: 0; outline: 0; font-size: 14px; }
+.tn-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tn-table th { padding: 22px 16px; background: #f5f7fa; border-bottom: 1px solid var(--tn-line); font-weight: 500; white-space: nowrap; text-align: right; }
+.tn-table td { padding: 16px; border-bottom: 1px solid var(--tn-line); text-align: right; white-space: nowrap; }
+.tn-table th:first-child, .tn-table td:first-child { text-align: left; padding-left: 24px; border-right: 1px solid var(--tn-line); }
+.tn-table tfoot td { font-weight: 600; }
+.tn-avatar { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: var(--tn-orange); color: #fff; font-size: 14px; font-weight: 700; }
+.tn-change-icon { margin-left: 6px; color: #e08a2c; font-size: 13px; }
+.tn-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 20; display: flex; flex-direction: column; width: min(640px, 100%); background: #fff; box-shadow: -8px 0 24px rgba(15,23,42,.16); }
+.tn-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; background: #f5f7fa; }
+.tn-drawer-head h2 { margin: 0; font-size: 18px; font-weight: 500; }
+.tn-drawer-body { flex: 1; overflow-y: auto; padding: 24px 28px; }
+.tn-drawer-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 28px; border-top: 1px solid var(--tn-line); }
+.tn-icon-btn { padding: 4px; border: 0; background: none; color: var(--tn-muted); font-size: 18px; line-height: 1; }
+.tn-drawer-name { margin-bottom: 14px; font-size: 16px; font-weight: 600; }
+.tn-details { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px; margin-bottom: 20px; font-size: 13px; }
+.tn-details div { display: grid; grid-template-columns: 110px 1fr; }
+.tn-details dt { font-weight: 400; color: var(--tn-muted); }
+.tn-details dd { margin: 0; }
+.tn-info { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; padding: 14px 18px; border: 1px solid #b9cdf5; border-radius: 4px; background: #eef4ff; font-size: 14px; }
+.tn-info i { color: var(--tn-blue); font-size: 18px; }
+.tn-section-head { display: grid; grid-template-columns: 1fr auto 110px; gap: 16px; align-items: end; margin-top: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--tn-line); }
+.tn-section-head h4 { margin: 0; font-size: 17px; font-weight: 600; }
+.tn-section-head span { font-size: 14px; color: var(--tn-muted); text-align: right; }
+.tn-row { display: grid; grid-template-columns: 1fr auto 110px; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--tn-line); font-size: 14px; }
+.tn-row > span:last-child { text-align: right; }
+.tn-row-rate small { color: var(--tn-muted); }
+.tn-row-total { padding: 16px 0 20px; text-align: right; font-size: 14px; }
+.tn-assistant { width: min(440px, 100%); }
+.tn-assistant .tn-drawer-head h2 { color: var(--tn-orange); font-weight: 600; }
+.tn-assistant .tn-drawer-foot input { flex: 1; }
+.tn-pill { padding: 6px 12px; border: 1px solid var(--tn-orange); border-radius: 99px; background: #fff; color: var(--tn-orange); font-size: 12px; font-weight: 600; }
+.tn-pill:hover:not(:disabled) { background: #fff3ec; }
+.tn-assistant-launcher { position: fixed; right: 28px; bottom: 28px; z-index: 15; display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border: 0; border-radius: 99px; background: var(--tn-orange); color: #fff; font-weight: 700; box-shadow: 0 6px 18px rgba(196,80,27,.35); }
+.tn-thread { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.tn-message { font-size: 13px; line-height: 1.5; padding: 8px 12px; border-radius: 12px; max-width: 92%; }
+.tn-message.user  { align-self: flex-end; background: #1c2734; color: #fff; }
+.tn-message.agent { align-self: flex-start; background: #f1f5f9; color: #1c2734; border: 1px solid #e2e8f0; }
+
+/* Edit Employee Pay */
+.tn-btn-outline { padding: 9px 14px; border: 1.5px solid var(--tn-orange); border-radius: 4px; background: #fff; color: var(--tn-orange); font-size: 13px; font-weight: 700; }
+.tn-btn-outline:hover:not(:disabled) { background: #fff3ec; }
+.tn-input-wrap { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.tn-input { width: 110px; padding: 6px 8px; border: 1px solid #c8ced6; border-radius: 3px; background: #fff; color: var(--tn-ink); font-size: 14px; text-align: right; }
+.tn-input:focus { outline: 2px solid rgba(31, 95, 214, .35); border-color: var(--tn-blue); }
+.tn-input.invalid { border-color: #c0392b; }
+.tn-input:disabled { background: #f5f7fa; }
+.tn-row-rate .tn-input { width: 80px; }
+.tn-select { width: auto; min-width: 150px; text-align: left; }
+.tn-field-error { color: #c0392b; font-size: 11px; white-space: nowrap; }
+.tn-save-error { display: flex; align-items: center; gap: 10px; margin: 0 28px 12px; padding: 12px 14px; border: 1px solid #f1b8b0; border-radius: 4px; background: #fdf1ef; color: #8a2a1d; font-size: 13px; }
+.tn-success { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 14px 18px; border: 1px solid #a7dcc0; border-radius: 4px; background: #eefaf3; color: #14532d; font-size: 14px; font-weight: 500; }
+.tn-success > i { color: #2f9e6b; font-size: 18px; }

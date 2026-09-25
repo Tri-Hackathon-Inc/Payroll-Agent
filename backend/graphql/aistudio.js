@@ -17,17 +17,19 @@ const typeDefs = `
     modelId: String!
     enabled: Boolean!
     endpointEnv: String!
-
-    
     credentialEnv: String!
     parameters: JSON!
+    details: JSON!
   }
 
   type Service {
     id: ID!
     name: String!
+    domain: String!
     enabled: Boolean!
+    baseUrlEnv: String!
     method: String!
+    path: String!
   }
 
   type Template {
@@ -40,6 +42,7 @@ const typeDefs = `
     service: Service!
     attachedServices: [Service!]!
     modelOptions: [ModelConfig!]!
+    serviceOptions: [Service!]!
   }
 
   type Domain { name: String!, label: String!, domain: String! }

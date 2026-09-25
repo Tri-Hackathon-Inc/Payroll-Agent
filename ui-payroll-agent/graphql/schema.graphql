@@ -9,6 +9,7 @@ scalar JSON
     endpointEnv: String!
     credentialEnv: String!
     parameters: JSON!
+    details: JSON!
   }
 
   type Service {

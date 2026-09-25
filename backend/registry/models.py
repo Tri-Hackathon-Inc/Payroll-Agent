@@ -12,6 +12,8 @@ class ModelConfiguration(models.Model):
     endpoint_env = models.CharField(max_length=150, blank=True)
     credential_env = models.CharField(max_length=150, blank=True)
     parameters = models.JSONField(default=dict)
+    # Display metadata for the model library: license, description, context window, etc.
+    details = models.JSONField(default=dict, blank=True)
 
 
 class ServiceDefinition(models.Model):
@@ -36,6 +38,10 @@ class Template(models.Model):
     )
     attached_services = models.ManyToManyField(
         ServiceDefinition, related_name="attached_templates"
+    )
+    # Models this template offers; empty means every enabled model.
+    supported_models = models.ManyToManyField(
+        ModelConfiguration, blank=True, related_name="supporting_templates"
     )
 
     class Meta:

@@ -3,6 +3,11 @@
   "name": "Summarizer",
   "version": 1,
   "description": "Produce a structured employee or payrun summary.",
+  "models": [
+    "poc-demo",
+    "qwen-2-5-72b",
+    "bedrock-claude"
+  ],
   "config": {
     "description": "Produce a structured employee or payrun summary.",
     "instructions": "Summarize the supplied payroll data, highlighting totals, changes, and unresolved items.",

@@ -4,11 +4,28 @@ export const STUDIO_QUERY = `
   }
 `
 
+export const DOMAINS_QUERY = `
+  query ListDomains {
+    listDomains { name label domain }
+  }
+`
+
+// Templates of one domain with everything the studio, Tools and Models views need.
+export const DOMAIN_TEMPLATES_QUERY = `
+  query GetDomainAgentsTemplates($domainName: String!) {
+    getDomainAgentsTemplates(domainName: $domainName) {
+      id name description version config
+      modelOptions { id name provider modelId enabled details }
+      serviceOptions { id name domain enabled baseUrlEnv method path }
+    }
+  }
+`
+
 export const TEMPLATE_QUERY = `
   query GetTemplate($id: ID!) {
     getTemplate(id: $id) {
       id name description version config
-      modelOptions { id name provider modelId }
+      modelOptions { id name provider modelId details }
       serviceOptions { id name domain method path }
     }
   }
@@ -31,11 +48,5 @@ export const CREATE_AGENT_MUTATION = `
 export const UPDATE_AGENT_MUTATION = `
   mutation UpdateAgent($input: UpdateAgentInput!) {
     updateAgent(input: $input) { ${AGENT_FIELDS} }
-  }
-`
-
-export const DOMAIN_TEMPLATES_QUERY = `
-  query GetDomainAgentsTemplates($domainName: String!) {
-    getDomainAgentsTemplates(domainName: $domainName) { id name description version config }
   }
 `

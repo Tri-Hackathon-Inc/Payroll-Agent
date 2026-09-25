@@ -34,5 +34,41 @@
     "base_url_env": "DIAGNOSTICS_API_BASE_URL",
     "method": "GET",
     "path": "/diagnostics/logs"
+  },
+  {
+    "id": "slack-webhook",
+    "name": "Slack alert webhook",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "SLACK_WEBHOOK_BASE_URL",
+    "method": "POST",
+    "path": "/services/payroll-alerts"
+  },
+  {
+    "id": "email-notification",
+    "name": "Email notification",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "EMAIL_API_BASE_URL",
+    "method": "POST",
+    "path": "/notifications/email"
+  },
+  {
+    "id": "alert-manager",
+    "name": "On-call alerting",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "ALERTING_API_BASE_URL",
+    "method": "POST",
+    "path": "/alerts"
+  },
+  {
+    "id": "opensearch-sink",
+    "name": "OpenSearch event sink",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "OPENSEARCH_BASE_URL",
+    "method": "POST",
+    "path": "/agent-events/_doc"
   }
 ]

@@ -1,39 +1,49 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { graphqlRequest } from './graphql/client'
-import { SERVICE_AGENT_REGISTRY_QUERY, DOMAIN_TEMPLATES_QUERY, STUDIO_QUERY } from './graphql/operations'
+import { DOMAIN_TEMPLATES_QUERY, SERVICE_AGENT_REGISTRY_QUERY, STUDIO_QUERY } from './graphql/operations'
 import AgentEditor from './AgentEditor'
+import ChatWindow from './ChatWindow'
+import ToolsPage from './ToolsPage'
+import EvaluationPage from './EvaluationPage'
+import MyAgentsPage from './MyAgentsPage'
+import ModelsPage from './ModelsPage'
+import { trinetUrl } from './links'
 
+// Services (domain categories) shown on the landing page. Display chrome only: a service
+// becomes available once the backend has a domain and templates in that category, and any
+// other backend category is listed too.
+const SERVICES = [
+  { category: 'Payroll', icon: 'bi-cash-coin', description: 'Payrun anomalies, summaries, and payroll questions.' },
+  { category: 'Benefits', icon: 'bi-heart-pulse', description: 'Stock matching, HSA, and other benefits questions.' },
+  { category: 'Insurance', icon: 'bi-shield-check', description: 'Coverage, claims, and policy questions.' },
+  { category: 'HR', icon: 'bi-people', description: 'Policies, onboarding, and general people questions.' },
+  { category: 'Time off', icon: 'bi-calendar-week', description: 'PTO balances, requests, and time-off policy.' },
+]
+
+// Agent Studio is a single page at BASE_URL: the left panel switches views in place and
+// the URL never changes. Agents are not opened here; services use them (e.g. the TriNet payrun page).
 const NAV_GROUPS = [
   {
     label: 'Build',
     items: [
-      { key: 'templates', label: 'Templates', icon: 'bi-grid-1x2', path: '/ai-studio' },
-      { key: 'my-agents', label: 'My Agents', icon: 'bi-robot', path: '/agents' },
-      { key: 'tools', label: 'Tools & APIs', icon: 'bi-plug', soon: true },
-      { key: 'models', label: 'Models', icon: 'bi-cpu', soon: true },
+      { key: 'studio', label: 'Services', icon: 'bi-grid-1x2' },
+      { key: 'tools', label: 'Tools & APIs', icon: 'bi-plug' },
+      { key: 'models', label: 'Models', icon: 'bi-cpu' },
     ],
   },
   {
     label: 'Manage',
     items: [
-      { key: 'registry', label: 'Agent Registry', icon: 'bi-collection', soon: true },
-      { key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up', soon: true },
+      { key: 'agents', label: 'My Agents', icon: 'bi-robot' },
+      { key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up' },
     ],
   },
 ]
 
-function domainSlug(domain) {
-  return domain.toLowerCase().replace(' ', '-')
-}
-
-function domainClass(domain) {
-  return `domain-badge domain-${domainSlug(domain)}`
-}
-
-function Sidebar({ activeKey, onNavigate }) {
+function Sidebar({ activeKey, onNavigate, domainName }) {
   return (
-    <aside className="app-sidebar d-flex flex-column flex-shrink-0 p-3">
+    <aside className="app-sidebar studio-sticky d-flex flex-column flex-shrink-0 p-3">
       <div className="d-flex align-items-center gap-2 px-1 mb-1">
         <span className="sidebar-mark"><i className="bi bi-stars" /></span>
         <div className="d-flex flex-column">
@@ -42,46 +52,37 @@ function Sidebar({ activeKey, onNavigate }) {
         </div>
       </div>
       <hr className="sidebar-divider mt-3 mb-3" />
-      {NAV_GROUPS.map((group) => (
-        <div className="mb-3" key={group.label}>
-          <div className="sidebar-group-label px-2 mb-2">{group.label}</div>
-          <ul className="nav nav-pills flex-column gap-1">
-            {group.items.map((item) => (
-              <li className="nav-item" key={item.key}>
-                <button
-                  type="button"
-                  className={`nav-link sidebar-link d-flex align-items-center gap-2 w-100 text-start${activeKey === item.key ? ' active' : ''}`}
-                  onClick={() => onNavigate(item)}
-                >
-                  <span className="sidebar-icon"><i className={`bi ${item.icon}`} /></span>
-                  <span className="flex-grow-1">{item.label}</span>
-                  {item.soon && <span className="badge rounded-pill sidebar-soon">Soon</span>}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </aside>
-  )
-}
-
-function AppShell({ activeKey, onNavigate, notice, onDismissNotice, children }) {
-  return (
-    <div className="app-shell d-flex">
-      <Sidebar activeKey={activeKey} onNavigate={onNavigate} />
-      <div className="flex-grow-1 d-flex flex-column min-vw-0">
-        <main className="flex-grow-1 p-4 p-xl-5">
-          {notice && (
-            <div className="alert alert-success d-flex align-items-center justify-content-between py-2 px-3 mb-4" role="alert">
-              <span className="small">{notice}</span>
-              <button type="button" className="btn-close" onClick={onDismissNotice} aria-label="Dismiss" />
-            </div>
-          )}
-          {children}
-        </main>
+      <nav aria-label="Agent Studio">
+        {NAV_GROUPS.map((group) => (
+          <div className="mb-3" key={group.label}>
+            <div className="sidebar-group-label px-2 mb-2">{group.label}</div>
+            <ul className="nav nav-pills flex-column gap-1">
+              {group.items.map((item) => (
+                <li className="nav-item" key={item.key}>
+                  <button
+                    type="button"
+                    aria-current={activeKey === item.key ? 'true' : undefined}
+                    className={`nav-link sidebar-link d-flex align-items-center gap-2 w-100 text-start${activeKey === item.key ? ' active' : ''}`}
+                    onClick={() => onNavigate(item.key)}
+                  >
+                    <span className="sidebar-icon"><i className={`bi ${item.icon}`} /></span>
+                    <span className="flex-grow-1">{item.label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+      <div className="mt-auto">
+        <hr className="sidebar-divider mt-0 mb-3" />
+        <a className="nav-link sidebar-link d-flex align-items-center gap-2 w-100" href={trinetUrl(domainName)} target="_blank" rel="noreferrer">
+          <span className="sidebar-icon"><i className="bi bi-cash-stack" /></span>
+          <span className="flex-grow-1">TriNet Payruns</span>
+          <i className="bi bi-box-arrow-up-right small" aria-label="Opens in a new tab" />
+        </a>
       </div>
-    </div>
+    </aside>
   )
 }
 
@@ -89,175 +90,197 @@ function Loading({ children = 'Loading…' }) {
   return <p role="status" className="text-muted py-4"><span className="spinner-border spinner-border-sm me-2" />{children}</p>
 }
 
+// ?view=chat&domain=X opens the standalone chat window instead of the studio.
+const standaloneView = () => {
+  const params = new URLSearchParams(window.location.search)
+  return params.get('view') === 'chat' ? { view: 'chat', domain: params.get('domain') || params.get('business') || '' } : null
+}
+
 function App() {
-  const [route, setRoute] = useState(() => window.location.pathname + window.location.search)
+  const [standalone] = useState(standaloneView)
+  const [view, setView] = useState('studio')
   const [catalog, setCatalog] = useState(null)
-  const [templateResult, setTemplateResult] = useState(null)
   const [catalogError, setCatalogError] = useState('')
   const [reload, setReload] = useState(0)
-  const [agentResult, setAgentResult] = useState(null)
-  const [refreshAgents, setRefreshAgents] = useState(0)
-  const [search, setSearch] = useState('')
+  const [service, setService] = useState(null)
+  const [domainName, setDomainName] = useState('')
+  const [editing, setEditing] = useState(null)
   const [notice, setNotice] = useState('')
-  const url = new URL(route, window.location.origin)
-  const path = url.pathname
-  const domainName = url.searchParams.get('domain') || catalog?.domains[0]?.name
-  const domain = catalog?.domains.find(item => item.name === domainName)
-  const domainHome = path === '/' || (path === '/ai-studio' && !url.searchParams.has('domain'))
-  const templateMatch = path.match(/^\/ai-studio\/templates\/([^/]+)\/config$/)
-  const agentMatch = path.match(/^\/agents\/([^/]+)$/)
-  const editId = agentMatch && agentMatch[1] !== 'new' ? decodeURIComponent(agentMatch[1]) : null
-  const listPage = path === '/agents'
-  const agents = agentResult && agentResult.domainName === domainName ? agentResult.items : []
-  const agentsLoading = domain && (agentResult?.domainName !== domainName || agentResult.loading)
-  const agentsError = agentResult && agentResult.domainName === domainName ? agentResult.error : ''
+  const [agentResult, setAgentResult] = useState(null)
+  const editorRef = useRef(null)
+  // In the studio the domain list is limited to the chosen service; other views use all domains.
+  const domains = (view === 'studio' ? catalog?.domains.filter(item => item.domain === service) : catalog?.domains) || []
+  const domain = domains.find(item => item.name === domainName) || domains[0]
+  const needsAgents = ['tools', 'evaluation'].includes(view)
+  const agents = agentResult && agentResult.domainName === domain?.name ? agentResult.items : []
+  const agentsLoading = domain && (agentResult?.domainName !== domain.name || agentResult.loading)
 
   useEffect(() => {
-    const onPopState = () => {
-      setRoute(window.location.pathname + window.location.search)
-      setSearch('')
-    }
-    window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
-  }, [])
-
-  useEffect(() => {
+    if (standalone) return undefined
     let active = true
     setCatalogError('')
+    // Domains, then each domain's templates (one list, deduplicated by template id).
     graphqlRequest(STUDIO_QUERY)
-      .then(data => { if (active) setCatalog({ domains: data.listDomains }) })
+      .then(async ({ listDomains: domainList }) => {
+        const results = await Promise.all(domainList.map(item => graphqlRequest(DOMAIN_TEMPLATES_QUERY, { domainName: item.name })))
+        const templates = [...new Map(results.flatMap(result => result.getDomainAgentsTemplates).map(item => [item.id, item])).values()]
+        if (active) setCatalog({ domains: domainList, templates })
+      })
       .catch(error => { if (active) setCatalogError(error.message) })
     return () => { active = false }
-  }, [reload])
+  }, [reload, standalone])
 
   useEffect(() => {
-    if (!domain) return
+    if (standalone || !needsAgents || !domain) return undefined
     let active = true
     setAgentResult({ domainName: domain.name, items: [], loading: true, error: '' })
     graphqlRequest(SERVICE_AGENT_REGISTRY_QUERY, { domainName: domain.name })
       .then(data => { if (active) setAgentResult({ domainName: domain.name, items: data.getServiceAgentRegistry, loading: false, error: '' }) })
       .catch(error => { if (active) setAgentResult({ domainName: domain.name, items: [], loading: false, error: error.message }) })
     return () => { active = false }
-  }, [domain, refreshAgents])
+  }, [domain, needsAgents, standalone])
 
   useEffect(() => {
-    if (!domain) return
-    let active = true
-    setTemplateResult({ domainName: domain.name, loading: true, items: [] })
-    graphqlRequest(DOMAIN_TEMPLATES_QUERY, { domainName: domain.name })
-      .then(data => { if (active) setTemplateResult({ domainName: domain.name, items: data.getDomainAgentsTemplates }) })
-      .catch(error => { if (active) setTemplateResult({ domainName: domain.name, items: [], error: error.message }) })
-    return () => { active = false }
-  }, [domain, reload])
+    if (editing) editorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  }, [editing])
 
-  function navigate(next) {
-    window.history.pushState({}, '', next)
-    setRoute(next)
-    setSearch('')
+  // Clicking anywhere outside the configuration and summary cards closes them.
+  // Template cards are excluded so Use Template switches templates instead.
+  useEffect(() => {
+    if (!editing) return undefined
+    const closeOnOutsideClick = event => {
+      const onScrollbar = event.clientX >= document.documentElement.clientWidth
+      const inside = event.target.closest?.('.template-card, .alert, [role="status"]')
+        || [...(editorRef.current?.querySelectorAll('.card') || [])].some(card => card.contains(event.target))
+      if (onScrollbar || inside) return
+      setEditing(null)
+    }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [editing])
+
+  if (standalone?.view === 'chat') {
+    return <main className="chat-app-shell">
+      <ChatWindow domainName={standalone.domain || null} />
+    </main>
   }
-  const scoped = (next, name = domainName) => `${next}?domain=${encodeURIComponent(name || '')}`
-  const handleNav = item => item.soon ? setNotice(`${item.label} is coming soon.`) : navigate(scoped(item.path))
+
+  const showView = next => {
+    setView(next)
+    setEditing(null)
+    setNotice('')
+    window.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
+  const openService = category => {
+    setService(category)
+    setDomainName('')
+    showView('studio')
+  }
+  const chooseDomain = name => {
+    setDomainName(name)
+    setEditing(null)
+    setNotice('')
+  }
   const saved = agent => {
-    setNotice(`${agent.name} saved for ${domain.label}.`)
-    setRefreshAgents(value => value + 1)
-    navigate(scoped('/agents'))
+    setNotice(`${agent.name} created for ${domain.label}. It is now available to the ${domain.domain} service.`)
+    setEditing(null)
+    window.scrollTo?.({ top: 0, behavior: 'smooth' })
   }
-  const query = search.trim().toLowerCase()
-  const matches = (...values) => values.some(value => String(value || '').toLowerCase().includes(query))
 
   let content
-  if (catalogError) {
+  if (view === 'models') {
+    content = <ModelsPage templates={catalog?.templates} />
+  } else if (catalogError) {
     content = <div className="alert alert-danger" role="alert">Could not load Agent Studio: {catalogError}
       <button className="btn btn-outline-danger btn-sm ms-3" onClick={() => setReload(value => value + 1)}>Retry</button>
     </div>
   } else if (!catalog) {
-    content = <Loading>Loading domains…</Loading>
-  } else if (!catalog.domains.length) {
+    content = <Loading>Loading domains and templates…</Loading>
+  } else if (view !== 'studio' && !domain) {
     content = <p>No domains are available yet. Ask your administrator to create one.</p>
-  } else if (!domain) {
-    content = <div className="alert alert-warning" role="alert">Domain not found.
-      <button className="btn btn-link" onClick={() => navigate('/ai-studio')}>Choose a domain</button>
-    </div>
-  } else if (templateMatch || editId) {
-    const agent = editId && agents.find(item => item.id === editId)
-    if (editId && agentsLoading) content = <Loading>Loading agent…</Loading>
-    else if (editId && agentsError) content = <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents(value => value + 1)}>Retry</button></div>
-    else if (editId && !agent) content = <p role="alert">This agent was not found in {domain.label}.</p>
-    else content = <AgentEditor key={`${domain.name}:${editId || templateMatch[1]}`}
-      domain={domain} agent={agent || null} templateId={agent?.templateId || decodeURIComponent(templateMatch[1])}
-      onSaved={saved} onCancel={() => navigate(scoped(editId ? '/agents' : '/ai-studio'))} />
-  } else if (domainHome) {
-    content = <>
-      <h1 className="h3 fw-bold">Choose a domain</h1>
-      <p className="text-muted">Create and manage agents for a specific domain.</p>
-      <input className="form-control mb-4" type="search" aria-label="Search domains" placeholder="Search domains…" value={search} onChange={event => setSearch(event.target.value)} />
-      <div className="row row-cols-1 row-cols-md-3 g-3">
-        {catalog.domains.filter(item => matches(item.label, item.domain)).map(item => <div className="col" key={item.name}>
-          <button className="card border-0 shadow-sm template-card accent-neutral h-100 w-100 text-start" onClick={() => navigate(scoped('/ai-studio', item.name))}>
-            <span className="card-body"><span className="template-icon mb-3"><i className="bi bi-building" /></span>
-              <span className="h5 d-block">{item.label}</span><span className="text-muted d-block">{item.domain}</span>
-              <span className="d-block mt-3 fw-semibold">Browse templates →</span>
-            </span>
-          </button>
-        </div>)}
+  } else if (view === 'tools') {
+    content = <ToolsPage domain={domain} templates={catalog.templates} agents={agents} agentsLoading={agentsLoading} />
+  } else if (view === 'evaluation') {
+    content = <EvaluationPage key={domain.name} domain={domain} agents={agents} agentsLoading={agentsLoading}
+      onBrowseTemplates={() => openService(domain.domain)} />
+  } else if (view === 'agents') {
+    content = <MyAgentsPage domains={catalog.domains} onCreate={() => openService(null)} />
+  } else if (!service || !domain) {
+    const categories = [...SERVICES.map(item => item.category),
+      ...new Set(catalog.domains.map(item => item.domain).filter(category => !SERVICES.some(item => item.category === category)))]
+    content = <section aria-labelledby="services-heading">
+      <h2 id="services-heading" className="h5 fw-bold">Choose a service</h2>
+      <p className="text-muted">Pick the service your agent will work in.</p>
+      <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3">
+        {categories.map(category => {
+          const info = SERVICES.find(item => item.category === category) || { icon: 'bi-grid', description: `${category} agents.` }
+          const templateCount = catalog.templates.filter(item => item.config.domain === category).length
+          const available = templateCount > 0 && catalog.domains.some(item => item.domain === category)
+          return <div className="col" key={category}>
+            <button type="button" disabled={!available} onClick={() => openService(category)}
+              className="card border-0 shadow-sm template-card service-card accent-neutral h-100 w-100 text-start">
+              <span className="card-body d-flex flex-column w-100">
+                <span className="d-flex justify-content-between align-items-start mb-3">
+                  <span className="template-icon"><i className={`bi ${info.icon}`} /></span>
+                  {!available && <span className="badge rounded-pill text-bg-light">Coming soon</span>}
+                </span>
+                <span className="h6 fw-bold d-block">{category}</span>
+                <span className="text-muted d-block flex-grow-1">{info.description}</span>
+                <span className="small fw-semibold mt-3 d-block">{available ? `${templateCount} template${templateCount === 1 ? '' : 's'} →` : 'No templates yet'}</span>
+              </span>
+            </button>
+          </div>
+        })}
       </div>
-      {!catalog.domains.some(item => matches(item.label, item.domain)) && <p>No domains match your search.</p>}
-    </>
-  } else if (listPage) {
-    content = <>
-      <div className="d-flex justify-content-between align-items-center mb-4 gap-3">
-        <div><h1 className="h3 fw-bold">My agents</h1><p className="text-muted mb-0">{domain.label}</p></div>
-        <button className="btn btn-dark" onClick={() => navigate(scoped('/ai-studio'))}>Create agent</button>
-      </div>
-      <input className="form-control mb-4" type="search" aria-label="Search agents" placeholder="Search agents…" value={search} onChange={event => setSearch(event.target.value)} />
-      {agentsLoading ? <Loading>Loading agents…</Loading> : agentsError ? <div className="alert alert-danger" role="alert">{agentsError}<button className="btn btn-link" onClick={() => setRefreshAgents(value => value + 1)}>Retry</button></div> : <>
-        <div className="row row-cols-1 row-cols-md-3 g-3">
-          {agents.filter(item => matches(item.name, item.config.description)).map(agent => <div className="col" key={agent.id}>
-            <div className="card h-100 border-0 shadow-sm"><div className="card-body d-flex flex-column">
-              <h2 className="h5">{agent.name}</h2><span className={`badge align-self-start mb-3 ${domainClass(agent.config.domain)}`}>{agent.config.domain}</span>
-              <p className="text-muted flex-grow-1">{agent.config.description}</p>
-              <button className="btn btn-outline-secondary" onClick={() => navigate(scoped(`/agents/${encodeURIComponent(agent.id)}`))}>Edit agent</button>
-            </div></div>
-          </div>)}
-        </div>
-        {!agents.length && <p>No agents yet for {domain.label}. Choose a template to create your first agent.</p>}
-        {!!agents.length && !agents.some(item => matches(item.name, item.config.description)) && <p>No agents match your search.</p>}
-      </>}
-    </>
+    </section>
   } else {
-    const templates = (templateResult?.domainName === domainName ? templateResult.items : []).filter(item => item.config.domain === domain.domain && matches(item.name, item.description))
-    content = <>
-      <button className="btn btn-link ps-0 mb-3" onClick={() => navigate('/ai-studio')}>← All domains</button>
-      <h1 className="h3 fw-bold">{domain.label} templates</h1>
-      <p className="text-muted">Choose a template and customize its configuration for your domain.</p>
-      <input className="form-control mb-4" type="search" aria-label="Search templates" placeholder="Search templates…" value={search} onChange={event => setSearch(event.target.value)} />
+    const templates = catalog.templates.filter(item => item.config.domain === domain.domain)
+    content = <section id="templates" className="studio-section" aria-labelledby="templates-heading">
+      <button type="button" className="btn btn-link ps-0 mb-2" onClick={() => openService(null)}>← All services</button>
+      <h2 id="templates-heading" className="h5 fw-bold">{service} templates</h2>
+      <p className="text-muted">Pick a {domain.domain} template, configure it below, and submit to create the agent.</p>
       <div className="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
-        {templates.map(template => <div className="col" key={template.id}>
-          <div className="card h-100 border-0 shadow-sm template-card accent-neutral"><div className="card-body d-flex flex-column">
-            <div className="template-icon mb-3"><i className="bi bi-stars" /></div>
-            <h2 className="h6 fw-bold">{template.name}</h2><span className="small text-muted mb-2">Version {template.version}</span>
-            <p className="text-muted flex-grow-1">{template.description}</p>
-            <button className="btn btn-dark" onClick={() => navigate(scoped(`/ai-studio/templates/${encodeURIComponent(template.id)}/config`))}>Use Template</button>
-          </div></div>
-        </div>)}
+        {templates.map(template => {
+          const selected = editing?.templateId === template.id
+          return <div className="col" key={template.id}>
+            <div className={`card h-100 border-0 shadow-sm template-card accent-neutral${selected ? ' border border-2 border-dark' : ''}`}><div className="card-body d-flex flex-column">
+              <div className="template-icon mb-3"><i className="bi bi-stars" /></div>
+              <h3 className="h6 fw-bold">{template.name}</h3><span className="small text-muted mb-2">Version {template.version}</span>
+              <p className="text-muted flex-grow-1">{template.description}</p>
+              <button className="btn btn-dark" aria-pressed={selected} onClick={() => { setNotice(''); setEditing({ templateId: template.id }) }}>Use Template</button>
+            </div></div>
+          </div>
+        })}
       </div>
-      {(!templateResult || templateResult.domainName !== domainName || templateResult.loading) ? <Loading>Loading templates...</Loading>
-        : templateResult.error ? <div role="alert">{templateResult.error}<button onClick={() => setReload(value => value + 1)}>Retry</button></div>
-        : !templates.length && <p>No templates match this domain and search.</p>}
-    </>
+      {!templates.length && <p>No templates are available for this domain.</p>}
+      {editing && <div id="configure" ref={editorRef} className="mt-4 studio-section" aria-label="Configure agent">
+        <AgentEditor key={`${domain.name}:${editing.templateId}`}
+          domain={domain} agent={null} templateId={editing.templateId}
+          onSaved={saved} onCancel={() => setEditing(null)} />
+      </div>}
+    </section>
   }
 
-  return <AppShell activeKey={listPage || editId ? 'my-agents' : 'templates'} onNavigate={handleNav} notice={notice} onDismissNotice={() => setNotice('')}>
-    {!!catalog?.domains.length && <div className="d-flex justify-content-end align-items-center gap-2 mb-4">
-      <label htmlFor="domain" className="fw-semibold">Domain</label>
-      <select id="domain" className="form-select w-auto" value={domain?.name || ''}
-        onChange={event => navigate(scoped(listPage || editId ? '/agents' : '/ai-studio', event.target.value))}>
-        {!domain && <option value="">Choose a domain</option>}
-        {catalog.domains.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
-      </select>
-    </div>}
-    {content}
-  </AppShell>
+  const showDomain = !['models', 'agents'].includes(view) && domain && (view !== 'studio' || service)
+  return <div className="app-shell d-flex">
+    <Sidebar activeKey={view} onNavigate={key => key === 'studio' ? openService(null) : showView(key)} domainName={domain?.name} />
+    <main className="studio-page flex-grow-1 min-vw-0 p-4 p-xl-5">
+      <header className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div><h1 className="h3 fw-bold mb-0">Agent Studio</h1><p className="text-muted mb-0">Create an AI agent for a service and domain.</p></div>
+        {showDomain && <div className="d-flex align-items-center gap-2">
+          <label htmlFor="domain" className="fw-semibold">Domain</label>
+          <select id="domain" className="form-select w-auto" value={domain.name} onChange={event => chooseDomain(event.target.value)}>
+            {domains.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
+          </select>
+        </div>}
+      </header>
+      {notice && <div className="alert alert-success d-flex align-items-center justify-content-between py-2 px-3 mb-4" role="status">
+        <span className="small">{notice}</span>
+        <button type="button" className="btn-close" onClick={() => setNotice('')} aria-label="Dismiss" />
+      </div>}
+      {content}
+    </main>
+  </div>
 }
 
 export default App

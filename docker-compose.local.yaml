@@ -1,4 +1,4 @@
-# The explicit local command uses the same three-service stack as the default.
+# The explicit local command uses the same stack as the default (plus the temporary TriNet mock).
 name: payroll-local
 services:
   db:
@@ -13,5 +13,14 @@ services:
     extends:
       file: docker-compose.yaml
       service: ui
+  trinet-mock:
+    extends:
+      file: docker-compose.yaml
+      service: trinet-mock
+  trinet-ui:
+    extends:
+      file: docker-compose.yaml
+      service: trinet-ui
 volumes:
   mysql_data:
+  trinet_data:

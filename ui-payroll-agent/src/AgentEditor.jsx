@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { graphqlRequest } from './graphql/client'
+import ModelPicker from './ModelPicker'
 import { CREATE_AGENT_MUTATION, TEMPLATE_QUERY, UPDATE_AGENT_MUTATION } from './graphql/operations'
 
 export default function AgentEditor({ domain, templateId, agent, onSaved, onCancel }) {
@@ -33,9 +34,6 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
   }, [templateId, agent, domain.domain, retry])
 
   const field = (key, value) => setConfig(current => ({ ...current, [key]: value }))
-  const capability = (group, key, value) => setConfig(current => ({ ...current, capabilities: {
-    ...current.capabilities, [group]: { ...current.capabilities[group], [key]: value },
-  } }))
 
   async function submit(event) {
     event.preventDefault()
@@ -66,7 +64,7 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
   const services = template.serviceOptions
   return <div className="row g-4">
     <div className="col-lg-8"><div className="card border-0 shadow-sm"><div className="card-body p-4">
-      <h1 className="h4 fw-bold">{agent ? 'Edit agent' : `Configure ${template.name}`}</h1>
+      <h3 className="h4 fw-bold">{agent ? `Edit ${agent.name}` : `Configure ${template.name}`}</h3>
       <p className="text-muted">{domain.label} · {domain.domain}</p>
       {archived && <p className="alert alert-warning">The source template is no longer available. You can edit this agent’s saved configuration.</p>}
       <form onSubmit={submit}>
@@ -81,19 +79,12 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
           <div className="mb-3"><label htmlFor="instructions" className="form-label">Instructions</label>
             <textarea id="instructions" className="form-control" value={config.instructions} onChange={event => field('instructions', event.target.value)} rows={6} maxLength={10000} required />
           </div>
-          <div className="row g-3 mb-3">
-            <div className="col-md-6"><label htmlFor="model" className="form-label">Model</label>
-              <select id="model" className="form-select" value={config.model} onChange={event => field('model', event.target.value)} required>
-                {!models.some(item => item.id === config.model) && <option value={config.model}>{config.model} (saved selection)</option>}
-                {models.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            </div>
-            <div className="col-md-6"><label htmlFor="service" className="form-label">Primary external API</label>
-              <select id="service" className="form-select" value={config.service} onChange={event => field('service', event.target.value)} required>
-                {!services.some(item => item.id === config.service) && <option value={config.service}>{config.service} (saved selection)</option>}
-                {services.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-            </div>
+          <ModelPicker models={models} value={config.model} onChange={value => field('model', value)} />
+          <div className="mb-3"><label htmlFor="service" className="form-label">Primary external API</label>
+            <select id="service" className="form-select" value={config.service} onChange={event => field('service', event.target.value)} required>
+              {!services.some(item => item.id === config.service) && <option value={config.service}>{config.service} (saved selection)</option>}
+              {services.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
           </div>
           <div className="mb-3"><label htmlFor="page" className="form-label">Page attachment</label>
             <input id="page" className="form-control" value={config.page} onChange={event => field('page', event.target.value)} maxLength={255} />
@@ -113,22 +104,7 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
             </div>)}
             <button type="button" className="btn btn-link ps-0" disabled={config.questions.length >= 50} onClick={() => field('questions', [...config.questions, ''])}>Add question</button>
           </fieldset>
-          <fieldset className="border-top pt-3 mb-3"><legend className="h6 float-none w-auto">Alert configuration</legend>
-            <div className="form-check mb-2"><input id="alerts-enabled" className="form-check-input" type="checkbox" checked={config.capabilities.alerts.enabled} onChange={event => capability('alerts', 'enabled', event.target.checked)} />
-              <label htmlFor="alerts-enabled" className="form-check-label">Enable alerts</label></div>
-            <label htmlFor="severity" className="form-label">Severity</label>
-            <select id="severity" className="form-select" value={config.capabilities.alerts.severity} onChange={event => capability('alerts', 'severity', event.target.value)}>
-              <option value="info">Info</option><option value="warning">Warning</option><option value="critical">Critical</option>
-            </select>
-          </fieldset>
-          <fieldset className="border-top pt-3 mb-3"><legend className="h6 float-none w-auto">Webhook configuration</legend>
-            <div className="form-check mb-2"><input id="webhooks-enabled" className="form-check-input" type="checkbox" checked={config.capabilities.webhooks.enabled} onChange={event => capability('webhooks', 'enabled', event.target.checked)} />
-              <label htmlFor="webhooks-enabled" className="form-check-label">Enable webhook</label></div>
-            <label htmlFor="webhook-url" className="form-label">HTTPS destination</label>
-            <input id="webhook-url" className="form-control" type="url" pattern="https://.*" value={config.capabilities.webhooks.url} required={config.capabilities.webhooks.enabled}
-              onChange={event => capability('webhooks', 'url', event.target.value)} placeholder="https://example.com/payroll-events" />
-          </fieldset>
-          <p className="small text-muted">Saving stores these settings. Agent execution and notification delivery are not active yet.</p>
+          <p className="small text-muted">Saving stores these settings. Agent execution is not active yet.</p>
           <div className="d-flex justify-content-end gap-2 mt-4">
             <button type="button" className="btn btn-outline-secondary" onClick={onCancel}>Cancel</button>
             <button type="submit" className="btn btn-dark">{saving ? 'Saving…' : agent ? 'Save changes' : 'Create agent'}</button>
