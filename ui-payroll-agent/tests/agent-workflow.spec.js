@@ -137,20 +137,37 @@ test('chat sends a question to the agent webhook and shows the reply', async ({ 
   await expect(page.locator('.chat-message.agent .message-bubble').last()).toContainText(`${name} received your question`)
 })
 
-test('tools page lists payroll APIs and the demo notification tools', async ({ page }) => {
+test('tools page shows tool cards by purpose and opens details in a dialog', async ({ page }) => {
   await page.goto(BASE)
   await page.getByRole('navigation', { name: 'Agent Studio' }).getByRole('button', { name: 'Tools & APIs' }).click()
-  await expect(page.locator('.tool-card')).toHaveCount(8)
-  for (const [tool, kind] of [['Slack alert webhook', 'Webhook'], ['Email notification', 'Notification'], ['On-call alerting', 'Alerting'], ['OpenSearch event sink', 'Observability']]) {
-    const card = page.locator('.tool-card').filter({ has: page.getByRole('heading', { name: tool, exact: true }) })
-    await expect(card).toContainText(kind)
-    await expect(card).toContainText('Demo only')
-  }
-  const payrun = page.locator('.tool-card').filter({ has: page.getByRole('heading', { name: 'Payrun service', exact: true }) })
-  await expect(payrun).toContainText('Payroll API')
-  await expect(payrun).not.toContainText('Demo only')
-  await page.getByLabel('Search tools', { exact: true }).fill('slack')
-  await expect(page.locator('.tool-card')).toHaveCount(1)
+  const section = name => page.getByRole('region', { name })
+  const card = (group, tool) => section(group).locator('.tool-card').filter({ hasText: tool })
+  await expect(section('Data sources').locator('.tool-card')).toHaveCount(4)
+  await expect(section('Actions').locator('.tool-card')).toHaveCount(4)
+  for (const [group, tool, status] of [
+    ['Data sources', 'Payrun service', 'Live'], ['Data sources', 'Payrun history', 'Live'],
+    ['Data sources', 'Employee details', 'Live'], ['Data sources', 'Service diagnostics', 'Catalog only'],
+    ['Actions', 'Email notification', 'Live when configured'], ['Actions', 'Slack alert webhook', 'Catalog only'],
+    ['Actions', 'On-call alerting', 'Catalog only'], ['Actions', 'OpenSearch event sink', 'Catalog only'],
+  ]) await expect(card(group, tool).locator('.tool-status')).toHaveText(status)
+  await expect(card('Data sources', 'Payrun service')).toContainText('Primary API · 5 templates')
+  await expect(card('Actions', 'On-call alerting')).toContainText('Not used by default')
+
+  const dialog = page.getByRole('dialog')
+  await card('Data sources', 'Payrun service').click()
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'Payrun service' })).toBeVisible()
+  await expect(dialog).toContainText('TRINET_API_URL')
+  await expect(dialog).toContainText('Anomaly Detection')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(card('Data sources', 'Payrun service')).toBeFocused()
+
+  await card('Actions', 'Slack alert webhook').click()
+  await expect(dialog).toContainText('Attached by default, but no agent calls it yet.')
+  await expect(dialog).toContainText('/services/payroll-alerts')
+  await page.mouse.click(5, 5)
+  await expect(dialog).toBeHidden()
 })
 
 test('model library comes from the backend catalog and filters by license', async ({ page }) => {
