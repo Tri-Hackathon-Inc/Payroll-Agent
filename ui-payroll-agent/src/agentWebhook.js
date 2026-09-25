@@ -1,3 +1,8 @@
+// crypto.randomUUID exists only on HTTPS and localhost; getRandomValues works on plain HTTP too
+// (e.g. a cloud-dev hostname), and its hex output fits the backend's request ID format.
+const newRequestId = () => globalThis.crypto?.randomUUID?.()
+  ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+
 function readWebhookReply(body) {
   if (typeof body === 'string') return body
   return body.reply || body.message || body.answer || 'Your request was sent to the agent webhook.'
@@ -26,7 +31,7 @@ export async function callWebhook({ domain, agent, question, source = 'agent-stu
       domain: domain && { name: domain.name, label: domain.label },
       agent: { id: agent.id, name: agent.name },
       question,
-      ...(conversation ? { sessionId, requestId: crypto.randomUUID() } : {}),
+      ...(conversation ? { sessionId, requestId: newRequestId() } : {}),
       ...(context ? { context } : {}),
     }),
   })

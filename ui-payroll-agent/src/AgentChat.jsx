@@ -2,6 +2,12 @@ import { useRef, useState } from 'react'
 import { graphqlRequest } from './graphql/client'
 import { CHAT_AGENT_MUTATION } from './graphql/operations'
 
+// crypto.randomUUID exists only on HTTPS and localhost; getRandomValues works on plain HTTP too
+// (e.g. a cloud-dev hostname), and its hex output fits the backend's request ID format.
+const newRequestId = () => globalThis.crypto?.randomUUID?.()
+  ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+
+
 export default function AgentChat({ agent, domain, onBack }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -30,7 +36,7 @@ export default function AgentChat({ agent, domain, onBack }) {
       try { sessionId = sessionStorage.getItem(sessionKey) || undefined } catch { /* Use a new session. */ }
       const { chatAgent } = await graphqlRequest(CHAT_AGENT_MUTATION, { input: {
         agentId: agent.id, domainName: domain.name, message,
-        history: sessionId ? [] : messages.slice(-40), sessionId, requestId: crypto.randomUUID(),
+        history: sessionId ? [] : messages.slice(-40), sessionId, requestId: newRequestId(),
         context: payrunId.trim() ? { page: 'payrun', payrunId: payrunId.trim(), employeeId: employeeId.trim() || null } : {},
       } })
       if (chatAgent.session?.id) {

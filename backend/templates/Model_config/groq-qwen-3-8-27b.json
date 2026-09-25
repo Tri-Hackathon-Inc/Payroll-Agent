@@ -1,19 +1,20 @@
 {
   "id": "groq-qwen-3-8-27b",
-  "name": "Qwen 3.8 \u00b7 27B (Groq, free)",
+  "name": "Qwen 3.8 · 27B (Groq, free)",
   "provider": "openai-compatible",
   "model_id": "qwen/qwen3.8-27b",
   "enabled": true,
   "endpoint_env": "GROQ_BASE_URL",
   "credential_env": "GROQ_API_KEY",
   "parameters": {
-    "temperature": 0.2,
+    "temperature": 0,
     "max_tokens": 4096,
-    "reasoning_effort": "none"
+    "reasoning_effort": "none",
+    "seed": 7
   },
   "details": {
     "license": "open-source",
-    "vendor": "Alibaba Qwen \u00b7 served by Groq",
+    "vendor": "Alibaba Qwen · served by Groq",
     "context_window": "131K tokens",
     "description": "Qwen's 27B open model served free on Groq (about 1,000 requests a day, no card). Very low latency; thinking is turned off for quick answers.",
     "strengths": [

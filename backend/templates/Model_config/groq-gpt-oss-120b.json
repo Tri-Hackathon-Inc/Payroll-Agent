@@ -1,20 +1,21 @@
 {
   "id": "groq-gpt-oss-120b",
-  "name": "GPT-OSS \u00b7 120B (Groq, free)",
+  "name": "GPT-OSS · 120B (Groq, free)",
   "provider": "openai-compatible",
   "model_id": "openai/gpt-oss-120b",
   "enabled": true,
   "endpoint_env": "GROQ_BASE_URL",
   "credential_env": "GROQ_API_KEY",
   "parameters": {
-    "temperature": 0.2,
+    "temperature": 0,
     "max_tokens": 4096,
     "reasoning_effort": "low",
-    "include_reasoning": false
+    "include_reasoning": false,
+    "seed": 7
   },
   "details": {
     "license": "open-source",
-    "vendor": "OpenAI \u00b7 served by Groq",
+    "vendor": "OpenAI · served by Groq",
     "context_window": "131K tokens",
     "description": "OpenAI's open-weight reasoning model, served free on Groq (about 1,000 requests a day, no card). Reasoning effort is set to low for quick answers.",
     "strengths": [

@@ -1,3 +1,8 @@
+// crypto.randomUUID exists only on HTTPS and localhost; getRandomValues works on plain HTTP too
+// (e.g. a cloud-dev hostname), and its hex output fits the backend's request ID format.
+const newRequestId = () => globalThis.crypto?.randomUUID?.()
+  ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+
 // The two backends this mock TriNet UI talks to (both proxied by vite.config.js).
 const BASE = import.meta.env.BASE_URL
 const AGENT_STUDIO = `${BASE}agent-studio`
@@ -47,7 +52,7 @@ export async function askAgent({ domain, agent, question, context }) {
       question,
       context,
       sessionId,
-      requestId: crypto.randomUUID(),
+      requestId: newRequestId(),
     }),
   })
   const isJson = response.headers.get('content-type')?.includes('application/json')
@@ -57,7 +62,24 @@ export async function askAgent({ domain, agent, question, context }) {
   if (body.session?.id) {
     try { sessionStorage.setItem(key, body.session.id) } catch { /* The answer remains available. */ }
   }
+  const details = typeof body === 'object' ? body : {}
   return { id: `agent-${Date.now()}`, reply: message || 'Your request was sent to the agent.',
-    analysis: typeof body === 'object' ? body.analysis : null, session: body.session, retrieval: body.retrieval,
-    incident: typeof body === 'object' ? body.incident : undefined }
+    analysis: details.analysis || null, session: body.session, retrieval: body.retrieval, incident: details.incident,
+    source: answerSource(details), incidentAlert: details.incidentAlert || null }
+}
+
+// How an answer was produced, shown under the reply: computed exactly from the payroll data, from
+// the calculated history comparisons (RAG or anomaly pipeline), or written by a model (with its
+// latency, and whether it came from the cache).
+function answerSource(details) {
+  if (details.answeredBy === 'payroll-data') return { kind: 'data', label: 'Computed from payroll data' }
+  const seconds = details.metrics?.latencyMs != null ? ` · ${(details.metrics.latencyMs / 1000).toFixed(1)} s` : ''
+  if (details.answeredBy === 'rag' || details.answeredBy === 'anomaly-pipeline') {
+    const basis = details.answeredBy === 'rag' ? 'Payroll history search' : 'Calculated history comparison'
+    const explained = details.analysis?.modelStatus === 'completed' && details.model ? ` · explained by ${details.model.name}${seconds}` : ''
+    return { kind: 'data', label: `${basis}${explained}` }
+  }
+  if (details.answeredBy !== 'model' || !details.model) return null
+  return { kind: 'model', label: `Written by ${details.model.name}${details.cached ? ' · repeated answer' : seconds}`,
+    checked: details.check?.checked ? details.check.ok : null }
 }

@@ -48,7 +48,7 @@ async function benchmarkAgent(templateId, model, existing) {
 async function ask(agent, prompt) {
   const response = await fetch(`${STUDIO}/webhook/${encodeURIComponent(DOMAIN)}/${encodeURIComponent(agent.id)}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question: prompt, context: { page: 'payrun', payrunId: EVALUATION_PAYRUN, source: 'benchmark' } }),
+    body: JSON.stringify({ question: prompt, context: { page: 'payrun', payrunId: EVALUATION_PAYRUN, source: 'benchmark', answerMode: 'model' } }),
   })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) return { error: body.message || `HTTP ${response.status}` }

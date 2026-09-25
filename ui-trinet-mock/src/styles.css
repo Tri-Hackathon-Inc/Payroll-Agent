@@ -146,6 +146,11 @@ button { cursor: pointer; }
 .tn-copilot-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
 .tn-copilot-message.user .tn-copilot-bubble { background: var(--tn-ink); color: #fff; border-bottom-right-radius: 4px; }
 .tn-copilot-message.agent .tn-copilot-bubble { background: #f4f6f8; border: 1px solid var(--tn-line); color: var(--tn-ink); border-bottom-left-radius: 4px; }
+.tn-copilot-source { margin-top: 4px; font-size: 0.72rem; color: var(--tn-muted, #6b7280); }
+.tn-copilot-source.data { color: #1f7a4d; }
+.tn-copilot-alert { margin-top: 6px; padding: 6px 8px; border-radius: 6px; font-size: 0.75rem; background: #fdecea; color: #8a1c12; }
+.tn-copilot-alert.warning { background: #fff4e0; color: #7a4a00; }
+.tn-copilot-alert.info { background: #eaf5ee; color: #1f5f3a; }
 /* Agent-to-agent handoff: action under an answer, handoff marker, incident card */
 .tn-copilot-actions { margin-top: 6px; }
 .tn-copilot-action { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid #cfd6de; border-radius: 8px;

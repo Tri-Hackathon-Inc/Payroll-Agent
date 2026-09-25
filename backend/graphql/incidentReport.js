@@ -6,6 +6,7 @@
 
 const { loadPayrunContext } = require('./payrunContext');
 const { callModel, unavailableReason } = require('./modelRuntime');
+const { amountAtRisk, severityOf, RANK } = require('./findingPolicy');
 
 const MAX_CONVERSATION = 20;
 const RECOMMENDATIONS = {
@@ -18,7 +19,6 @@ const RECOMMENDATIONS = {
   'reimbursement outlier': 'Verify the expense receipts behind the reimbursement.',
   'overtime outlier': 'Confirm the overtime hours against approved timesheets.',
 };
-const CRITICAL = new Set(['duplicate payment', 'paid after termination', 'no tax withholding']);
 
 const money = value => Math.round(value * 100) / 100;
 const dollars = value => `$${money(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -28,19 +28,6 @@ function cleanConversation(conversation) {
   return (Array.isArray(conversation) ? conversation : []).slice(-MAX_CONVERSATION)
     .filter(item => item && typeof item.text === 'string')
     .map(item => ({ role: item.role === 'user' ? 'user' : 'agent', agent: item.agent || '', text: item.text.slice(0, 2000) }));
-}
-
-// Dollars that would be paid wrongly if the run were approved as is, where it can be computed.
-function amountAtRisk(signal, lines, past) {
-  const line = lines[0];
-  const highest = pick => Math.max(0, ...past.map(pick));
-  switch (signal.kind) {
-    case 'duplicate payment': return line.gross * (lines.length - 1);
-    case 'paid after termination': return line.gross;
-    case 'bonus outlier': return line.earnings.bonus - highest(item => item.earnings.bonus);
-    case 'reimbursement outlier': return line.earnings.reimbursement - highest(item => item.earnings.reimbursement);
-    default: return null;
-  }
 }
 
 // One evidence item per anomaly finding, limited to the employees the conversation discussed
@@ -60,7 +47,8 @@ function collectEvidence(context, conversation, collectedAt) {
       name: signal.name,
       finding: signal.kind,
       detail: signal.detail,
-      amountAtRisk: amountAtRisk(signal, lines, past),
+      amountAtRisk: signal.amountAtRisk !== undefined ? signal.amountAtRisk : amountAtRisk(signal.kind, lines, past),
+      severity: signal.severity || severityOf(signal.kind, amountAtRisk(signal.kind, lines, past)),
       snapshot: {
         payLines: lines.length, gross: line.gross, net: line.net, hours: line.hours, earnings: line.earnings,
         taxes: line.taxes, deductions: line.deductions, employmentStatus: line.employmentStatus,
@@ -75,8 +63,8 @@ function collectEvidence(context, conversation, collectedAt) {
 }
 
 function evidenceTable(evidence) {
-  return ['| ID | Employee | Finding | Detail | Amount at risk |', '| --- | --- | --- | --- | --- |',
-    ...evidence.map(item => `| ${item.id} | ${item.employeeId} ${item.name} | ${item.finding} | ${item.detail} | ${item.amountAtRisk == null ? '-' : dollars(item.amountAtRisk)} |`)].join('\n');
+  return ['| ID | Employee | Finding | Detail | Amount at risk | Severity |', '| --- | --- | --- | --- | --- | --- |',
+    ...evidence.map(item => `| ${item.id} | ${item.employeeId} ${item.name} | ${item.finding} | ${item.detail} | ${item.amountAtRisk == null ? '-' : dollars(item.amountAtRisk)} | ${item.severity} |`)].join('\n');
 }
 
 // Report written from the evidence alone (used when no model is connected).
@@ -169,7 +157,8 @@ async function createIncidentReport({ agent, config, model, invocation, domainNa
     if (result?.error) item.screenshotError = result.error;
   }
   const totalAtRisk = evidence.reduce((sum, item) => sum + (item.amountAtRisk || 0), 0);
-  const severity = evidence.some(item => CRITICAL.has(item.finding)) ? 'critical' : evidence.length ? 'warning' : 'info';
+  // The incident takes the highest severity among its findings (findingPolicy).
+  const severity = evidence.reduce((highest, item) => (RANK[item.severity] > RANK[highest] ? item.severity : highest), 'info');
   const id = `INC-${context.payrunId}-${now.getTime().toString(36).toUpperCase()}`;
   const title = `${evidence.length} payroll issue${evidence.length === 1 ? '' : 's'} in ${context.payrunId}`;
 
