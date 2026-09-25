@@ -28,11 +28,14 @@ podman machine start
 Start the UI, backend, databases and supporting services.
 Keep credentials in `backend/.env`, or create an empty file for defaults.
 
-**Docker:** build and start all services.
+**Docker:** build and start all services. Loads both `.env` files automatically.
 
 ```sh
-docker compose -f docker/docker-compose.yaml --env-file backend/.env up --build -d --wait
+bash docker/compose.sh up --build -d --wait
 ```
+
+Plain `docker compose -f docker/...` commands must pass every settings file with
+`--env-file`; otherwise model keys stay empty and every model answer fails.
 
 **Podman:** build and start all services. Loads both `.env` files automatically.
 

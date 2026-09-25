@@ -117,3 +117,58 @@ test('facts are answered without a model; model answers are checked, cached, and
   const benchmark = await answerQuestion({ agent, config, model, question: 'What is the total net pay?', invocation: { ...invocation, answerMode: 'model' } }, shared);
   assert.equal(benchmark.answeredBy, 'model', 'answerMode "model" always asks the model');
 });
+
+test('review questions get the automated findings; one selected employee drills down; concepts skip retrieval', async () => {
+  const anomalyAgent = { id: 'ad', name: 'Anomaly bot', templateId: 'anomaly-detection' };
+  const config = { model: 'groq', service: 'payrun', instructions: 'Flag unusual payments.' };
+  const invocation = { page: 'payrun', payrunId: 'PR-2026-09-B' };
+  let modelCalls = 0;
+  const url = await standIn(() => { modelCalls += 1; return { choices: [{ message: { content: 'FICA funds Social Security and Medicare (general guidance).' } }] }; });
+  const model = { id: 'groq', name: 'GPT-OSS', provider: 'openai-compatible', modelId: 'openai/gpt-oss-120b',
+    endpointEnv: 'GROQ_BASE_URL', credentialEnv: 'GROQ_API_KEY', parameters: {} };
+  const deps = { env: { GROQ_API_KEY: 'k', GROQ_BASE_URL: url, REDIS_URL: 'redis://unused' }, loadContext: async () => context(),
+    cache: createAnswerCache() };
+
+  const review = await answerQuestion({ agent: anomalyAgent, config, model, question: 'Is anyone paid twice in this payrun?', invocation }, deps);
+  assert.equal(review.answeredBy, 'payroll-data');
+  assert.match(review.reply, /^Yes: 1 employee is paid more than once/);
+
+  const concept = await answerQuestion({ agent: anomalyAgent, config, model, question: 'What is FICA?', invocation }, deps);
+  assert.equal(concept.answeredBy, 'model', 'not the RAG or anomaly pipeline');
+  assert.equal(modelCalls, 1);
+
+  const { AnomalyDetectionPipeline } = require('./anomalyPipeline');
+  const run = AnomalyDetectionPipeline.prototype.run;
+  AnomalyDetectionPipeline.prototype.run = async () => ({ reply: 'drill-down' });
+  try {
+    const drill = await answerQuestion({ agent: anomalyAgent, config, model, question: 'Is anything unusual?',
+      invocation: { ...invocation, employeeId: 'E1004' } }, { ...deps, env: { ...deps.env, REDIS_URL: '' } });
+    assert.equal(drill.answeredBy, 'anomaly-pipeline', 'one selected employee gets the per-employee comparison');
+  } finally {
+    AnomalyDetectionPipeline.prototype.run = run;
+  }
+});
+
+test('a first RAG question is cached per payrun version; follow-ups with history are not', async () => {
+  const { PayrollRagPipeline } = require('./rag/pipeline');
+  const run = PayrollRagPipeline.prototype.run;
+  let calls = 0;
+  PayrollRagPipeline.prototype.run = async () => { calls += 1; return { reply: `answer ${calls}`, analysis: { modelStatus: 'completed' } }; };
+  try {
+    const args = { agent: { id: 'g', name: 'Query bot', templateId: 'general-query' }, config: { model: 'groq', instructions: 'Answer.' },
+      model: { id: 'groq', name: 'GPT-OSS' }, question: 'Why did taxes change for the sales team?', invocation: { page: 'payrun', payrunId: 'PR-2026-09-B' } };
+    const deps = { env: { REDIS_URL: 'redis://unused' }, loadContext: async () => context(), cache: createAnswerCache() };
+    const first = await answerQuestion(args, deps);
+    const again = await answerQuestion({ ...args, question: '  why did TAXES change for the sales team? ' }, deps);
+    assert.equal(again.reply, first.reply);
+    assert.equal(again.cached, true);
+    const followUp = await answerQuestion({ ...args, conversation: { history: [{ role: 'user', content: 'Earlier question' }] } }, deps);
+    assert.equal(followUp.cached, false);
+    assert.equal(calls, 2);
+    const edited = { ...fixture.payrun, version: 2 };
+    await answerQuestion(args, { ...deps, loadContext: async () => context(edited) });
+    assert.equal(calls, 3, 'a new payrun version is answered afresh');
+  } finally {
+    PayrollRagPipeline.prototype.run = run;
+  }
+});

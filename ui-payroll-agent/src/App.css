@@ -301,3 +301,11 @@ button.tool-card:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px
 .metrics-timeline-bar span.has-errors { background: #c4501b; }
 .metrics-table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; font-weight: 600; }
 .metrics-question { max-width: 340px; }
+
+/* Access (admin vs user) */
+.sidebar-access { margin: 0 4px 12px; padding: 8px 10px; border-radius: 8px; background: rgba(255,255,255,.06); color: rgba(255,255,255,.8); }
+.sidebar-access-link { color: #fff; font-size: 12px; text-decoration: underline; }
+
+/* Customer Tools & APIs */
+.tool-chip { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; background: #eef1f4; font-size: .8rem; }
+.tool-chip.primary { background: #212529; color: #fff; }

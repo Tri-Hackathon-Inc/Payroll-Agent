@@ -85,10 +85,20 @@ services:
       # Incident reports (agent-to-agent handoff) are emailed through this endpoint when set.
       EMAIL_API_BASE_URL: ${EMAIL_API_BASE_URL:-}
       INCIDENT_EMAIL_TO: ${INCIDENT_EMAIL_TO:-payroll-team@example.com}
+      # Slack incoming-webhook URL for incident alerts (secret; used when the Slack tool is attached).
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      # Employee names are masked before model calls unless this is "false".
+      PII_MASKING: ${PII_MASKING:-true}
       # Headless-browser screenshots of each finding, attached to incident evidence.
       EVIDENCE_CAPTURE_URL: http://evidence-capture:4300
       # Real-time anomaly detection: shared secret required on POST /events/payroll when set.
       PAYROLL_EVENTS_TOKEN: ${PAYROLL_EVENTS_TOKEN:-}
+      # Admin vs user views: admins sign in with this key (unset = open Studio, everyone admin).
+      STUDIO_ADMIN_KEY: ${STUDIO_ADMIN_KEY:-}
+      ADMIN_FEATURES: ${ADMIN_FEATURES:-all}
+      USER_FEATURES: ${USER_FEATURES:-}
+      CUSTOMER_MODELS: ${CUSTOMER_MODELS:-}
+      CUSTOMER_TOOLS: ${CUSTOMER_TOOLS:-}
     volumes:
       - embedding_cache:/models
     ports:

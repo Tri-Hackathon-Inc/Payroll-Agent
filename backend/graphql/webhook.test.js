@@ -188,11 +188,11 @@ test('answerQuestion acknowledges when the model is not connected', async () => 
   assert.equal(answer.metrics, null);
 });
 
-test('answerQuestion sends instructions, payrun data, and the question to the model', async () => {
+test('answerQuestion sends instructions, payrun data, and the question to the model, without employee names', async () => {
   let prompt;
   const modelUrl = await standIn(request => {
     prompt = request.body.messages;
-    return { json: { choices: [{ message: { content: 'Maya Chen gross doubled from 4500 to 9000.' } }], usage: { completion_tokens: 12 } } };
+    return { json: { choices: [{ message: { content: 'E1001 gross doubled from 4500 to 9000.' } }], usage: { completion_tokens: 12 } } };
   });
   const payrollUrl = await standIn(() => ({ json: { data: { payrun: run('PR-B', 'PENDING_APPROVAL', 9000), payrunHistory: [run('PR-A', 'COMPLETED', 4500)] } } }));
   const answer = await answerQuestion({
@@ -200,12 +200,14 @@ test('answerQuestion sends instructions, payrun data, and the question to the mo
     config: { model: 'qwen-2-5-72b', service: 'payrun', description: 'Flags anomalies.', instructions: 'Compare payrun inputs against history.' },
     invocation: { page: 'payrun', payrunId: 'PR-B' },
   }, { env: { HF_TOKEN: 'hf_test', HF_INFERENCE_BASE_URL: modelUrl }, endpoint: payrollUrl });
-  assert.equal(answer.reply, 'Maya Chen gross doubled from 4500 to 9000.');
+  assert.equal(answer.reply, 'E1001 Maya Chen gross doubled from 4500 to 9000.', 'the name is restored for the reader');
   assert.equal(answer.model.modelId, 'Qwen/Qwen2.5-72B-Instruct');
   assert.equal(answer.context.payrunId, 'PR-B');
   assert.match(prompt[0].content, /Instructions: Compare payrun inputs against history\./);
   assert.match(prompt[0].content, /one-sentence direct answer[\s\S]*Never paste raw data lines/);
-  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Why are Maya Chen's taxes so high\?/);
+  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Why are E1001's taxes so high\?/);
+  assert.ok(!JSON.stringify(prompt).includes('Maya Chen'), 'the name never reaches the model');
+  assert.ok(answer.privacy.namesMasked > 0);
   assert.equal(answer.answeredBy, 'model');
   assert.equal(answer.check.ok, true);
 });

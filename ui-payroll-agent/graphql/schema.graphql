@@ -70,6 +70,13 @@ scalar JSON
     context: JSON
   }
   type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
+  type Viewer {
+    role: String!
+    features: [String!]!
+    authMode: String!
+    allowedModels: [String!]
+    allowedTools: [String!]
+  }
   input RateAnswerInput {
     domainName: String!
     interactionId: ID!
@@ -88,4 +95,5 @@ scalar JSON
     getDomainAgentsTemplates(domainName: String!): [Template!]!
     getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
     agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
+    viewer: Viewer!
   }

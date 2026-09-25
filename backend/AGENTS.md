@@ -537,6 +537,35 @@ payrun pages over `GET /events/stream?domain=&payrunId=` (server-sent events, pr
 `/ai_studio/events/stream`) and recorded for Agent Metrics with source `realtime-monitor`
 (counted as checks, not questions). The live stream is per process: several backend replicas
 would need Redis pub/sub for it.
+
+Admin and customer views (`graphql/access.js`): the GraphQL `viewer` query returns the role,
+feature flags, and the customer allow-lists. With `STUDIO_ADMIN_KEY` set, an admin signs in with
+it (`POST /auth/admin`, proxied as `/ai_studio/auth/admin`; limited to 10 attempts a minute),
+which sets an HttpOnly, SameSite cookie holding an HMAC of the key (8 hours; rotating the key
+signs everyone out); everyone else is a customer. Without the key the Studio is open (everyone
+is admin). Flags per role (`ADMIN_FEATURES`, default all; `USER_FEATURES`, default the customer
+set; "all", "none", or a list): customers get `createAgents`, `testAgents`, `agentTools`,
+`usage`; admins also `manageAgents`, `tools`, `models`, `evaluation`, `metrics`.
+`CUSTOMER_MODELS` and `CUSTOMER_TOOLS` limit the models and tools a customer may give an agent.
+The resolvers enforce all of it (`createAgent`/`updateAgent` need `createAgents` or
+`manageAgents` and, for customers, allowed choices; Studio `chatAgent` needs `testAgents`;
+`agentMetrics` returns full metrics with `metrics` and usage only with `usage`; FORBIDDEN
+otherwise). The Studio shows admins Services, the tool catalog, Models, My Agents, Evaluation,
+and Agent Metrics; customers Services, their agents' tools (with Attach tool), My Agents
+(playground), and Usage. The payrun page's chat webhook, answer feedback, and live alerts are
+not gated. This is a shared admin key, not per-user accounts.
+
+Privacy (`graphql/piiMask.js`): employee names never reach a model. Before any model call
+(generic answers, the RAG pipeline, the anomaly pipeline) each employee's name is replaced with
+their employee ID in the payroll context, question, conversation, and retrieved documents; names
+are restored in the reply's prose (for JSON replies only in `answer`, `explanation`, and
+`reviewAction`, so IDs used as keys stay exact). Pay figures are kept because the model needs
+them. `PII_MASKING=false` turns it off. Answers computed from the data use no model at all.
+
+Slack alerts: when the Incident Report agent has the `slack-webhook` tool attached and
+`SLACK_WEBHOOK_URL` (a Slack incoming-webhook URL, https only; secret) is set, each incident is
+also posted to Slack as a short summary; the incident's `slack` field reports sent, not-sent, or
+failed, next to `email`.
 Domain filtering and role
 metadata do not provide authentication or authorization.
 

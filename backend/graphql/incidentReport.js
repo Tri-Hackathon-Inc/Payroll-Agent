@@ -142,6 +142,30 @@ async function deliverEmail({ subject, body }, { env = process.env, fetchImpl = 
   }
 }
 
+// Posts a short incident summary to Slack when the Incident Report agent has the Slack webhook
+// tool attached and SLACK_WEBHOOK_URL (a Slack incoming-webhook URL, kept server-side) is set.
+async function deliverSlack({ id, title, severity, totalAtRisk, evidence, agentName, fromAgent }, config = {}, { env = process.env, fetchImpl = fetch } = {}) {
+  const attached = [config.service, ...(config.attached_services || [])].includes('slack-webhook');
+  if (!attached) return { status: 'off', reason: 'The Slack webhook tool is not attached to this agent.' };
+  let url;
+  try { url = new URL(env.SLACK_WEBHOOK_URL || ''); } catch {
+    return { status: 'not-sent', reason: 'SLACK_WEBHOOK_URL is not set.' };
+  }
+  const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) return { status: 'not-sent', reason: 'SLACK_WEBHOOK_URL must use https.' };
+  const lines = evidence.slice(0, 8).map(item => `• ${item.employeeId} ${item.name}: ${item.finding}${item.amountAtRisk != null ? ` (${dollars(item.amountAtRisk)})` : ''}`);
+  const text = [`*[${severity.toUpperCase()}] ${id}*: ${title} · ${dollars(totalAtRisk)} at risk`, ...lines,
+    ...(evidence.length > 8 ? [`…and ${evidence.length - 8} more`] : []),
+    `Raised by ${agentName}${fromAgent ? `, handed over from ${fromAgent}` : ''}.`].join('\n');
+  try {
+    const response = await fetchImpl(url.href, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }), signal: AbortSignal.timeout(10000) });
+    return response.ok ? { status: 'sent' } : { status: 'failed', reason: `Slack returned HTTP ${response.status}.` };
+  } catch {
+    return { status: 'failed', reason: 'Slack could not be reached.' };
+  }
+}
+
 async function createIncidentReport({ agent, config, model, invocation, domainName }, deps = {}) {
   const context = await (deps.loadContext || loadPayrunContext)(invocation, deps);
   if (!context) throw Object.assign(new Error('An incident report needs a payrun: open the agent from a payrun page.'), { status: 400 });
@@ -177,16 +201,18 @@ async function createIncidentReport({ agent, config, model, invocation, domainNa
   const report = [header, '', narrative || evidenceReport({ evidence, totalAtRisk, conversation }), '', '## Evidence', evidenceTable(evidence),
     '', ...screenshotSection(evidence)].join('\n');
   const email = await deliverEmail({ subject: `[${severity.toUpperCase()}] ${id}: ${title}`, body: report }, deps);
+  const slack = await deliverSlack({ id, title, severity, totalAtRisk, evidence, agentName: agent.name, fromAgent: handoff.fromAgent }, config, deps);
 
   return {
     reply: `Incident ${id} created: ${evidence.length} evidence item${evidence.length === 1 ? '' : 's'}, severity ${severity}, ${dollars(totalAtRisk)} at risk. `
-      + (email.status === 'sent' ? `Emailed to ${email.to}.` : `Email not sent: ${email.reason}`),
+      + (email.status === 'sent' ? `Emailed to ${email.to}.` : `Email not sent: ${email.reason}`)
+      + (slack.status === 'sent' ? ' Posted to Slack.' : slack.status === 'off' ? '' : ` Slack not sent: ${slack.reason}`),
     model: writtenBy === 'evidence' ? null : { id: model.id, name: model.name, modelId: model.modelId },
     metrics,
     incident: { id, title, severity, payrunId: context.payrunId, createdAt, fromAgent: handoff.fromAgent || null,
-      evidence, totalAtRisk: money(totalAtRisk), report, writtenBy, modelError, email,
+      evidence, totalAtRisk: money(totalAtRisk), report, writtenBy, modelError, email, slack,
       screenshots: { taken: evidence.reduce((sum, item) => sum + item.screenshots.length, 0), capturedAt: capture.capturedAt || null, error: capture.error || null } },
   };
 }
 
-module.exports = { createIncidentReport, collectEvidence, deliverEmail };
+module.exports = { createIncidentReport, collectEvidence, deliverEmail, deliverSlack };

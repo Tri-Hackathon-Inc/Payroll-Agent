@@ -111,6 +111,9 @@ class AgentInteraction(models.Model):
     error = models.CharField(max_length=300, blank=True)
     feedback = models.CharField(max_length=10, blank=True)
     feedback_at = models.DateTimeField(null=True)
+    # Fingerprint of the reply text: the same question getting different answers shows up in
+    # the consistency metric. The reply itself is not stored.
+    answer_hash = models.CharField(max_length=32, blank=True)
 
     class Meta:
         db_table = "agent_interaction"

@@ -40,5 +40,7 @@ function scopeContext(context, question) {
 
 // Whether a question is about findings or review (the UI shows incident suggestions only then).
 const isReviewQuestion = question => REVIEW.test(normalize(question || ''));
+// Definitions and general guidance: answered briefly by the model, not from retrieved payroll data.
+const isConceptQuestion = question => CONCEPT.test(normalize(question || ''));
 
-module.exports = { scopeContext, selectEmployees, isReviewQuestion, SMALL_RUN_LINES };
+module.exports = { scopeContext, selectEmployees, isReviewQuestion, isConceptQuestion, SMALL_RUN_LINES };

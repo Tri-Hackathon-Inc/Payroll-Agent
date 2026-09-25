@@ -1,6 +1,23 @@
 const path = require('node:path');
 const { createRpcResolver, encodeStruct, decodeStruct, jsonResolver } = require('./client');
 const { withConversation, failure } = require('./redisStore');
+const { requireFeature, viewerFor, viewerOf, checkCustomerChoices } = require('./access');
+
+// Customers see their usage (questions asked, most asked, helpful rate), not the admin's
+// business and technical metrics.
+function usageOnly(metrics) {
+  const { summary = {}, business = {}, recent = [], window } = metrics;
+  return { window, summary: { questions: summary.questions, conversations: summary.conversations, activeAgents: summary.activeAgents,
+    up: summary.up, down: summary.down, helpfulRate: summary.helpfulRate },
+  business: { topQuestions: business.topQuestions || [] },
+  recent: recent.map(({ id, createdAt, agentName, question, feedback }) => ({ id, createdAt, agentName, question, feedback })) };
+}
+
+// Admins or customers may save agents; customers only with the models and tools they are allowed.
+const savingAgent = resolver => requireFeature(['manageAgents', 'createAgents'], (root, args, context, info) => {
+  checkCustomerChoices(viewerOf(context), args.input?.config);
+  return resolver(root, args, context, info);
+});
 
 const catalogRpc = {
   protoPath: path.join(__dirname, '../registry/proto/templates.proto'),
@@ -81,6 +98,13 @@ const typeDefs = `
     context: JSON
   }
   type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
+  type Viewer {
+    role: String!
+    features: [String!]!
+    authMode: String!
+    allowedModels: [String!]
+    allowedTools: [String!]
+  }
   input RateAnswerInput {
     domainName: String!
     interactionId: ID!
@@ -99,6 +123,7 @@ const typeDefs = `
     getDomainAgentsTemplates(domainName: String!): [Template!]!
     getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
     agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
+    viewer: Viewer!
   }
 `;
 
@@ -120,12 +145,16 @@ const resolvers = {
       value => value.templates || []),
     getServiceAgentRegistry: rpcResolver('GetServiceAgentRegistry', ({ serviceName, domainName }) => ({ service_name: serviceName || '', domain_name: domainName || '' }),
       value => value.agents || []),
-    agentMetrics: rpcResolver('GetAgentMetrics', ({ domainName, agentId, sinceHours }) => ({
-      domain_name: domainName, agent_id: agentId || '', since_hours: Math.max(0, sinceHours || 0),
-    }), value => decodeStruct(value.metrics || { fields: {} })),
+    viewer: (root, args, { context }) => context?.viewer || viewerFor(context?.headers),
+    agentMetrics: requireFeature(['metrics', 'usage'], async (root, args, context, info) => {
+      const metrics = await rpcResolver('GetAgentMetrics', ({ domainName, agentId, sinceHours }) => ({
+        domain_name: domainName, agent_id: agentId || '', since_hours: Math.max(0, sinceHours || 0),
+      }), value => decodeStruct(value.metrics || { fields: {} }))(root, args, context, info);
+      return viewerOf(context).features.includes('metrics') ? metrics : usageOnly(metrics);
+    }),
   },
   Mutation: {
-    chatAgent: async (root, { input }, context) => withConversation({
+    chatAgent: requireFeature('testAgents', async (root, { input }, context) => withConversation({
       sessionId: input.sessionId, requestId: input.requestId, question: input.message, history: input.history || [],
       scope: { domainName: input.domainName, agentId: input.agentId, channel: 'studio', owner: context.context?.sessionOwner },
       context: input.context || {},
@@ -144,18 +173,18 @@ const resolvers = {
       const invoke = rpcResolver('ChatAgent', () => ({ agent_id: input.agentId, domain_name: input.domainName,
         message: input.message, history: conversation.history }));
       return { answer: await invoke(root, {}, context) };
-    }),
-    createAgent: rpcResolver('CreateAgent', ({ input }) => ({
+    })),
+    createAgent: savingAgent(rpcResolver('CreateAgent', ({ input }) => ({
       domain_name: input.domainName, template_id: input.templateId,
       name: input.name, config: encodeStruct(input.config),
-    })),
+    }))),
     rateAnswer: rpcResolver('RateInteraction', ({ input }) => ({
       domain_name: input.domainName, interaction_id: input.interactionId, rating: input.rating,
     }), value => value.id),
-    updateAgent: rpcResolver('UpdateAgent', ({ input }) => ({
+    updateAgent: savingAgent(rpcResolver('UpdateAgent', ({ input }) => ({
       id: input.id, domain_name: input.domainName,
       name: input.name, config: encodeStruct(input.config),
-    })),
+    }))),
   },
   Agent: {
     domainName: agent => agent.domain_name,

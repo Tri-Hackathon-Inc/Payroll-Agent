@@ -120,3 +120,23 @@ test('an unreachable capture service still produces the report and says why scre
   assert.doesNotMatch(result.incident.report, /## Screenshots/);
   assert.equal(result.incident.evidence.length, 2);
 });
+
+test('with the Slack tool attached, the incident is posted to Slack; without it, nothing is sent', async () => {
+  const { deliverSlack } = require('./incidentReport');
+  let posted;
+  const slackUrl = await standIn(request => { posted = request; return { json: { ok: true } }; });
+  const slackConfig = { ...config, attached_services: ['payrun-history', 'slack-webhook'] };
+  const result = await createIncidentReport({ agent, config: slackConfig, model, invocation: { page: 'payrun', payrunId: 'PR-9', handoff } },
+    { loadContext, env: { SLACK_WEBHOOK_URL: `${slackUrl}/services/T000/B000/secret` } });
+  assert.equal(result.incident.slack.status, 'sent');
+  assert.equal(posted.url, '/services/T000/B000/secret');
+  assert.match(posted.body.text, /^\*\[CRITICAL\] INC-PR-9-[A-Z0-9]+\*: 2 payroll issues in PR-9 · \$6,500\.00 at risk\n• E2 Twice: duplicate payment \(\$2,000\.00\)/);
+  assert.match(result.reply, /Posted to Slack\./);
+
+  const off = await createIncidentReport({ agent, config, model, invocation: { page: 'payrun', payrunId: 'PR-9', handoff } },
+    { loadContext, env: { SLACK_WEBHOOK_URL: `${slackUrl}/x` } });
+  assert.equal(off.incident.slack.status, 'off', 'the tool is not attached');
+  const facts = { id: 'INC-1', title: 't', severity: 'critical', totalAtRisk: 1, evidence: [], agentName: 'a' };
+  assert.equal((await deliverSlack(facts, slackConfig, { env: {} })).status, 'not-sent');
+  assert.match((await deliverSlack(facts, slackConfig, { env: { SLACK_WEBHOOK_URL: 'http://hooks.example.com/x' } })).reason, /must use https/);
+});

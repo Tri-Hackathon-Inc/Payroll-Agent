@@ -12,9 +12,10 @@ const { AnomalyDetectionPipeline } = require('./anomalyPipeline');
 const { withConversation } = require('./redisStore');
 const { createIncidentReport } = require('./incidentReport');
 const { answerFromData, normalize } = require('./factAnswers');
+const { createPseudonymizer, employeesIn } = require('./piiMask');
 const { checkReply, checkNote } = require('./replyCheck');
 const { createAnswerCache } = require('./answerCache');
-const { scopeContext, isReviewQuestion } = require('./contextScope');
+const { scopeContext, isReviewQuestion, isConceptQuestion } = require('./contextScope');
 const { createDefaultIncidentStore, planIncidents, findingKey, findingsMessage, brief } = require('./incidentTrigger');
 
 const answerCache = createAnswerCache();
@@ -59,9 +60,11 @@ async function agentModel(agent, config, context) {
 
 // Answers a question, in order:
 //   1. a fact in the payroll data is answered exactly in code (factAnswers), even when no model is
-//      connected; follow-ups that depend on the conversation ("his", "her") go on to the next steps;
+//      connected, including the automated findings for review questions; follow-ups that depend on
+//      the conversation ("his", "her") go on to the next steps;
 //   2. payrun questions go to the payroll RAG pipeline when Redis is configured, and Anomaly
-//      Detection agents' review questions to the anomaly pipeline (calculated history comparisons);
+//      Detection agents to the anomaly pipeline (per-employee history comparisons, e.g. when one
+//      employee is selected); definitions and general guidance skip both and go to the model;
 //   3. otherwise the model answers: a question already answered for this payrun version returns
 //      the same reply from the cache, only the pay lines the question needs are sent
 //      (contextScope), and the reply is checked against the data (replyCheck).
@@ -80,18 +83,32 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
     contextError = error.message;
   }
   const contextInfo = { payrunId: payrunContext?.payrunId || null, characters: payrunContext?.text?.length || 0, error: contextError };
-  const anomalyReview = templateId === 'anomaly-detection' && isReviewQuestion(question);
+  // One source of findings: review questions get the automated checks' findings (severity, dollars
+  // at risk), except when one employee is selected, where the anomaly pipeline's per-employee
+  // history comparison is the drill-down.
+  const employeeDrillDown = templateId === 'anomaly-detection' && isReviewQuestion(question) && Boolean(invocation?.employeeId);
+  const concept = isConceptQuestion(question);
 
-  const computed = modelOnly || anomalyReview ? null : answerFromData(question, payrunContext);
+  const computed = modelOnly || employeeDrillDown ? null : answerFromData(question, payrunContext);
   if (computed) {
     return { reply: computed.reply, answeredBy: 'payroll-data', intent: computed.intent, model: null,
       metrics: { latencyMs: Math.round(performance.now() - started) }, context: contextInfo };
   }
-  if (invocation?.page === 'payrun' && env.RAG_ENABLED !== 'false' && (env.REDIS_URL || deps.vectorStore)) {
+  if (!concept && invocation?.page === 'payrun' && env.RAG_ENABLED !== 'false' && (env.REDIS_URL || deps.vectorStore)) {
     const { PayrollRagPipeline } = require('./rag/pipeline');
-    return { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation }) };
+    // A first question (no conversation yet) on the same payrun version gets the same answer
+    // from the cache: consistent wording and no repeated model call. Follow-ups are not cached.
+    const ragCache = deps.cache || answerCache;
+    const ragKey = ragCache.key(['rag', agent.id || agent.name, model?.id, config.instructions, invocation.employeeId || null,
+      payrunContext?.payrunId || null, payrunContext?.payrun?.version ?? null, normalize(question)]);
+    const ragCacheable = !modelOnly && !(conversation?.history || []).length;
+    const hit = ragCacheable ? ragCache.get(ragKey) : null;
+    if (hit) return { ...hit, cached: true };
+    const answer = { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation }) };
+    if (ragCacheable && answer.analysis?.modelStatus === 'completed') ragCache.set(ragKey, answer);
+    return { ...answer, cached: false };
   }
-  if (templateId === 'anomaly-detection') {
+  if (!concept && templateId === 'anomaly-detection') {
     return { answeredBy: 'anomaly-pipeline', ...await new AnomalyDetectionPipeline(deps).run({ config, model, question, invocation }) };
   }
 
@@ -115,8 +132,13 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
 
   // Only the pay lines this question needs go to the model (contextScope).
   const modelContext = scopeContext(payrunContext, question);
-  const messages = buildMessages({ agentName: agent.name, config, question, context: modelContext, history });
-  const { text, metrics } = await callModel(model, messages, deps);
+  // Names never reach the model (piiMask): masked going in, restored in the reply.
+  const pii = createPseudonymizer(employeesIn(payrunContext), env);
+  const messages = buildMessages({ agentName: agent.name, config, question: pii.mask(question),
+    context: modelContext && { ...modelContext, text: pii.mask(modelContext.text) },
+    history: history.map(turn => ({ ...turn, content: pii.mask(turn.content) })) });
+  const { text: maskedText, metrics } = await callModel(model, messages, deps);
+  const text = pii.unmask(maskedText);
   const check = checkReply(text, modelContext);
   const sent = { characters: modelContext?.text?.length || 0, scope: modelContext?.scope || null };
   const answer = {
@@ -125,6 +147,7 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
     model: { id: model.id, name: model.name, modelId: model.modelId },
     metrics,
     check,
+    privacy: { namesMasked: pii.masked },
   };
   if (!modelOnly) cache.set(cacheKey, { ...answer, sent });
   return { ...answer, cached: false, context: { ...contextInfo, ...sent } };

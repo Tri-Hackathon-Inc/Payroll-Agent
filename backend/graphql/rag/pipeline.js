@@ -7,6 +7,7 @@ const { LocalEmbeddings } = require('./embeddings');
 const { PayrollVectorStore, getVectorPool } = require('./vectorStore');
 const { historyDocuments } = require('./documents');
 const { resolveIntent } = require('./intent');
+const { createPseudonymizer, employeesIn, unmaskJsonProse } = require('../piiMask');
 
 const TOPIC_METRICS = { earnings: ['gross', 'net', 'bonus'], overtime: ['overtimeHours'], deductions: ['health', 'retirement401k', 'garnishment'] };
 
@@ -57,6 +58,8 @@ class PayrollRagPipeline {
         periodEnd: context.current.periodEnd, currency: context.current.currency, frequency: context.current.frequency,
         employees: employeeDetails(context.current, focused) }, evidence: focused, retrievalStatus,
       sources: sources.map(({ id, text, payrunId, employeeId }) => ({ id, text, payrunId, employeeId })) };
+    // Names never reach the answer model (piiMask); they are restored in the reply's prose fields.
+    const pii = createPseudonymizer(employeesIn(context), env);
     if (retrievalStatus === 'unavailable') {
       output = { modelStatus: 'not_needed', reason: 'Historical document retrieval is unavailable. Showing calculated comparisons only.' };
     } else if (!reason && JSON.stringify(promptData).length > 60000) {
@@ -72,10 +75,10 @@ class PayrollRagPipeline {
             'When no historical sources exist, use the current employee payrun information only, return an empty sourceIds array, and explicitly explain that historical comparison is limited or unavailable. Do not invent historical payments.',
             'The answer is at most 3000 characters. If the evidence cannot answer the question, state what is missing. Baselines are already computed from the complete comparison window; never recompute them from the retrieved subset.',
           ].join('\n') },
-          { role: 'user', content: JSON.stringify(promptData) },
+          { role: 'user', content: pii.mask(JSON.stringify(promptData)) },
         ], { responseFormat: { type: 'json_object' } });
         metrics = result.metrics;
-        output = { modelStatus: 'completed', text: result.text };
+        output = { modelStatus: 'completed', text: unmaskJsonProse(result.text, pii) };
       } catch (error) {
         if (!(error instanceof ModelUnavailable)) throw error;
         output = { modelStatus: 'unavailable', reason: error.message };

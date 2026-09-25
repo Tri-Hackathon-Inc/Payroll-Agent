@@ -69,3 +69,10 @@ export const RATE_ANSWER_MUTATION = `
     rateAnswer(input: $input)
   }
 `
+
+// Who is using the Studio: role (admin or user) and the features turned on for it.
+export const VIEWER_QUERY = `
+  query Viewer {
+    viewer { role features authMode allowedModels allowedTools }
+  }
+`

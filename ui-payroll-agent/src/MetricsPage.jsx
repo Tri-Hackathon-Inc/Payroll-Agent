@@ -77,12 +77,15 @@ export default function MetricsPage({ domain, agents, agentsLoading }) {
   const summary = metrics?.summary
   const business = metrics?.business
   const quality = metrics?.quality
+  // Customers get usage only (the API leaves out the admin's business and technical metrics).
+  const usageOnly = Boolean(metrics && !quality)
 
   return <div>
     <div className="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-3">
       <div>
-        <h2 className="h5 fw-bold mb-1">Agent Metrics</h2>
-        <p className="text-muted small mb-0">Measured from every answer {domain.label} agents gave. Benchmark runs are excluded.</p>
+        <h2 className="h5 fw-bold mb-1">{usageOnly ? 'Usage' : 'Agent Metrics'}</h2>
+        <p className="text-muted small mb-0">{usageOnly ? `How your team uses the ${domain.label} agents.`
+          : `Measured from every answer ${domain.label} agents gave. Benchmark runs are excluded.`}</p>
       </div>
       <div className="d-flex flex-wrap gap-2 align-items-center">
         <select className="form-select form-select-sm w-auto" aria-label="Agent" value={agentId} onChange={event => setAgentId(event.target.value)} disabled={agentsLoading}>
@@ -107,7 +110,31 @@ export default function MetricsPage({ domain, agents, agentsLoading }) {
       <a className="btn btn-dark btn-sm" href={trinetUrl(domain.name)} target="_blank" rel="noreferrer">Open the payrun page <i className="bi bi-box-arrow-up-right ms-1" /></a>
     </div></div>}
 
-    {summary && summary.questions > 0 && <>
+    {usageOnly && summary.questions > 0 && <>
+      <div className="row row-cols-1 row-cols-md-3 g-3 mb-4">
+        <Kpi icon="bi-chat-dots" label="Questions asked" value={number(summary.questions)} detail={plural(summary.conversations, 'conversation')} />
+        <Kpi icon="bi-robot" label="Agents used" value={number(summary.activeAgents)} />
+        <Kpi icon="bi-hand-thumbs-up" label="Helpful rate" value={pct(summary.helpfulRate)} detail={`${number(summary.up)} 👍 · ${number(summary.down)} 👎`} />
+      </div>
+      <div className="row g-4">
+        <div className="col-lg-6"><Section title="Most asked">
+          <div className="card border-0 shadow-sm"><div className="card-body">
+            <Bars rows={business.topQuestions} value={row => row.count} label={row => <span className="text-truncate d-inline-block metrics-question">{row.question}</span>}
+              detail={row => number(row.count)} />
+          </div></div>
+        </Section></div>
+        <div className="col-lg-6"><Section title="Recent questions">
+          <div className="card border-0 shadow-sm"><ul className="list-group list-group-flush">
+            {metrics.recent.map(item => <li key={item.id} className="list-group-item small d-flex justify-content-between gap-2">
+              <span className="text-truncate" title={item.question}>{item.question}<span className="text-muted"> · {item.agentName}</span></span>
+              <span className="text-nowrap text-muted">{item.feedback === 'up' ? '👍' : item.feedback === 'down' ? '👎' : ''} {new Date(item.createdAt).toLocaleDateString()}</span>
+            </li>)}
+          </ul></div>
+        </Section></div>
+      </div>
+    </>}
+
+    {!usageOnly && summary && summary.questions > 0 && <>
       <Section title="Business impact" subtitle="What the agents surfaced for payroll reviewers. Findings and dollars at risk count each payrun once.">
         <div className="row row-cols-2 row-cols-lg-3 row-cols-xxl-6 g-3">
           <Kpi icon="bi-chat-dots" label="Questions answered" value={number(summary.questions)} detail={`${plural(summary.conversations, 'conversation')} · ${plural(summary.activeAgents, 'agent')}`} />
@@ -122,10 +149,12 @@ export default function MetricsPage({ domain, agents, agentsLoading }) {
       </Section>
 
       <Section title="Agent performance" subtitle="How answers were produced and how reliable they were.">
-        <div className="row row-cols-2 row-cols-lg-3 row-cols-xxl-5 g-3">
+        <div className="row row-cols-2 row-cols-lg-3 row-cols-xxl-6 g-3">
           <Kpi icon="bi-calculator" label="Answered from data" value={pct(summary.dataShare)} detail={`${plural(summary.answeredFromData, 'exact answer')}, no model call`} />
           <Kpi icon="bi-stopwatch" label="Response time" value={duration(summary.avgLatencyMs)} detail={`p95 ${duration(summary.p95LatencyMs)} · full request, incl. automatic incidents`} />
           <Kpi icon="bi-shield-check" label="Reply check pass rate" value={pct(quality.checkPassRate)} detail={`${number(quality.flagged)} of ${number(quality.checked)} model answers flagged`} />
+          <Kpi icon="bi-arrow-repeat" label="Answer consistency" value={pct(quality.consistencyRate)}
+            detail={quality.repeatedQuestions ? `${number(quality.consistent)} of ${plural(quality.repeatedQuestions, 'repeated question')} always got the same answer` : 'No repeated questions yet'} />
           <Kpi icon="bi-lightning" label="Cache hit rate" value={pct(quality.cacheHitRate)} detail={`${number(quality.cached)} of ${number(quality.modelAnswers)} model answers`} />
           <Kpi icon="bi-exclamation-triangle" label="Errors" value={number(summary.errors)} detail={quality.errorReasons[0]?.reason || 'None'} />
         </div>
@@ -159,6 +188,21 @@ export default function MetricsPage({ domain, agents, agentsLoading }) {
           </Section>
         </div>
       </div>
+
+      {quality.variedAnswers?.length > 0 && <Section title="Same question, different answers"
+        subtitle="Questions asked more than once to the same agent on the same payrun whose answers differed. Candidates for computed answers or clearer instructions.">
+        <div className="card border-0 shadow-sm"><div className="table-responsive">
+          <table className="table table-sm align-middle mb-0 metrics-table">
+            <thead><tr><th>Question</th><th>Agent</th><th>Payrun</th><th className="text-end">Asked</th><th className="text-end">Different answers</th><th>Answered by</th></tr></thead>
+            <tbody>{quality.variedAnswers.map(item => <tr key={`${item.agentName}:${item.payrunId}:${item.question}`}>
+              <td className="small"><span className="d-inline-block text-truncate metrics-question" title={item.question}>{item.question}</span></td>
+              <td className="small">{item.agentName}</td><td className="small">{item.payrunId || '—'}</td>
+              <td className="small text-end">{number(item.times)}</td><td className="small text-end">{number(item.distinctAnswers)}</td>
+              <td className="small">{item.answeredBy.map(typeLabel).join(', ')}</td>
+            </tr>)}</tbody>
+          </table>
+        </div></div>
+      </Section>}
 
       <Section title="Agents">
         <div className="card border-0 shadow-sm"><div className="table-responsive">

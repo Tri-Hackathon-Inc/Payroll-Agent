@@ -39,6 +39,11 @@ test('model answers record tokens and the reply check; errors and acknowledgemen
   const failed = buildInteraction({ question: 'Hi', config: { model: 'groq-gpt-oss-120b' }, error: new Error('rate limit') });
   assert.deepEqual([failed.answeredBy, failed.modelId, failed.error], ['error', 'groq-gpt-oss-120b', 'rate limit']);
   assert.equal(buildInteraction({ question: 'x'.repeat(900) }).question.length, 500);
+  const fingerprint = reply => buildInteraction({ question: 'Q', answer: { answeredBy: 'model', reply } }).answerHash;
+  assert.match(fingerprint('Gross is $62,504.00.'), /^[0-9a-f]{32}$/);
+  assert.equal(fingerprint('Gross is  $62,504.00.\n'), fingerprint('gross is $62,504.00.'), 'whitespace and case are not a different answer');
+  assert.notEqual(fingerprint('Gross is $62,504.00.'), fingerprint('Gross is $62,000.00.'));
+  assert.equal(failed.answerHash, '');
 });
 
 test('recording returns the interaction ID, and a failed write never breaks the chat', async () => {

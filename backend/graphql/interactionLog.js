@@ -8,6 +8,8 @@ const SEVERITIES = ['critical', 'warning', 'info'];
 const ANSWER_TYPES = new Set(['payroll-data', 'model', 'rag', 'anomaly-pipeline', 'incident-report']);
 
 const hashed = value => (value ? createHash('sha256').update(String(value)).digest('hex').slice(0, 32) : '');
+// Reply fingerprint for the consistency metric (whitespace and case do not count as a difference).
+const fingerprint = reply => (reply ? hashed(String(reply).toLowerCase().replace(/\s+/g, ' ').trim()) : '');
 const count = value => (Number.isFinite(value) && value >= 0 ? Math.round(value) : null);
 
 function findingsOf(payrunContext) {
@@ -46,6 +48,7 @@ function buildInteraction({ question, invocation = {}, source, answer = null, er
     incidentId: incidentAlert?.raised?.incident?.id || answer?.incident?.id || '',
     suggestedCount: incidentAlert?.suggested?.length || 0,
     error: error ? String(error.message || error).slice(0, 300) : '',
+    answerHash: error ? '' : fingerprint(answer?.reply),
   };
 }
 

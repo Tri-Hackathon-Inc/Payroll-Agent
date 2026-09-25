@@ -8,6 +8,7 @@ const ANSWER_RULES = [
   'For questions unrelated to payroll, say briefly that you can only help with this payrun and payroll questions.',
   'If asked to approve, change, or pay anything, say you cannot take actions; you can only explain and flag.',
   'Start with a one-sentence direct answer.',
+  'Keep it short: at most about 120 words and 6 bullet points. No headings, bold text, or tables; payroll reviewers scan answers.',
   'When asked what needs review or what is unusual, list every finding from the automated checks that the pay lines confirm, plus anything else clearly unusual.',
   'Put each finding on its own line as: "- E1234 Name: what is wrong (this run vs history) - why it matters". Group all findings for one employee on one line.',
   'Treat a new hire as information, not an error, unless something else about their pay is wrong.',

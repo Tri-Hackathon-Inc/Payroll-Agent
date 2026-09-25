@@ -11,6 +11,7 @@ const { createGrpcDataSource } = require('./grpc-client');
 const { typeDefs, resolvers, catalogRpc } = require('../graphql/aistudio');
 const { isWebhookRequest, handleWebhook } = require('../graphql/webhook');
 const { isEventsRequest, handleEvents, startPayrollMonitor } = require('../graphql/payrollEvents');
+const { viewerFor, createAuthHandler, isAuthRequest } = require('../graphql/access');
 
 async function readBody(req) {
   let body = '';
@@ -60,15 +61,22 @@ async function main() {
     // Real-time anomaly detection: checks each payroll change reported to /events/payroll.
     const monitor = startPayrollMonitor({ context: { dataSources: { grpc }, context: { headers: {} } } });
     console.log(`Real-time payroll monitor started (${monitor.kind} queue)`);
+    const handleAuth = createAuthHandler();
+    console.log(`Agent Studio access: ${process.env.STUDIO_ADMIN_KEY ? 'admin key required for admin features' : 'open (STUDIO_ADMIN_KEY not set)'}`);
+    // Names only, never values: an empty list means every model answer will fail.
+    const modelKeys = ['HF_TOKEN', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'OLLAMA_BASE_URL'].filter(name => process.env[name]);
+    if (modelKeys.length) console.log(`Model providers configured: ${modelKeys.join(', ')}`);
+    else console.warn('WARNING: no model keys are set (HF_TOKEN, GROQ_API_KEY, ...); model answers will fail. Start the stack with docker/compose.sh so .env is loaded.');
     const httpServer = http.createServer(async (req, res) => {
       const url = new URL(req.url, 'http://localhost');
       // Bind session IDs to an opaque browser cookie as well as the domain and agent.
       const cookieOwner = req.headers.cookie?.match(/(?:^|;\s*)payroll_client=([a-f0-9]{64})(?:;|$)/)?.[1];
       const sessionOwner = cookieOwner || randomBytes(32).toString('hex');
       if (!cookieOwner) res.setHeader('Set-Cookie', `payroll_client=${sessionOwner}; HttpOnly; SameSite=Lax; Path=/`);
-      const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner } };
+      const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner, viewer: viewerFor(req.headers) } };
       try {
-        if (isWebhookRequest(url.pathname)) await handleWebhook(req, res, url.pathname, context);
+        if (isAuthRequest(url.pathname)) await handleAuth(req, res, url.pathname);
+        else if (isWebhookRequest(url.pathname)) await handleWebhook(req, res, url.pathname, context);
         else if (isEventsRequest(url.pathname)) await handleEvents(req, res, url, context);
         else await handleGraphQL(server, req, res, url, context);
       } catch (error) {

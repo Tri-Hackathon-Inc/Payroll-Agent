@@ -85,6 +85,22 @@ class MetricsTests(TestCase):
         only = metrics.agent_metrics(DOMAIN, agent_id=self.agent["id"])
         self.assertEqual(only["summary"]["questions"], 2)
 
+    def test_consistency_counts_repeated_questions_that_got_different_answers(self):
+        ask = lambda question, answer, **extra: self.record(question=question, answerHash=answer, **extra)
+        ask("What is the total net pay?", "aa")
+        ask("what is the  TOTAL net pay?", "aa")  # same question, same answer
+        ask("Why are taxes high?", "b1", answeredBy="model")
+        ask("Why are taxes high?", "b2", answeredBy="model")
+        ask("Why are taxes high?", "b1", answeredBy="model")
+        ask("Why are taxes high?", "c1", answeredBy="model", payrunId="PR-OTHER")  # another payrun
+        ask("Only once", "dd")
+        quality = metrics.agent_metrics(DOMAIN)["quality"]
+        self.assertEqual((quality["repeatedQuestions"], quality["consistent"], quality["consistencyRate"]), (2, 1, 0.5))
+        self.assertEqual(quality["variedAnswers"][0], {"question": "why are taxes high?", "agentName": "Anomaly bot",
+                                                       "payrunId": "PR-B", "times": 3, "distinctAnswers": 2, "answeredBy": ["model"]})
+        with self.assertRaises(services.InvalidInput):
+            ask("x", "not-hex!")
+
     def test_time_window_filters_old_answers(self):
         old = self.record()
         AgentInteraction.objects.filter(pk=old).update(created_at=timezone.now() - timedelta(days=3))

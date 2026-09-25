@@ -57,6 +57,34 @@ def _count(data, key, nullable=False):
     return int(round(value))
 
 
+def _hash(data):
+    value = _text(data, "answerHash", 32)
+    if value and not all(char in "0123456789abcdef" for char in value):
+        raise InvalidInput("answerHash must be hexadecimal.")
+    return value
+
+
+def _consistency(rows):
+    """How often the same question to the same agent on the same payrun got the same answer."""
+    groups = defaultdict(list)
+    for row in rows:
+        if row.answer_hash and row.answered_by not in ("error", "acknowledged"):
+            groups[(str(row.agent_id), row.payrun_id, " ".join(row.question.lower().split()))].append(row)
+    repeated = {key: items for key, items in groups.items() if len(items) > 1}
+    varied = [(key, items) for key, items in repeated.items() if len({row.answer_hash for row in items}) > 1]
+    varied.sort(key=lambda item: -len(item[1]))
+    return {
+        "repeatedQuestions": len(repeated),
+        "consistent": len(repeated) - len(varied),
+        "consistencyRate": _rate(len(repeated) - len(varied), len(repeated)),
+        "variedAnswers": [{
+            "question": key[2], "agentName": items[0].agent_name, "payrunId": key[1], "times": len(items),
+            "distinctAnswers": len({row.answer_hash for row in items}),
+            "answeredBy": sorted({row.answered_by for row in items}),
+        } for key, items in varied[:5]],
+    }
+
+
 def record_interaction(domain_name, agent_id, data):
     """Stores one answered question and returns its ID."""
     domain = get_domain(domain_name)
@@ -105,6 +133,7 @@ def record_interaction(domain_name, agent_id, data):
         incident_id=_text(data, "incidentId", 100),
         suggested_count=_count(data, "suggestedCount"),
         error=_text(data, "error", 300),
+        answer_hash=_hash(data),
     )
     return str(interaction.id)
 
@@ -243,6 +272,7 @@ def agent_metrics(domain_name, agent_id="", since_hours=0):
             "checkPassRate": _rate(sum(row.check_status == "passed" for row in checked), len(checked)),
             "errorReasons": [{"reason": reason, "count": count} for reason, count in
                              Counter(row.error for row in by_type["error"] if row.error).most_common(5)],
+            **_consistency(rows),
         },
         "answerTypes": [{"type": kind, "count": len(items), **_latency(items)}
                         for kind, items in sorted(by_type.items(), key=lambda item: -len(item[1])) if items],
