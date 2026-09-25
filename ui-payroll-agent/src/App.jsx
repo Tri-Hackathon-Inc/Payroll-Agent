@@ -6,6 +6,7 @@ import AgentEditor from './AgentEditor'
 import ChatWindow from './ChatWindow'
 import ToolsPage from './ToolsPage'
 import EvaluationPage from './EvaluationPage'
+import MetricsPage from './MetricsPage'
 import MyAgentsPage from './MyAgentsPage'
 import ModelsPage from './ModelsPage'
 import { trinetUrl } from './links'
@@ -37,6 +38,7 @@ const NAV_GROUPS = [
     items: [
       { key: 'agents', label: 'My Agents', icon: 'bi-robot' },
       { key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up' },
+      { key: 'metrics', label: 'Agent Metrics', icon: 'bi-speedometer2' },
     ],
   },
 ]
@@ -203,6 +205,8 @@ function App() {
   } else if (view === 'evaluation') {
     content = <EvaluationPage key={domain.name} domain={domain} agents={agents} agentsLoading={agentsLoading}
       onBrowseTemplates={() => openService(domain.domain)} />
+  } else if (view === 'metrics') {
+    content = <MetricsPage key={domain.name} domain={domain} agents={agents} agentsLoading={agentsLoading} />
   } else if (view === 'agents') {
     content = <MyAgentsPage domains={catalog.domains} onCreate={() => openService(null)} />
   } else if (!service || !domain) {

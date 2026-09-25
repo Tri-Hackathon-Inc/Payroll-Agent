@@ -18,8 +18,11 @@ the HTTP chat webhook described below.
 | List domains | `ListDomains` | `listDomains` |
 | List templates for a domain | `GetDomainAgentsTemplates` | `getDomainAgentsTemplates(domainName)` |
 | List saved agents for a service or domain | `GetServiceAgentRegistry` | `getServiceAgentRegistry(domainName: ...)` |
+| Agent metrics for the admin view | `GetAgentMetrics` | `agentMetrics(domainName, agentId?, sinceHours?)` |
+| Rate an answer (thumbs up/down) | `RateInteraction` | `rateAnswer(input)` |
+| Record an answered question (webhook only) | `RecordInteraction` | none; `recordInteraction` in `graphql/aistudio.js` |
 
-These are the eight public operations. Model and external API choices are included
+These are the public operations (the last three serve the Agent Metrics view). Model and external API choices are included
 in template details rather than exposed as separate list operations.
 
 ## Domain, template, and agent
@@ -513,6 +516,27 @@ against the data (`replyCheck.js`: unknown employee IDs or dollar amounts add a 
 acting" note), and are cached per payrun version (`answerCache.js`, in process). Agents with
 alerts enabled raise new critical findings as incidents automatically (`findingPolicy.js`,
 `incidentTrigger.js`; raised-incident memory is in process until it moves to shared storage).
+Every answer is recorded for the Agent Metrics view: `graphql/interactionLog.js` builds the
+record (how it was answered, response time, model tokens, reply check, the payrun's findings
+and dollars at risk, incidents) and `registry/metrics.py` stores it in `agent_interaction` and
+aggregates it; replies carry an `interactionId` for `rateAnswer` feedback. Records hold
+measurements only (no credentials or pay lines; Redis session IDs are hashed), benchmark runs
+are excluded from the metrics, and a failed metrics write never breaks a chat.
+
+Real-time anomaly detection (`graphql/payrollEvents.js`): the payroll platform reports each
+saved change to `POST /events/payroll` (the TriNet mock's `events.js` sends
+`{ type: "payrun.changed", payrunId, version, lineId, employeeId }`; `PAYROLL_EVENTS_TOKEN`, when
+set, must match the `X-Payroll-Events-Token` header). Events are queued on the Redis stream
+`payroll:events` (consumer group `realtime-monitor`; an in-process queue without `REDIS_URL`)
+and a worker in the GraphQL process checks the payrun for every domain whose Anomaly Detection
+agent has alerts enabled: code-only checks, then new critical findings go to the Incident
+Report agent through the same `raiseIncidents` path as chat. Findings are claimed atomically in
+Postgres (`payroll_incident_findings`, created on first use), so each is raised once across
+workers and restarts; without Postgres the claims are in memory. Each check is pushed to open
+payrun pages over `GET /events/stream?domain=&payrunId=` (server-sent events, proxied as
+`/ai_studio/events/stream`) and recorded for Agent Metrics with source `realtime-monitor`
+(counted as checks, not questions). The live stream is per process: several backend replicas
+would need Redis pub/sub for it.
 Domain filtering and role
 metadata do not provide authentication or authorization.
 

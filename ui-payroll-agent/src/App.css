@@ -285,3 +285,19 @@ button.tool-card:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px
 .eval-score-poor { color: #991b1b; background: #fee2e2; border: 1px solid #fecaca; }
 .eval-detail { padding: 16px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; }
 .eval-reply { padding: 8px 12px; border-radius: 8px; background: #fff; border: 1px solid #e2e8f0; color: #334155; }
+
+/* Agent Metrics */
+.metrics-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.2; margin: 4px 0 2px; }
+.metrics-sev { display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 0.72rem; }
+.metrics-sev.critical { background: #fdecea; color: #8a1c12; }
+.metrics-sev.warning { background: #fff4e0; color: #7a4a00; }
+.metrics-sev.info { background: #eaf1fb; color: #1f4f8a; }
+.metrics-bars li + li { margin-top: 10px; }
+.metrics-bar { height: 8px; border-radius: 4px; background: #eef1f4; overflow: hidden; margin-top: 3px; }
+.metrics-bar span { display: block; height: 100%; border-radius: 4px; background: #212529; }
+.metrics-timeline { display: flex; align-items: flex-end; justify-content: center; gap: 3px; height: 120px; }
+.metrics-timeline-bar { flex: 1; max-width: 48px; height: 100%; display: flex; align-items: flex-end; }
+.metrics-timeline-bar span { display: block; width: 100%; min-height: 2px; border-radius: 3px 3px 0 0; background: #212529; }
+.metrics-timeline-bar span.has-errors { background: #c4501b; }
+.metrics-table th { font-size: 0.75rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; font-weight: 600; }
+.metrics-question { max-width: 340px; }

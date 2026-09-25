@@ -110,3 +110,24 @@ test('domain templates and service registry expose distinct collections', async 
   const missing = await execute({ query: operations.SERVICE_AGENT_REGISTRY_QUERY, variables: { serviceName: 'missing' } })
   assert.equal(missing.errors[0].extensions.code, 'NOT_FOUND')
 })
+
+test('agent metrics and answer feedback go to gRPC; the mock reports empty metrics', async () => {
+  const calls = []
+  const context = { context: {}, dataSources: { grpc: { call: async (...args) => {
+    calls.push([args[3], args[4]])
+    return args[3] === 'GetAgentMetrics'
+      ? { metrics: { fields: { summary: { structValue: { fields: { questions: { numberValue: 3 } } } } } } }
+      : { id: 'answer-1' }
+  } } } }
+  const metrics = await resolvers.Query.agentMetrics(null, { domainName: 'payroll-services', sinceHours: 24 }, context)
+  assert.equal(metrics.summary.questions, 3)
+  assert.equal(await resolvers.Mutation.rateAnswer(null, { input: { domainName: 'payroll-services', interactionId: 'answer-1', rating: 'up' } }, context), 'answer-1')
+  assert.deepEqual(calls, [
+    ['GetAgentMetrics', { domain_name: 'payroll-services', agent_id: '', since_hours: 24 }],
+    ['RateInteraction', { domain_name: 'payroll-services', interaction_id: 'answer-1', rating: 'up' }],
+  ])
+  const execute = createMockExecutor()
+  const mock = await execute({ query: operations.AGENT_METRICS_QUERY, variables: { domainName: 'payroll-services' } })
+  assert.equal(mock.errors, undefined)
+  assert.equal(mock.data.agentMetrics.summary.questions, 0)
+})

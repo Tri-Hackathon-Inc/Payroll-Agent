@@ -70,8 +70,14 @@ scalar JSON
     context: JSON
   }
   type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
+  input RateAnswerInput {
+    domainName: String!
+    interactionId: ID!
+    rating: String!
+  }
   type Mutation {
     chatAgent(input: ChatAgentInput!): ChatReply!
+    rateAnswer(input: RateAnswerInput!): ID!
     createAgent(input: CreateAgentInput!): Agent!
     updateAgent(input: UpdateAgentInput!): Agent!
   }
@@ -81,4 +87,5 @@ scalar JSON
     listDomains: [Domain!]!
     getDomainAgentsTemplates(domainName: String!): [Template!]!
     getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
+    agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
   }

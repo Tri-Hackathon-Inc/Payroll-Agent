@@ -10,6 +10,7 @@ const { ApolloServerPluginLandingPageLocalDefault } = graphqlRequire('@apollo/se
 const { createGrpcDataSource } = require('./grpc-client');
 const { typeDefs, resolvers, catalogRpc } = require('../graphql/aistudio');
 const { isWebhookRequest, handleWebhook } = require('../graphql/webhook');
+const { isEventsRequest, handleEvents, startPayrollMonitor } = require('../graphql/payrollEvents');
 
 async function readBody(req) {
   let body = '';
@@ -56,6 +57,9 @@ async function main() {
   try {
     await grpc.waitForReady(catalogRpc.protoPath, catalogRpc.packageName, catalogRpc.serviceName);
     await server.start();
+    // Real-time anomaly detection: checks each payroll change reported to /events/payroll.
+    const monitor = startPayrollMonitor({ context: { dataSources: { grpc }, context: { headers: {} } } });
+    console.log(`Real-time payroll monitor started (${monitor.kind} queue)`);
     const httpServer = http.createServer(async (req, res) => {
       const url = new URL(req.url, 'http://localhost');
       // Bind session IDs to an opaque browser cookie as well as the domain and agent.
@@ -65,6 +69,7 @@ async function main() {
       const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner } };
       try {
         if (isWebhookRequest(url.pathname)) await handleWebhook(req, res, url.pathname, context);
+        else if (isEventsRequest(url.pathname)) await handleEvents(req, res, url, context);
         else await handleGraphQL(server, req, res, url, context);
       } catch (error) {
         console.error(error);

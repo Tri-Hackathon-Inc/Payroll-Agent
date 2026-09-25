@@ -81,8 +81,14 @@ const typeDefs = `
     context: JSON
   }
   type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
+  input RateAnswerInput {
+    domainName: String!
+    interactionId: ID!
+    rating: String!
+  }
   type Mutation {
     chatAgent(input: ChatAgentInput!): ChatReply!
+    rateAnswer(input: RateAnswerInput!): ID!
     createAgent(input: CreateAgentInput!): Agent!
     updateAgent(input: UpdateAgentInput!): Agent!
   }
@@ -92,10 +98,17 @@ const typeDefs = `
     listDomains: [Domain!]!
     getDomainAgentsTemplates(domainName: String!): [Template!]!
     getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
+    agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
   }
 `;
 
 const rpcResolver = createRpcResolver(catalogRpc);
+
+// Records one answered question for the admin metrics (called by the webhook, not exposed in
+// GraphQL): recordInteraction(null, { domainName, agentId, data }, context) resolves to its ID.
+const recordInteraction = rpcResolver('RecordInteraction', ({ domainName, agentId, data }) => ({
+  domain_name: domainName, agent_id: agentId, data: encodeStruct(data),
+}), value => value.id);
 
 const resolvers = {
   JSON: jsonResolver,
@@ -107,6 +120,9 @@ const resolvers = {
       value => value.templates || []),
     getServiceAgentRegistry: rpcResolver('GetServiceAgentRegistry', ({ serviceName, domainName }) => ({ service_name: serviceName || '', domain_name: domainName || '' }),
       value => value.agents || []),
+    agentMetrics: rpcResolver('GetAgentMetrics', ({ domainName, agentId, sinceHours }) => ({
+      domain_name: domainName, agent_id: agentId || '', since_hours: Math.max(0, sinceHours || 0),
+    }), value => decodeStruct(value.metrics || { fields: {} })),
   },
   Mutation: {
     chatAgent: async (root, { input }, context) => withConversation({
@@ -133,6 +149,9 @@ const resolvers = {
       domain_name: input.domainName, template_id: input.templateId,
       name: input.name, config: encodeStruct(input.config),
     })),
+    rateAnswer: rpcResolver('RateInteraction', ({ input }) => ({
+      domain_name: input.domainName, interaction_id: input.interactionId, rating: input.rating,
+    }), value => value.id),
     updateAgent: rpcResolver('UpdateAgent', ({ input }) => ({
       id: input.id, domain_name: input.domainName,
       name: input.name, config: encodeStruct(input.config),
@@ -167,4 +186,4 @@ const resolvers = {
   Service: { baseUrlEnv: service => service.base_url_env },
 };
 
-module.exports = { typeDefs, resolvers, catalogRpc };
+module.exports = { typeDefs, resolvers, catalogRpc, recordInteraction };

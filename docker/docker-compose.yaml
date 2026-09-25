@@ -87,6 +87,8 @@ services:
       INCIDENT_EMAIL_TO: ${INCIDENT_EMAIL_TO:-payroll-team@example.com}
       # Headless-browser screenshots of each finding, attached to incident evidence.
       EVIDENCE_CAPTURE_URL: http://evidence-capture:4300
+      # Real-time anomaly detection: shared secret required on POST /events/payroll when set.
+      PAYROLL_EVENTS_TOKEN: ${PAYROLL_EVENTS_TOKEN:-}
     volumes:
       - embedding_cache:/models
     ports:
@@ -142,6 +144,9 @@ services:
       target: trinet-mock
     environment:
       DATABASE_PATH: /data/trinet_mock.sqlite3
+      # Report each saved pay-line change to Agent Studio's real-time monitor.
+      PAYROLL_EVENTS_URL: ${PAYROLL_EVENTS_URL:-http://backend:4000/events/payroll}
+      PAYROLL_EVENTS_TOKEN: ${PAYROLL_EVENTS_TOKEN:-}
     volumes:
       - trinet_data:/data
     ports:

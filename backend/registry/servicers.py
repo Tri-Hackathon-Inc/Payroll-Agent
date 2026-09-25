@@ -5,7 +5,7 @@ import grpc
 from django.db import close_old_connections
 from google.protobuf.json_format import MessageToDict, ParseDict
 
-from . import services
+from . import metrics, services
 from .agent_chat import AgentChat
 from .model_runtime import ModelConfigurationError, ModelExecutionError, ModelTimeout
 from .proto import templates_pb2 as pb
@@ -104,3 +104,19 @@ class AIStudioServicer(rpc.ai_studioServicer):
             ),
             pb.Agent(),
         )
+
+    @rpc_handler
+    def RecordInteraction(self, request, context):
+        return pb.InteractionRef(id=metrics.record_interaction(
+            request.domain_name, request.agent_id, MessageToDict(request.data)))
+
+    @rpc_handler
+    def RateInteraction(self, request, context):
+        return pb.InteractionRef(id=metrics.rate_interaction(
+            request.domain_name, request.interaction_id, request.rating))
+
+    @rpc_handler
+    def GetAgentMetrics(self, request, context):
+        result = pb.AgentMetrics()
+        result.metrics.update(metrics.agent_metrics(request.domain_name, request.agent_id, request.since_hours))
+        return result

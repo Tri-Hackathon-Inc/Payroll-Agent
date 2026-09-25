@@ -28,6 +28,8 @@ export default defineConfig(({ mode }) => {
       proxy: useBackend ? {
         [`${BASE}graphql`]: { target, changeOrigin: true, rewrite: () => '/' },
         [`${BASE}webhook`]: { target, changeOrigin: true, rewrite: path => path.slice(BASE.length - 1) },
+        // Live payroll alerts (server-sent events); the event intake is backend-internal.
+        [`${BASE}events/stream`]: { target, changeOrigin: true, rewrite: path => path.slice(BASE.length - 1) },
       } : {},
     },
   }
