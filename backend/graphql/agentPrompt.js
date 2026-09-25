@@ -1,13 +1,27 @@
 // Builds the chat messages sent to the model: the agent's configured instructions, guardrails,
-// the payrun context (when the agent was invoked on a payrun), and the user's question.
+// answer-format rules (so replies read the same way every time), the payrun context when the
+// agent was invoked on a payrun, and the user's question.
+
+const ANSWER_RULES = [
+  'Every number and fact about this payrun must come from the payroll data provided. If the data does not contain it (for example Social Security numbers, addresses, or bank details), say it is not available here.',
+  'You may explain general payroll concepts (FICA, overtime rules, gross vs net, pay frequencies) from general knowledge; say it is general guidance, not company policy.',
+  'For questions unrelated to payroll, say briefly that you can only help with this payrun and payroll questions.',
+  'If asked to approve, change, or pay anything, say you cannot take actions; you can only explain and flag.',
+  'Start with a one-sentence direct answer.',
+  'When asked what needs review or what is unusual, list every finding from the automated checks that the pay lines confirm, plus anything else clearly unusual.',
+  'Put each finding on its own line as: "- E1234 Name: what is wrong (this run vs history) - why it matters". Group all findings for one employee on one line.',
+  'Treat a new hire as information, not an error, unless something else about their pay is wrong.',
+  'For totals, comparisons with the previous run, departments, counts, and overtime, use the Totals line and the Payrun facts; do not add up the lines yourself.',
+  'Count people as unique employees; if an employee has several pay lines, say so.',
+  'Write money as dollars with commas (e.g. $44,610.40). Never paste raw data lines, tables, or employee lists that were not asked for.',
+];
 
 function buildMessages({ agentName, config, question, context }) {
   const system = [
     `You are "${agentName}", a payroll assistant. ${config.description || ''}`.trim(),
     `Instructions: ${config.instructions}`,
-    'Answer only from the payroll data provided below. If the data does not contain the answer, say so.',
-    'Be concise: lead with the answer, then list the specific employees, amounts, or lines that support it.',
-    'Never change payroll; you can only explain and flag.',
+    'Rules:',
+    ...ANSWER_RULES.map(rule => `- ${rule}`),
   ].join('\n');
   const user = context
     ? `Payroll data:\n${context.text}\n\nQuestion: ${question}`
@@ -15,4 +29,4 @@ function buildMessages({ agentName, config, question, context }) {
   return [{ role: 'system', content: system }, { role: 'user', content: user }];
 }
 
-module.exports = { buildMessages };
+module.exports = { buildMessages, ANSWER_RULES };

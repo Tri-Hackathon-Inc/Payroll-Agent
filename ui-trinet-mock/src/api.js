@@ -44,5 +44,5 @@ export async function askAgent({ domain, agent, question, context }) {
   const body = isJson ? await response.json().catch(() => ({})) : await response.text()
   const message = typeof body === 'string' ? body : body.reply || body.message || body.answer
   if (!response.ok) throw new Error(message || `Agent request failed (${response.status}).`)
-  return { id: `agent-${Date.now()}`, reply: message || 'Your request was sent to the agent.' }
+  return { id: `agent-${Date.now()}`, reply: message || 'Your request was sent to the agent.', incident: typeof body === 'object' ? body.incident : undefined }
 }

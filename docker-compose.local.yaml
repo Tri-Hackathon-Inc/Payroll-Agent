@@ -21,6 +21,10 @@ services:
     extends:
       file: docker-compose.yaml
       service: trinet-ui
+  evidence-capture:
+    extends:
+      file: docker-compose.yaml
+      service: evidence-capture
 volumes:
   mysql_data:
   trinet_data:

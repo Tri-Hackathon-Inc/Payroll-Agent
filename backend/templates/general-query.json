@@ -13,7 +13,12 @@
     "description": "Answer questions using attached payroll services.",
     "instructions": "Answer from available payroll context and attached service data. State when information is missing.",
     "questions": [
-      "What is the status of this payrun?"
+      "Why is Luis Ortega's pay higher this run?",
+      "Who is being paid for the first time in this payrun?",
+      "What is the total net pay for this payrun?",
+      "How does this payrun compare to the previous one?",
+      "Which department has the highest payroll cost?",
+      "Who worked overtime this payrun?"
     ],
     "domain": "Payroll",
     "model": "poc-demo",

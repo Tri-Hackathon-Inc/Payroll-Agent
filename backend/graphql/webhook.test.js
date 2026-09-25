@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { once } = require('node:events');
 const { callModel, ModelUnavailable } = require('./modelRuntime');
-const { loadPayrunContext } = require('./payrunContext');
+const { loadPayrunContext, detectSignals, payrunFacts } = require('./payrunContext');
 const { answerQuestion } = require('./webhook');
 
 // Local stand-ins for the Hugging Face router (OpenAI-compatible) and the payroll GraphQL API.
@@ -65,7 +65,7 @@ test('callModel explains missing credentials, unsupported providers, and provide
   }
 });
 
-test('payrun context loads the current run and the previous completed run', async () => {
+test('payrun context loads the run with recent history and formats each employee', async () => {
   let seen;
   const endpoint = await standIn(request => {
     seen = request.body;
@@ -74,11 +74,53 @@ test('payrun context loads the current run and the previous completed run', asyn
   assert.equal(await loadPayrunContext({ page: 'chat' }, { endpoint }), null);
   const context = await loadPayrunContext({ page: 'payrun', payrunId: 'PR-B' }, { endpoint });
   assert.equal(seen.variables.id, 'PR-B');
+  assert.match(seen.query, /payrunHistory\(limit: 3/);
   assert.equal(context.payrunId, 'PR-B');
-  assert.match(context.text, /Current payrun: PR-B/);
-  assert.match(context.text, /Previous completed payrun \(history\): PR-A/);
-  // gross | employee taxes | health | 401k | garnishment
-  assert.match(context.text, /E1001 \| Maya Chen .* \| 9000 \| 215 \| 120 \| 200 \| 0 \|/);
+  assert.match(context.text, /Current payrun PR-B/);
+  assert.match(context.text, /History: PR-A/);
+  assert.match(context.text, /E1001 Maya Chen .*gross 9000 \(last 1 runs: 4500\).*federal tax 100, state tax 40, Social Security 60, Medicare 15, total employee tax 215.*health 120/);
+});
+
+test('automated checks flag each kind of anomaly and leave normal pay alone', () => {
+  const history = [1, 2, 3].map(n => ({ ...run(`PR-${n}`, 'COMPLETED', 4000), lines: [
+    line('E1', 'Normal', 4000), { ...line('E2', 'Overtime', 3000), hours: { regular: 80, overtime: 4 } },
+    { ...line('E3', 'Bonus', 4000), earnings: { regular: 4000, overtime: 0, bonus: 700, reimbursement: 0 } },
+    line('E4', 'Health', 4000), line('E5', 'Leaver', 4000), line('E6', 'Twice', 2000),
+    { ...line('E7', 'Expenses', 3000), earnings: { regular: 3000, overtime: 0, bonus: 0, reimbursement: 20 } },
+  ] }));
+  const current = { ...run('PR-4', 'PENDING_APPROVAL', 0), lines: [
+    { ...line('E1', 'Normal', 4100), hours: { regular: 80, overtime: 3 } },
+    { ...line('E2', 'Overtime', 5200), hours: { regular: 80, overtime: 44 } },
+    { ...line('E3', 'Bonus', 29000), earnings: { regular: 4000, overtime: 0, bonus: 25000, reimbursement: 0 } },
+    { ...line('E4', 'Health', 4000), deductions: { health: 0, retirement401k: 200, garnishment: 0 } },
+    { ...line('E5', 'Leaver', 4000), terminationDate: '2026-09-10' },
+    line('E6', 'Twice', 2000), line('E6', 'Twice', 2000),
+    { ...line('E7', 'Expenses', 4800), earnings: { regular: 3000, overtime: 0, bonus: 0, reimbursement: 1800 } },
+    { ...line('E8', 'Newbie', 4000), hireDate: '2026-09-16', taxes: { federal: 0, state: 0, socialSecurity: 248, medicare: 58 } },
+  ] };
+  const kinds = detectSignals(current, history).map(item => `${item.employeeId} ${item.kind}`);
+  assert.deepEqual(kinds, [
+    'E2 overtime outlier', 'E3 bonus outlier', 'E4 health deduction missing', 'E5 paid after termination',
+    'E6 duplicate payment', 'E7 reimbursement outlier', 'E8 no tax withholding', 'E8 new hire',
+  ]);
+  assert.ok(!kinds.some(kind => kind.startsWith('E1 ')), 'normal variation is not flagged');
+});
+
+test('payrun facts compare with the previous run and count unique employees', () => {
+  const previous = { ...run('PR-A', 'COMPLETED', 0), totals: { employees: 2, gross: 6000, taxes: 0, deductions: 0, net: 4200 },
+    lines: [line('E1', 'Ann', 3000), line('E2', 'Bob', 3000)] };
+  const current = { ...run('PR-B', 'PENDING_APPROVAL', 0), totals: { employees: 3, gross: 13000, taxes: 0, deductions: 0, net: 9100 }, lines: [
+    { ...line('E1', 'Ann', 3000), department: 'Sales', hours: { regular: 80, overtime: 2 } },
+    { ...line('E1', 'Ann', 3000), department: 'Sales', hours: { regular: 80, overtime: 2 } },
+    { ...line('E2', 'Bob', 7000), payType: 'hourly', hours: { regular: 80, overtime: 30 } },
+  ] };
+  const facts = payrunFacts(current, [previous]).join('\n');
+  assert.match(facts, /3 pay lines for 2 unique employees/);
+  assert.match(facts, /gross \$13,000\.00 vs \$6,000\.00 \(\+\$7,000\.00\)/);
+  assert.match(facts, /E2 Bob \+\$4,000\.00; E1 Ann \+\$3,000\.00/);
+  assert.match(facts, /Engineering \$7,000\.00 \(1 line\); Sales \$6,000\.00 \(2 lines\)/);
+  assert.match(facts, /Overtime: 34h in total; E2 Bob 30h, E1 Ann 4h across 2 lines/);
+  assert.match(facts, /Highest gross pay: E2 Bob \$7,000\.00/);
 });
 
 test('answerQuestion acknowledges when the model is not connected', async () => {
@@ -107,7 +149,8 @@ test('answerQuestion sends instructions, payrun data, and the question to the mo
   assert.equal(answer.model.modelId, 'Qwen/Qwen2.5-72B-Instruct');
   assert.equal(answer.context.payrunId, 'PR-B');
   assert.match(prompt[0].content, /Instructions: Compare payrun inputs against history\./);
-  assert.match(prompt[1].content, /Current payrun: PR-B[\s\S]*Question: Which payments need review\?/);
+  assert.match(prompt[0].content, /one-sentence direct answer[\s\S]*Never paste raw data lines/);
+  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Which payments need review\?/);
 });
 
 test('answerQuestion still answers when the payroll context cannot be loaded', async () => {

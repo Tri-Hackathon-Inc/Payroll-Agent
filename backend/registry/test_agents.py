@@ -68,7 +68,7 @@ class AgentWorkflowTests(TestCase):
     def test_list_templates_filters_primary_service(self):
         Template.objects.filter(pk="failure-investigation").update(service_id="diagnostics")
         templates = services.list_templates("payrun")
-        self.assertEqual(len(templates), 3)
+        self.assertEqual(len(templates), 4)
         self.assertNotIn("failure-investigation", [item["id"] for item in templates])
         self.assertTrue(all(item["config"]["service"] == "payrun" for item in templates))
         self.assertEqual([item["id"] for item in services.list_templates("diagnostics")], ["failure-investigation"])
@@ -265,7 +265,7 @@ class AgentWorkflowTests(TestCase):
         self.assertFalse(hasattr(settings, "ROOT_URLCONF"))
 
     def test_domain_templates_are_templates_and_scoped(self):
-        self.assertEqual(len(services.get_domain_agents_templates("payroll-services")), 4)
+        self.assertEqual(len(services.get_domain_agents_templates("payroll-services")), 5)
         self.assertEqual(services.get_domain_agents_templates("hr-services"), [])
         self.assertIn("anomaly-detection", [t["id"] for t in services.get_domain_agents_templates("payroll-services")])
         with self.assertRaises(services.NotFound):

@@ -12,7 +12,9 @@
     "description": "Produce a structured employee or payrun summary.",
     "instructions": "Summarize the supplied payroll data, highlighting totals, changes, and unresolved items.",
     "questions": [
-      "Summarize this payrun."
+      "Summarize this payrun.",
+      "What changed since the last payrun?",
+      "What should I check before approving this payrun?"
     ],
     "domain": "Payroll",
     "model": "poc-demo",

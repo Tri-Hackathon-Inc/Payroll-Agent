@@ -37,6 +37,11 @@ services:
       MODEL_TIMEOUT_MS: ${MODEL_TIMEOUT_MS:-60000}
       # Payroll data the webhook loads as context when an agent is asked on a payrun.
       TRINET_API_URL: http://trinet-mock:4100/
+      # Incident reports (agent-to-agent handoff) are emailed through this endpoint when set.
+      EMAIL_API_BASE_URL: ${EMAIL_API_BASE_URL:-}
+      INCIDENT_EMAIL_TO: ${INCIDENT_EMAIL_TO:-payroll-team@example.com}
+      # Headless-browser screenshots of each finding, attached to incident evidence.
+      EVIDENCE_CAPTURE_URL: http://evidence-capture:4300
     ports:
       - "127.0.0.1:4000:4000"
       - "127.0.0.1:50051:50051"
@@ -120,6 +125,24 @@ services:
         - node
         - -e
         - "fetch('http://127.0.0.1:5174/trinet/', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # Headless browser (Playwright) that opens the payroll UI read-only and screenshots each
+  # incident finding: the employee's pay rows and their Edit Employee Pay drawer.
+  evidence-capture:
+    build:
+      context: ./backend/evidence_capture
+    environment:
+      TRINET_UI_URL: http://trinet-ui:5174/trinet/
+    depends_on:
+      trinet-ui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4300/health', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
       interval: 5s
       timeout: 5s
       retries: 12

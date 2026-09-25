@@ -1,30 +1,77 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { agentStudioRequest, askAgent } from './api'
 import { SERVICE_AGENT_REGISTRY_QUERY } from './operations'
+import { QUESTION_LIBRARY } from './questionLibrary'
+import IncidentCard from './IncidentCard'
+
+const INCIDENT_TEMPLATE = 'incident-report'
 
 const AGENT_STUDIO_URL = import.meta.env.VITE_AGENT_STUDIO_URL || 'http://localhost:5173/ai_studio/'
 
+// Payrun questions offered after the agent's own starting questions, so the panel always has a
+// few suggestions (agents created before these existed saved only one question).
+const PAYRUN_QUESTIONS = [
+  'Which payments need review?',
+  'How does this payrun compare to the previous one?',
+  'What is the total net pay for this payrun?',
+  'Who worked overtime this payrun?',
+  'Is anyone paid after their termination date?',
+  'What should I check before approving this payrun?',
+]
+const SUGGESTION_COUNT = 4
+
 // The embedded agent: lists the domain's Agent Studio agents attached to the "payrun" page
-// and sends questions to Agent Studio's webhook with the open payrun as context.
-export default function AssistantPanel({ domain, run, onClose }) {
-  const [agents, setAgents] = useState(null)
+// and sends questions to Agent Studio's webhook with the open payrun as context. It stays
+// mounted while hidden, so the conversation survives closing and reopening the panel.
+export default function AssistantPanel({ domain, run, open, onClose }) {
+  const [allAgents, setAllAgents] = useState(null)
+  const [handingOff, setHandingOff] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [agentId, setAgentId] = useState('')
   const [question, setQuestion] = useState('')
   const [messages, setMessages] = useState([])
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [librarySearch, setLibrarySearch] = useState('')
 
   // Reload on open: agents may have been created in Agent Studio meanwhile.
   useEffect(() => {
+    if (!open) return undefined
     let active = true
     agentStudioRequest(SERVICE_AGENT_REGISTRY_QUERY, { domainName: domain.name })
-      .then((data) => { if (active) setAgents(data.getServiceAgentRegistry.filter((agent) => agent.config?.page === 'payrun')) })
+      .then((data) => { if (active) setAllAgents(data.getServiceAgentRegistry.filter((agent) => agent.config?.page === 'payrun')) })
       .catch((requestError) => { if (active) setLoadError(requestError.message) })
     return () => { active = false }
-  }, [domain.name])
+  }, [domain.name, open])
 
+  // Chat agents answer questions; an Incident Report agent is reached only through a handoff.
+  const agents = allAgents?.filter((item) => item.templateId !== INCIDENT_TEMPLATE) || null
+  const incidentAgent = allAgents?.find((item) => item.templateId === INCIDENT_TEMPLATE)
   const agent = agents?.find((item) => item.id === agentId) || agents?.[0]
+
+  // Agent-to-agent: hand this conversation to the Incident Report agent, which collects
+  // evidence, writes the report, and emails it.
+  async function handOff() {
+    if (!incidentAgent || handingOff || sending) return
+    setError('')
+    setHandingOff(true)
+    const conversation = messages.filter((item) => item.role === 'user' || item.role === 'agent')
+      .map((item) => ({ role: item.role, agent: item.agent, text: item.text }))
+    setMessages((current) => [...current, { id: `handoff-${Date.now()}`, role: 'handoff', text: `${agent.name} handed this conversation to ${incidentAgent.name}.` }])
+    try {
+      const response = await askAgent({
+        domain, agent: incidentAgent, question: 'Create an incident report from this conversation.',
+        context: { page: 'payrun', payrunId: run.id, task: 'incident-report', handoff: { fromAgent: agent.name, conversation } },
+      })
+      setMessages((current) => [...current, { id: response.id, role: 'incident', agent: incidentAgent.name, text: response.reply, incident: response.incident }])
+    } catch (requestError) {
+      setError(requestError.message || 'The incident agent could not be reached.')
+    } finally {
+      setHandingOff(false)
+    }
+  }
+  const lastAgentMessage = [...messages].reverse().find((item) => item.role === 'agent' || item.role === 'incident')
 
   async function ask(text) {
     const trimmed = text.trim()
@@ -47,37 +94,112 @@ export default function AssistantPanel({ domain, run, onClose }) {
     }
   }
 
-  return <aside className="tn-drawer tn-assistant" aria-label="Payroll assistant">
-    <div className="tn-drawer-head">
-      <h2><i className="bi bi-stars me-2" />Payroll Assistant</h2>
-      <button type="button" className="tn-icon-btn" onClick={onClose} aria-label="Close"><i className="bi bi-x-lg" /></button>
-    </div>
-    <div className="tn-drawer-body d-flex flex-column">
-      <p className="text-muted small">Agents from <strong>{domain.label}</strong> attached to the payrun page. They receive {run.id} as context.</p>
-      {loadError ? <p className="text-danger small">Could not load agents from Agent Studio: {loadError}</p>
-        : !agents ? <p className="text-muted small"><span className="spinner-border spinner-border-sm me-2" />Loading agents…</p>
-        : !agents.length ? <p className="text-muted small">No agents are attached to the payrun page yet. Create one from the Anomaly Detection or Summarizer template in <a href={`${AGENT_STUDIO_URL}?domain=${encodeURIComponent(domain.name)}`} target="_blank" rel="noreferrer">Agent Studio</a>, then reopen this panel.</p>
-        : <>
-          <label className="form-label small fw-semibold" htmlFor="tn-agent">Agent</label>
-          <select id="tn-agent" className="form-select form-select-sm mb-3" value={agent.id} onChange={(event) => setAgentId(event.target.value)}>
+  // Up to four suggestions, dropping questions already asked so new ones rotate in.
+  const asked = new Set(messages.filter((item) => item.role === 'user').map((item) => item.text))
+  const suggestions = [...new Set([...(agent?.config.questions || []), ...PAYRUN_QUESTIONS])]
+    .filter((item) => !asked.has(item)).slice(0, SUGGESTION_COUNT)
+
+  const query = librarySearch.trim().toLowerCase()
+  const library = QUESTION_LIBRARY.map((group) => ({ ...group, prompts: group.prompts.filter((item) => !query || item.toLowerCase().includes(query)) }))
+    .filter((group) => group.prompts.length)
+  const closeLibrary = () => { setLibraryOpen(false); setLibrarySearch('') }
+  const askFromLibrary = (item) => { closeLibrary(); ask(item) }
+
+  // The question list closes on a click outside it (its own toggle chip excluded) or on Esc,
+  // which closes only the list, not the whole assistant.
+  const libraryRef = useRef(null)
+  const browseRef = useRef(null)
+  useEffect(() => {
+    if (!libraryOpen) return undefined
+    const onMouseDown = (event) => {
+      if (libraryRef.current?.contains(event.target) || browseRef.current?.contains(event.target)) return
+      closeLibrary()
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [libraryOpen])
+
+  const thread = useRef(null)
+  useEffect(() => { thread.current?.scrollTo?.({ top: thread.current.scrollHeight }) }, [messages, sending])
+
+  return <aside id="tn-assistant" className="tn-copilot" aria-label="Payroll assistant" hidden={!open}>
+    <header className="tn-copilot-head">
+      <span className="tn-copilot-mark" aria-hidden="true"><i className="bi bi-stars" /></span>
+      <div className="flex-grow-1 min-w-0">
+        <h2 className="tn-copilot-title">Payroll Assistant</h2>
+        <div className="tn-copilot-context text-truncate">{run.id} · {domain.label}</div>
+      </div>
+      <button type="button" className="tn-icon-btn" onClick={onClose} aria-label="Close assistant"><i className="bi bi-x-lg" /></button>
+    </header>
+
+    {loadError ? <p className="tn-copilot-note text-danger">Could not load agents from Agent Studio: {loadError}</p>
+      : !agents ? <p className="tn-copilot-note"><span className="spinner-border spinner-border-sm me-2" />Loading agents…</p>
+      : !agents.length ? <p className="tn-copilot-note">No agents are attached to the payrun page yet. Create one from the Anomaly Detection or Summarizer template in <a href={`${AGENT_STUDIO_URL}?domain=${encodeURIComponent(domain.name)}`} target="_blank" rel="noreferrer">Agent Studio</a>, then reopen this panel.</p>
+      : <>
+        <div className="tn-copilot-agent">
+          <label className="visually-hidden" htmlFor="tn-agent">Agent</label>
+          <i className="bi bi-robot" aria-hidden="true" />
+          <select id="tn-agent" className="form-select form-select-sm" value={agent.id} onChange={(event) => setAgentId(event.target.value)}>
             {agents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
-          {agent.config.questions?.length > 0 && <div className="d-flex flex-wrap gap-2 mb-3">
-            {agent.config.questions.map((item) => <button type="button" key={item} className="tn-pill" disabled={sending} onClick={() => ask(item)}>{item}</button>)}
+        </div>
+        <div ref={thread} className="tn-copilot-thread" aria-live="polite">
+          {!messages.length && <div className="tn-copilot-empty">
+            <span className="tn-copilot-mark large" aria-hidden="true"><i className="bi bi-stars" /></span>
+            <p className="fw-semibold mb-1">Ask about this payrun</p>
+            <p className="small text-muted mb-0">{agent.name} reads {run.id} and its recent history. Pick a suggestion below or type your own question.</p>
           </div>}
-          <div className="tn-thread flex-grow-1 mb-3" aria-live="polite">
-            {messages.map((item) => <div key={item.id} className={`tn-message ${item.role}`}>
-              {item.agent && <div className="small fw-semibold mb-1">{item.agent}</div>}
-              {item.text}
-            </div>)}
-            {sending && <p className="text-muted small mb-0"><span className="spinner-border spinner-border-sm me-2" />Waiting for {agent.name}…</p>}
-          </div>
-          {error && <p className="text-danger small mb-2" role="alert"><i className="bi bi-exclamation-circle me-1" />{error}</p>}
-        </>}
-    </div>
-    {agent && <form className="tn-drawer-foot" onSubmit={(event) => { event.preventDefault(); ask(question) }}>
-      <input className="form-control" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Ask a question or type a command…" aria-label={`Ask ${agent.name}`} />
-      <button type="submit" className="tn-btn-primary" disabled={!question.trim() || sending} aria-label="Send"><i className="bi bi-arrow-up" /></button>
+          {messages.map((item) => item.role === 'handoff'
+            ? <div key={item.id} className="tn-copilot-handoff"><i className="bi bi-arrow-left-right" aria-hidden="true" />{item.text}</div>
+            : item.role === 'incident' && item.incident
+              ? <IncidentCard key={item.id} agentName={item.agent} incident={item.incident} />
+              : <div key={item.id} className={`tn-copilot-message ${item.role}`}>
+                {item.agent && <div className="tn-copilot-author"><i className="bi bi-stars me-1" aria-hidden="true" />{item.agent}</div>}
+                <div className="tn-copilot-bubble">{item.text}</div>
+                {item === lastAgentMessage && item.role === 'agent' && <div className="tn-copilot-actions">
+                  {incidentAgent
+                    ? <button type="button" className="tn-copilot-action" disabled={handingOff || sending} onClick={handOff}>
+                      <i className="bi bi-file-earmark-medical" aria-hidden="true" />Create incident report with {incidentAgent.name}
+                    </button>
+                    : <span className="small text-muted">To file an incident, create an Incident Report agent in <a href={`${AGENT_STUDIO_URL}?domain=${encodeURIComponent(domain.name)}`} target="_blank" rel="noreferrer">Agent Studio</a>.</span>}
+                </div>}
+              </div>)}
+          {handingOff && <div className="tn-copilot-message agent"><div className="tn-copilot-bubble text-muted"><span className="spinner-border spinner-border-sm me-2" />{incidentAgent.name} is collecting evidence and writing the report…</div></div>}
+          {sending && <div className="tn-copilot-message agent"><div className="tn-copilot-bubble text-muted"><span className="spinner-border spinner-border-sm me-2" />Analyzing {run.id}…</div></div>}
+        </div>
+        {error && <p className="tn-copilot-error" role="alert"><i className="bi bi-exclamation-circle me-1" />{error}</p>}
+      </>}
+
+    {agent && <form className="tn-copilot-compose" onSubmit={(event) => { event.preventDefault(); ask(question) }}>
+      {libraryOpen && <div ref={libraryRef} className="tn-copilot-library" role="dialog" aria-label="All questions"
+        onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); closeLibrary() } }}>
+        <div className="tn-copilot-library-head">
+          <input type="search" value={librarySearch} onChange={(event) => setLibrarySearch(event.target.value)}
+            placeholder="Search questions…" aria-label="Search questions" autoFocus />
+          <button type="button" className="tn-icon-btn" onClick={closeLibrary} aria-label="Close question list"><i className="bi bi-x-lg" /></button>
+        </div>
+        <div className="tn-copilot-library-body">
+          {library.map((group) => <section key={group.category} aria-label={group.category}>
+            <h3>{group.category}</h3>
+            {group.prompts.map((item) => <button type="button" key={item} disabled={sending} onClick={() => askFromLibrary(item)}>{item}</button>)}
+          </section>)}
+          {!library.length && <p className="text-muted small m-0">No questions match. You can still type your own below.</p>}
+        </div>
+      </div>}
+      <div className="tn-copilot-suggestions" role="group" aria-label="Suggested questions">
+        {suggestions.map((item) => <button type="button" key={item} className="tn-copilot-chip" disabled={sending} onClick={() => ask(item)}>
+          <i className="bi bi-stars" aria-hidden="true" />{item}
+        </button>)}
+        <button ref={browseRef} type="button" className="tn-copilot-chip tn-copilot-browse" aria-expanded={libraryOpen}
+          onClick={() => (libraryOpen ? closeLibrary() : setLibraryOpen(true))}>
+          <i className="bi bi-list-ul" aria-hidden="true" />All questions ({QUESTION_LIBRARY.reduce((total, group) => total + group.prompts.length, 0)})
+        </button>
+      </div>
+      <div className="tn-copilot-input">
+        <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={`Ask ${agent.name}…`} aria-label={`Ask ${agent.name}`} />
+        <button type="submit" disabled={!question.trim() || sending} aria-label="Send"><i className="bi bi-send" /></button>
+      </div>
+      <p className="tn-copilot-disclaimer">AI-generated answers can be wrong. Verify before approving payroll.</p>
     </form>}
   </aside>
 }

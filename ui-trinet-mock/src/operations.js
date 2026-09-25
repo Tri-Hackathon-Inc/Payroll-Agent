@@ -42,6 +42,6 @@ export const DOMAINS_QUERY = `
 
 export const SERVICE_AGENT_REGISTRY_QUERY = `
   query GetServiceAgentRegistry($domainName: String) {
-    getServiceAgentRegistry(domainName: $domainName) { id name config }
+    getServiceAgentRegistry(domainName: $domainName) { id name templateId config }
   }
 `

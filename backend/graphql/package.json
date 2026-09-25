@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node ../local_server/apollo.js",
-    "test:webhook": "node --test webhook.test.js"
+    "test:webhook": "node --test webhook.test.js incidentReport.test.js"
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",

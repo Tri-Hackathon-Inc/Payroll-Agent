@@ -10,7 +10,20 @@ only through Agent Studio's public API, the same way the real TriNet UI will.
   Employee Pay** drawer for editing and saving an employee's pay.
 - **Payroll Assistant:** lists the selected domain's Agent Studio agents whose page
   attachment is `payrun`, and sends questions to them with the open payrun as
-  context.
+  context. On a payrun, the **Payroll Assistant** button at the right of the header
+  opens it as a docked panel on the right (the page makes room, as in Microsoft Copilot
+  or Salesforce Einstein). The button, the close button, or Esc closes it. The
+  conversation is kept while the panel is closed and resets when another payrun opens.
+  Four suggested questions sit above the input: the agent's starting questions first,
+  then common payrun questions; asked ones drop out so new ones rotate in.
+  **All questions** opens a searchable library of 64 questions in 11 categories
+  (`src/questionLibrary.js`, kept equal to Agent Studio's question bank by the contract test).
+  It closes on a click outside it, its close button, or Esc (Esc closes only the list).
+- **Agent-to-agent handoff:** when the domain has an agent made from the **Incident Report**
+  template, each answer offers **Create incident report**. The conversation is handed to that
+  agent, which returns an incident card (severity, evidence, amount at risk, email status) with
+  View and Download report. Each finding shows the headless-browser screenshots taken as
+  evidence; click one to view it full size (a click outside it or Esc closes it). Incident agents are not listed in the chat agent picker.
 
 URL: `/trinet/?domain=<agent-studio-domain>[&payrun=<id>]`. Agent Studio's
 **TriNet Payruns** sidebar link opens this app.

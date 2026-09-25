@@ -13,7 +13,11 @@
     "description": "Flag unusual payments against historical payrun data.",
     "instructions": "Compare payrun inputs against history. Explain unusual values and evidence. Do not change payroll.",
     "questions": [
-      "Which payments need review?"
+      "Which payments need review?",
+      "Is anyone paid twice in this payrun?",
+      "Is anyone paid after their termination date?",
+      "Are any taxes or deductions missing?",
+      "Whose pay changed the most since the last payrun?"
     ],
     "domain": "Payroll",
     "model": "poc-demo",

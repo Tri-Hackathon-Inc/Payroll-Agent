@@ -11,6 +11,7 @@ services:
       - ./backend/graphql/modelRuntime.js:/app/graphql/modelRuntime.js:ro
       - ./backend/graphql/payrunContext.js:/app/graphql/payrunContext.js:ro
       - ./backend/graphql/agentPrompt.js:/app/graphql/agentPrompt.js:ro
+      - ./backend/graphql/incidentReport.js:/app/graphql/incidentReport.js:ro
   ui:
     volumes:
       - ./ui-payroll-agent/src:/app/src:ro

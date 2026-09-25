@@ -4,7 +4,8 @@ The API is gRPC with a GraphQL adapter. There are no REST endpoints.
 One root `Dockerfile` builds the backend and UI targets. Docker Compose runs
 three core services: `backend` (Python gRPC plus Node GraphQL and the agent
 webhook), `ui`, and `db` (MySQL 8.4), plus the temporary TriNet mock (`trinet-mock`
-payroll API and `trinet-ui`). PostgreSQL is not used.
+payroll API and `trinet-ui`) and `evidence-capture` (a headless browser for incident
+screenshots). PostgreSQL is not used.
 
 ## Start the stack
 
@@ -178,7 +179,35 @@ node scripts/benchmark-models.mjs --dry-run                    # planned calls o
 node scripts/benchmark-models.mjs --out docs/model-benchmark.md  # real, billed calls
 ```
 
-Findings so far are in [docs/model-evaluation-findings.md](../docs/model-evaluation-findings.md).
+`node scripts/benchmark-models.mjs --bank --models llama-3-3-70b` runs the 64-question bank
+(`ui-payroll-agent/src/questionBank.js`: totals, comparisons, anomalies, employees, taxes,
+deductions, hours, departments, payments, payroll concepts, out-of-scope requests) and
+reports a pass rate per category. Findings so far are in
+[docs/model-evaluation-findings.md](../docs/model-evaluation-findings.md).
+
+### Agent-to-agent: incident reports
+
+An agent can hand its conversation to an agent created from the **Incident Report** template:
+`POST /webhook/<domain>/<incidentAgentId>` with `context: { page: "payrun", payrunId,
+task: "incident-report", handoff: { fromAgent, conversation } }` (the TriNet assistant's
+"Create incident report" action does this). `graphql/incidentReport.js` then:
+
+1. **Collects evidence** from the payroll API: one item per anomaly finding for the employees the
+   conversation discussed (all findings if it names none), each with a pay-line snapshot, the
+   employee's history, the source, a timestamp, and the amount at risk where computable.
+   The `evidence-capture` service (`evidence_capture/`, Playwright headless Chromium) then opens
+   the payroll UI read-only and screenshots each finding's pay rows and Edit Employee Pay drawer
+   (`POST <EVIDENCE_CAPTURE_URL>/capture`); the images are attached to the evidence and
+   embedded in the report. It never edits payroll. If the service is unavailable, the report
+   is still created and says why there are no screenshots.
+2. **Writes the report**: the agent's model writes Summary, Impact, and Recommended actions when
+   connected; otherwise the report is built from the evidence. The evidence table is always
+   appended from the collected data.
+3. **Emails it** through the email notification tool: `POST <EMAIL_API_BASE_URL>/notifications/email`
+   to `INCIDENT_EMAIL_TO`. Without `EMAIL_API_BASE_URL` the reply says the email was not sent.
+
+The response carries `incident` (ID, severity, evidence, total at risk, Markdown report, email
+status, screenshot count).
 
 ## Development and checks
 
