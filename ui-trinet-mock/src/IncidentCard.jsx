@@ -57,6 +57,10 @@ export default function IncidentCard({ agentName, incident }) {
       <i className={`bi ${email.status === 'sent' ? 'bi-envelope-check' : 'bi-envelope-exclamation'}`} aria-hidden="true" />
       {email.status === 'sent' ? `Emailed to ${email.to}` : `Email not sent (${email.to}): ${email.reason}`}
     </div>
+    {incident.slack && incident.slack.status !== 'off' && <div className={`tn-incident-email ${incident.slack.status === 'sent' ? 'sent' : 'not-sent'}`}>
+      <i className="bi bi-slack" aria-hidden="true" />
+      {incident.slack.status === 'sent' ? 'Posted to Slack' : `Slack not sent: ${incident.slack.reason}`}
+    </div>}
     {incident.modelError && <div className="tn-incident-note">Model unavailable, report built from evidence: {incident.modelError}</div>}
     <div className="tn-incident-buttons">
       <button type="button" onClick={() => setShowReport((value) => !value)} aria-expanded={showReport}>

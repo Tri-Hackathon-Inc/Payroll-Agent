@@ -65,7 +65,7 @@ export async function askAgent({ domain, agent, question, context }) {
   const details = typeof body === 'object' ? body : {}
   return { id: `agent-${Date.now()}`, reply: message || 'Your request was sent to the agent.',
     analysis: details.analysis || null, session: body.session, retrieval: body.retrieval, incident: details.incident,
-    source: answerSource(details), incidentAlert: details.incidentAlert || null }
+    source: answerSource(details), incidentAlert: details.incidentAlert || null, interactionId: details.interactionId || null }
 }
 
 // How an answer was produced, shown under the reply: computed exactly from the payroll data, from

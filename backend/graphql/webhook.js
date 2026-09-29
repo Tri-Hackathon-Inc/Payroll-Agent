@@ -3,7 +3,8 @@
 // (see incidentReport.js).
 // context describes where the host app invoked the agent, e.g. { page: 'payrun', payrunId }.
 // Looks the agent up through the same gRPC resolvers as GraphQL and answers (see answerQuestion).
-const { resolvers } = require('./aistudio');
+const { resolvers, recordInteraction } = require('./aistudio');
+const { buildInteraction } = require('./interactionLog');
 const { buildMessages } = require('./agentPrompt');
 const { callModel, unavailableReason, ModelUnavailable } = require('./modelRuntime');
 const { loadPayrunContext } = require('./payrunContext');
@@ -11,14 +12,15 @@ const { AnomalyDetectionPipeline } = require('./anomalyPipeline');
 const { withConversation } = require('./redisStore');
 const { createIncidentReport } = require('./incidentReport');
 const { answerFromData, normalize } = require('./factAnswers');
+const { createPseudonymizer, employeesIn } = require('./piiMask');
 const { checkReply, checkNote } = require('./replyCheck');
 const { createAnswerCache } = require('./answerCache');
-const { scopeContext, isReviewQuestion } = require('./contextScope');
+const { scopeContext, isReviewQuestion, isConceptQuestion } = require('./contextScope');
 const { resolveQuestionContext, focusFromAnswer } = require('./queryContext');
-const { createIncidentStore, planIncidents, findingKey, findingsMessage, brief } = require('./incidentTrigger');
+const { createDefaultIncidentStore, planIncidents, findingKey, findingsMessage, brief } = require('./incidentTrigger');
 
 const answerCache = createAnswerCache();
-const incidentStore = createIncidentStore();
+const incidentStore = createDefaultIncidentStore();
 const INCIDENT_TEMPLATE = 'incident-report';
 
 const WEBHOOK_PATH = /^\/webhook\/([^/]+)\/([^/]+)\/?$/;
@@ -59,9 +61,11 @@ async function agentModel(agent, config, context) {
 
 // Answers a question, in order:
 //   1. a fact in the payroll data is answered exactly in code (factAnswers), even when no model is
-//      connected; follow-ups that depend on the conversation ("his", "her") go on to the next steps;
+//      connected, including the automated findings for review questions; follow-ups that depend on
+//      the conversation ("his", "her") go on to the next steps;
 //   2. payrun questions go to the payroll RAG pipeline when Redis is configured, and Anomaly
-//      Detection agents' review questions to the anomaly pipeline (calculated history comparisons);
+//      Detection agents to the anomaly pipeline (per-employee history comparisons, e.g. when one
+//      employee is selected); definitions and general guidance skip both and go to the model;
 //   3. otherwise the model answers: a question already answered for this payrun version returns
 //      the same reply from the cache, only the pay lines the question needs are sent
 //      (contextScope), and the reply is checked against the data (replyCheck).
@@ -87,19 +91,32 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
   if (resolution.clarification) return finish({ reply: resolution.clarification, answeredBy: 'clarification', model: null,
     metrics: null, context: contextInfo });
   const resolvedQuestion = resolution.question;
-  const anomalyReview = templateId === 'anomaly-detection' && isReviewQuestion(resolvedQuestion);
+  const scopedInvocation = resolution.focus?.employeeIds.length === 1
+    ? { ...invocation, employeeId: resolution.focus.employeeIds[0] } : invocation;
+  // Whole-run reviews use automated findings; a resolved employee gets a history drill-down.
+  const employeeDrillDown = templateId === 'anomaly-detection' && isReviewQuestion(resolvedQuestion) && Boolean(scopedInvocation?.employeeId);
+  const concept = isConceptQuestion(question);
 
-  const computed = modelOnly || anomalyReview ? null : answerFromData(resolvedQuestion, payrunContext);
+  const computed = modelOnly || employeeDrillDown ? null : answerFromData(resolvedQuestion, payrunContext);
   if (computed) {
     return finish({ reply: computed.reply, answeredBy: 'payroll-data', intent: computed.intent, model: null,
       metrics: { latencyMs: Math.round(performance.now() - started) }, context: contextInfo });
   }
-  if (invocation?.page === 'payrun' && env.RAG_ENABLED !== 'false' && (env.REDIS_URL || deps.vectorStore)) {
+  if (!concept && invocation?.page === 'payrun' && env.RAG_ENABLED !== 'false' && (env.REDIS_URL || deps.vectorStore)) {
     const { PayrollRagPipeline } = require('./rag/pipeline');
-    return { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation, queryContext: resolution }) };
+    // A first question (no conversation yet) on the same payrun version gets the same answer
+    // from the cache: consistent wording and no repeated model call. Follow-ups are not cached.
+    const ragCache = deps.cache || answerCache;
+    const ragKey = ragCache.key(['rag', agent.id || agent.name, model?.id, config.instructions, invocation.employeeId || null,
+      payrunContext?.payrunId || null, payrunContext?.payrun?.version ?? null, normalize(question)]);
+    const ragCacheable = !modelOnly && !(conversation?.history || []).length && !conversation?.focus;
+    const hit = ragCacheable ? ragCache.get(ragKey) : null;
+    if (hit) return { ...hit, cached: true };
+    const answer = { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation, queryContext: resolution.focus ? resolution : undefined }) };
+    if (ragCacheable && answer.analysis?.modelStatus === 'completed') ragCache.set(ragKey, answer);
+    return { ...answer, cached: false };
   }
-  if (templateId === 'anomaly-detection') {
-    const scopedInvocation = resolution.focus?.employeeIds.length === 1 ? { ...invocation, employeeId: resolution.focus.employeeIds[0] } : invocation;
+  if (!concept && templateId === 'anomaly-detection') {
     return finish({ answeredBy: 'anomaly-pipeline', ...await new AnomalyDetectionPipeline(deps).run({ config, model,
       question: resolvedQuestion, invocation: scopedInvocation }) });
   }
@@ -125,8 +142,13 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
 
   // Only the pay lines this question needs go to the model (contextScope).
   const modelContext = scopeContext(payrunContext, resolvedQuestion);
-  const messages = buildMessages({ agentName: agent.name, config, question: resolvedQuestion, context: modelContext, history });
-  const { text, metrics } = await callModel(model, messages, deps);
+  // Names never reach the model (piiMask): masked going in, restored in the reply.
+  const pii = createPseudonymizer(employeesIn(payrunContext), env);
+  const messages = buildMessages({ agentName: agent.name, config, question: pii.mask(resolvedQuestion),
+    context: modelContext && { ...modelContext, text: pii.mask(modelContext.text) },
+    history: history.map(turn => ({ ...turn, content: pii.mask(turn.content) })) });
+  const { text: maskedText, metrics } = await callModel(model, messages, deps);
+  const text = pii.unmask(maskedText);
   const check = checkReply(text, modelContext);
   const sent = { characters: modelContext?.text?.length || 0, scope: modelContext?.scope || null };
   const answer = {
@@ -135,6 +157,7 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
     model: { id: model.id, name: model.name, modelId: model.modelId },
     metrics,
     check,
+    privacy: { namesMasked: pii.masked },
   };
   if (!modelOnly) cache.set(cacheKey, { ...answer, sent });
   return finish({ ...answer, cached: false, context: { ...contextInfo, ...sent } });
@@ -142,14 +165,18 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
 
 // After an agent with alerts enabled answers on a payrun, raise new critical findings as an
 // incident through the domain's Incident Report agent and list warnings to suggest (see
-// incidentTrigger.js). deps: loadContext, store, findIncidentAgent, createReport.
-async function raiseIncidents({ agent, config, invocation, domainName, question }, deps) {
+// incidentTrigger.js). reason says what triggered it (e.g. a payrun change); trigger is
+// "automatic" (after an answer) or "realtime" (payrollEvents.js). deps: loadContext, store,
+// findIncidentAgent, createReport.
+async function raiseIncidents({ agent, config, invocation, domainName, question, reason = '', trigger = 'automatic' }, deps) {
   if (invocation?.page !== 'payrun' || !invocation.payrunId || invocation.answerMode === 'model') return null;
   let payrunContext;
   try { payrunContext = await deps.loadContext(invocation, deps); } catch { return null; }
   if (!payrunContext?.signals) return null;
   const store = deps.store || incidentStore;
-  const plan = planIncidents({ signals: payrunContext.signals, alerts: config.capabilities?.alerts, domainName, payrunId: payrunContext.payrunId, store });
+  const payrunId = payrunContext.payrunId;
+  const alerts = config.capabilities?.alerts;
+  const plan = alerts?.enabled ? planIncidents({ signals: payrunContext.signals, alerts, raised: await store.raisedKeys(domainName, payrunId) }) : null;
   if (!plan) return null;
   // review: the question was about findings, so the UI shows suggestions and already-raised
   // incidents under it (not under every reply).
@@ -160,15 +187,48 @@ async function raiseIncidents({ agent, config, invocation, domainName, question 
   if (!incidentAgent) {
     return { ...result, note: `${plan.toRaise.length} critical finding${plan.toRaise.length === 1 ? '' : 's'} need an incident, but this domain has no Incident Report agent; create one in Agent Studio.` };
   }
+  // Claim atomically: whoever claims a finding raises it; a concurrent claimant skips it.
+  const claimed = new Set(await store.claim(domainName, payrunId, plan.toRaise.map(findingKey)));
+  const toRaise = plan.toRaise.filter(signal => claimed.has(findingKey(signal)));
+  if (!toRaise.length) return { ...result, alreadyRaised: plan.alreadyRaised + plan.toRaise.length };
   try {
     const report = await deps.createReport({ ...incidentAgent, domainName,
-      invocation: { page: 'payrun', payrunId: payrunContext.payrunId, task: 'incident-report',
-        handoff: { fromAgent: agent.name, trigger: 'automatic', conversation: [findingsMessage(agent.name, plan.toRaise)] } } });
-    plan.toRaise.forEach(signal => store.add(findingKey(domainName, payrunContext.payrunId, signal)));
-    return { ...result, raised: { agent: { id: incidentAgent.agent.id, name: incidentAgent.agent.name }, reply: report.reply, incident: report.incident,
-      findings: plan.toRaise.map(brief) } };
+      invocation: { page: 'payrun', payrunId, task: 'incident-report',
+        handoff: { fromAgent: agent.name, trigger, conversation: [findingsMessage(agent.name, toRaise, reason)] } } });
+    await store.attach(domainName, payrunId, [...claimed], report.incident?.id || null);
+    return { ...result, alreadyRaised: result.alreadyRaised + plan.toRaise.length - toRaise.length,
+      raised: { agent: { id: incidentAgent.agent.id, name: incidentAgent.agent.name }, reply: report.reply, incident: report.incident,
+        findings: toRaise.map(brief) } };
   } catch (error) {
+    await store.release(domainName, payrunId, [...claimed]);
     return { ...result, note: `The automatic incident could not be created: ${error.message}` };
+  }
+}
+
+// How raiseIncidents reaches the domain's Incident Report agent (shared by the chat webhook and
+// the real-time monitor in payrollEvents.js).
+function incidentHandoff({ agents, context, loadContext }) {
+  return {
+    loadContext,
+    async findIncidentAgent() {
+      const incidentAgent = agents.find(item => resolvers.Agent.templateId(item) === INCIDENT_TEMPLATE);
+      if (!incidentAgent) return null;
+      const incidentConfig = resolvers.Agent.config(incidentAgent);
+      return { agent: incidentAgent, config: incidentConfig, model: await agentModel(incidentAgent, incidentConfig, context) };
+    },
+    createReport: ({ agent: incidentAgent, config: incidentConfig, model: incidentModel, domainName: domain, invocation: handoff }) =>
+      createIncidentReport({ agent: incidentAgent, config: incidentConfig, model: incidentModel, invocation: handoff, domainName: domain }, { loadContext }),
+  };
+}
+
+// Records the answer for the admin metrics and returns its ID (used for feedback). Metrics must
+// never break a chat, so a failed write is logged and the answer is still returned.
+async function logInteraction({ domainName, agentId, context, record = recordInteraction, ...details }) {
+  try {
+    return await record(null, { domainName, agentId, data: buildInteraction(details) }, context);
+  } catch (error) {
+    console.warn(`Interaction metrics not recorded: ${error.message}`);
+    return null;
   }
 }
 
@@ -179,8 +239,11 @@ function isWebhookRequest(pathname) {
 async function handleWebhook(req, res, pathname, context) {
   if (req.method !== 'POST') return send(res, 405, { message: 'Use POST.' });
   const [, domainName, agentId] = pathname.match(WEBHOOK_PATH).map(decodeURIComponent);
+  const started = performance.now();
+  const elapsed = () => performance.now() - started;
+  let request = {}, found = null;
   try {
-    const { question, context: invocation, sessionId, requestId } = await readJson(req);
+    const { question, context: invocation, sessionId, requestId, source } = request = await readJson(req);
     if (typeof question !== 'string' || !question.trim()) return send(res, 400, { message: 'A question is required.' });
     if (question.length > 10000) return send(res, 400, { message: 'Questions must be at most 10,000 characters.' });
 
@@ -189,6 +252,7 @@ async function handleWebhook(req, res, pathname, context) {
     if (!agent) return send(res, 404, { message: `Agent ${agentId} was not found for ${domainName}.` });
 
     const config = resolvers.Agent.config(agent);
+    found = { agent, config };
     const model = await agentModel(agent, config, context);
     // The payrun is loaded once per request (per history depth), shared by the answer and any
     // automatic incident.
@@ -202,7 +266,9 @@ async function handleWebhook(req, res, pathname, context) {
     // outside ordinary chat session normalization and the payroll RAG path.
     if (invocation?.task === 'incident-report') {
       const report = await createIncidentReport({ agent, config, model, invocation, domainName }, { loadContext });
-      return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...report });
+      const interactionId = await logInteraction({ domainName, agentId, context, question: question.trim(), invocation, source,
+        config, answer: { ...report, answeredBy: 'incident-report' }, latencyMs: elapsed() });
+      return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...report, interactionId });
     }
     let effective = invocation || {};
     const answer = await withConversation({ sessionId, requestId, question: question.trim(),
@@ -214,23 +280,21 @@ async function handleWebhook(req, res, pathname, context) {
         invocation: effective, domainName, conversation }, { loadContext });
       return { answer: result, focus };
     });
-    const incidentAlert = answer.answeredBy === 'clarification' ? null : await raiseIncidents({ agent, config, invocation: effective, domainName, question: question.trim() }, {
-      loadContext,
-      async findIncidentAgent() {
-        const incidentAgent = agents.find(item => resolvers.Agent.templateId(item) === INCIDENT_TEMPLATE);
-        if (!incidentAgent) return null;
-        const incidentConfig = resolvers.Agent.config(incidentAgent);
-        return { agent: incidentAgent, config: incidentConfig, model: await agentModel(incidentAgent, incidentConfig, context) };
-      },
-      createReport: ({ agent: incidentAgent, config: incidentConfig, model: incidentModel, domainName: domain, invocation: handoff }) =>
-        createIncidentReport({ agent: incidentAgent, config: incidentConfig, model: incidentModel, invocation: handoff, domainName: domain }, { loadContext }),
-    });
-    return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...answer, incidentAlert });
+    const incidentAlert = answer.answeredBy === 'clarification' ? null : await raiseIncidents({ agent, config, invocation: effective, domainName, question: question.trim() },
+      incidentHandoff({ agents, context, loadContext }));
+    const payrunContext = effective?.page === 'payrun' ? await loadContext(effective).catch(() => null) : null;
+    const interactionId = await logInteraction({ domainName, agentId, context, question: question.trim(), invocation: effective,
+      source, config, answer, payrunContext, incidentAlert, latencyMs: elapsed() });
+    return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...answer, incidentAlert, interactionId });
   } catch (error) {
+    if (found && typeof request.question === 'string') {
+      await logInteraction({ domainName, agentId, context, question: request.question.trim(), invocation: request.context,
+        source: request.source, config: found.config, error, latencyMs: elapsed() });
+    }
     if (error instanceof ModelUnavailable) return send(res, 502, { message: error.message });
     const status = error.status || { NOT_FOUND: 404, BAD_USER_INPUT: 400 }[error.extensions?.code] || 502;
     return send(res, status, { message: error.message || 'The agent could not be reached.' });
   }
 }
 
-module.exports = { isWebhookRequest, handleWebhook, answerQuestion, agentModel, raiseIncidents };
+module.exports = { isWebhookRequest, handleWebhook, answerQuestion, agentModel, raiseIncidents, logInteraction, incidentHandoff };

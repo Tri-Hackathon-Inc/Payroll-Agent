@@ -85,6 +85,26 @@ export function createMockExecutor() {
       if (serviceName && !templates.some(item => item.serviceOptions.some(service => service.id === serviceName))) fail(`Service ${serviceName} not found.`, 'NOT_FOUND')
       return agents.filter(item => (!domainName || item.domainName === domainName) && (!serviceName || item.config.service === serviceName))
     },
+    // Mock mode has no sign-in: the Studio is open, as without STUDIO_ADMIN_KEY.
+    viewer: () => ({ role: 'admin', authMode: 'open', allowedModels: null, allowedTools: null,
+      features: ['createAgents', 'testAgents', 'agentTools', 'usage', 'manageAgents', 'tools', 'models', 'evaluation', 'metrics'] }),
+    // Mock mode records no answers, so metrics are honestly empty (no sample numbers).
+    agentMetrics: ({ domainName, agentId, sinceHours }) => {
+      domain(domainName)
+      return { window: { sinceHours: sinceHours || null, agentId: agentId || null, rows: 0, truncated: false },
+        summary: { questions: 0, conversations: 0, payrunsReviewed: 0, activeAgents: 0, answeredFromData: 0, dataShare: null,
+          errors: 0, avgLatencyMs: null, p95LatencyMs: null, up: 0, down: 0, helpfulRate: null },
+        business: { findings: { critical: 0, warning: 0, info: 0 }, amountAtRisk: 0, incidentsRaised: 0, manualIncidents: 0,
+          realtimeChecks: 0, realtimeIncidents: 0,
+          warningsSuggested: 0, topQuestions: [] },
+        quality: { modelAnswers: 0, cached: 0, cacheHitRate: null, checked: 0, flagged: 0, checkPassRate: null, errorReasons: [],
+          repeatedQuestions: 0, consistent: 0, consistencyRate: null, variedAnswers: [] },
+        answerTypes: [], models: [], agents: [], timeline: [], recent: [] }
+    },
+    rateAnswer: ({ input }) => {
+      domain(input.domainName)
+      fail('Answer not found in this domain.', 'NOT_FOUND')
+    },
     createAgent: ({ input }) => save(input),
     updateAgent: ({ input }) => {
       domain(input.domainName)

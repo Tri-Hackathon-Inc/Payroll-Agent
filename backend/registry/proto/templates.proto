@@ -12,6 +12,9 @@ service ai_studio {
   rpc CreateAgent(CreateAgentRequest) returns (Agent);
   rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
   rpc ChatAgent(ChatAgentRequest) returns (ChatAgentResponse);
+  rpc RecordInteraction(RecordInteractionRequest) returns (InteractionRef);
+  rpc RateInteraction(RateInteractionRequest) returns (InteractionRef);
+  rpc GetAgentMetrics(AgentMetricsRequest) returns (AgentMetrics);
 }
 message TemplateId { string id = 1; }
 message ServiceName { string service_name = 1; }
@@ -70,3 +73,22 @@ message ChatAgentResponse {
   string output = 3;
   bool demo = 4;
 }
+
+// Admin metrics: one record per answered question (see registry/metrics.py).
+message RecordInteractionRequest {
+  string domain_name = 1;
+  string agent_id = 2;
+  google.protobuf.Struct data = 3;
+}
+message InteractionRef { string id = 1; }
+message RateInteractionRequest {
+  string domain_name = 1;
+  string interaction_id = 2;
+  string rating = 3;
+}
+message AgentMetricsRequest {
+  string domain_name = 1;
+  string agent_id = 2;
+  uint32 since_hours = 3;
+}
+message AgentMetrics { google.protobuf.Struct metrics = 1; }

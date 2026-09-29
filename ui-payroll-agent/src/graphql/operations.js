@@ -56,3 +56,23 @@ export const UPDATE_AGENT_MUTATION = `
     updateAgent(input: $input) { ${AGENT_FIELDS} }
   }
 `
+
+// Admin metrics (Agent Metrics view) and answer feedback.
+export const AGENT_METRICS_QUERY = `
+  query AgentMetrics($domainName: String!, $agentId: ID, $sinceHours: Int) {
+    agentMetrics(domainName: $domainName, agentId: $agentId, sinceHours: $sinceHours)
+  }
+`
+
+export const RATE_ANSWER_MUTATION = `
+  mutation RateAnswer($input: RateAnswerInput!) {
+    rateAnswer(input: $input)
+  }
+`
+
+// Who is using the Studio: role (admin or user) and the features turned on for it.
+export const VIEWER_QUERY = `
+  query Viewer {
+    viewer { role features authMode allowedModels allowedTools }
+  }
+`

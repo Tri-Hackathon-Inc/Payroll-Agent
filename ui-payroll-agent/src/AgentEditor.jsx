@@ -3,7 +3,23 @@ import { graphqlRequest } from './graphql/client'
 import ModelPicker from './ModelPicker'
 import { CREATE_AGENT_MUTATION, TEMPLATE_QUERY, UPDATE_AGENT_MUTATION } from './graphql/operations'
 
-export default function AgentEditor({ domain, templateId, agent, onSaved, onCancel }) {
+// Customers only see the models and tools an admin allowed them (viewer.allowedModels and
+// allowedTools; null means all). The API enforces the same limits.
+function forViewer(detail, viewer, agent) {
+  const allowed = (list, id) => !list || list.includes(id)
+  const template = { ...detail,
+    modelOptions: detail.modelOptions.filter(item => allowed(viewer?.allowedModels, item.id)),
+    serviceOptions: detail.serviceOptions.filter(item => allowed(viewer?.allowedTools, item.id)) }
+  const config = structuredClone(agent?.config || detail.config)
+  if (!agent) {
+    if (!template.modelOptions.some(item => item.id === config.model) && template.modelOptions[0]) config.model = template.modelOptions[0].id
+    if (!template.serviceOptions.some(item => item.id === config.service) && template.serviceOptions[0]) config.service = template.serviceOptions[0].id
+    config.attached_services = config.attached_services.filter(id => template.serviceOptions.some(item => item.id === id))
+  }
+  return { template, config }
+}
+
+export default function AgentEditor({ domain, templateId, agent, onSaved, onCancel, viewer }) {
   const [template, setTemplate] = useState(null)
   const [name, setName] = useState(agent?.name || '')
   const [config, setConfig] = useState(null)
@@ -19,9 +35,10 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
     graphqlRequest(TEMPLATE_QUERY, { id: templateId }).then(({ getTemplate: detail }) => {
       if (!active) return
       if (detail.config.domain !== domain.domain) throw new Error('This template is not available for the selected domain.')
-      setTemplate(detail)
+      const scoped = forViewer(detail, viewer, agent)
+      setTemplate(scoped.template)
       setName(agent?.name || detail.name)
-      setConfig(structuredClone(agent?.config || detail.config))
+      setConfig(scoped.config)
     }).catch(requestError => {
       if (!active) return
       if (agent && requestError.code === 'NOT_FOUND') {
@@ -31,7 +48,7 @@ export default function AgentEditor({ domain, templateId, agent, onSaved, onCanc
       } else setLoadError(requestError.message)
     })
     return () => { active = false }
-  }, [templateId, agent, domain.domain, retry])
+  }, [templateId, agent, domain.domain, retry, viewer])
 
   const field = (key, value) => setConfig(current => ({ ...current, [key]: value }))
 

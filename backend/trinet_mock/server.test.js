@@ -133,3 +133,33 @@ test('serves GraphQL over HTTP', async t => {
   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{ payruns { id } }' }) });
   assert.equal((await response.json()).data.payruns.length, 4);
 });
+
+test('a saved pay line sends a payrun.changed event, and delivery failures never block the save', async () => {
+  const { createEventNotifier } = require('./events');
+  const sent = [];
+  const events = createEventNotifier({ url: 'http://agent-studio/events/payroll', token: 'shared-secret',
+    fetchImpl: async (url, request) => { sent.push({ url, request }); return { ok: true }; } });
+  const server = createApolloServer();
+  const store = openDatabase();
+  const run = async (query, variables, contextValue) => JSON.parse(JSON.stringify(
+    (await server.executeOperation({ query, variables }, { contextValue })).body.singleResult));
+  const edited = await run(UPDATE, { input: { payrunId: 'PR-2026-09-B', lineId: 'PR-2026-09-B-L07', earnings: { bonus: 100 } } }, { store, events });
+  assert.equal(edited.errors, undefined);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].request.headers['X-Payroll-Events-Token'], 'shared-secret');
+  const event = JSON.parse(sent[0].request.body);
+  assert.deepEqual([event.type, event.payrunId, event.version, event.lineId, event.employeeId],
+    ['payrun.changed', 'PR-2026-09-B', 2, 'PR-2026-09-B-L07', 'E1006']);
+
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const down = createEventNotifier({ url: 'http://agent-studio/events/payroll', fetchImpl: async () => { throw new Error('refused'); } });
+    const saved = await run(UPDATE, { input: { payrunId: 'PR-2026-09-B', lineId: 'PR-2026-09-B-L07', earnings: { bonus: 200 } } }, { store, events: down });
+    assert.equal(saved.errors, undefined, 'the save succeeds when the receiver is down');
+    assert.equal(await down.notify({}), false);
+  } finally {
+    console.warn = warn;
+  }
+  assert.equal(await createEventNotifier({ url: '' }).notify({}), false, 'no URL, no event');
+})

@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import { graphqlRequest } from './graphql/client'
-import { DOMAIN_TEMPLATES_QUERY, SERVICE_AGENT_REGISTRY_QUERY, STUDIO_QUERY } from './graphql/operations'
+import { DOMAIN_TEMPLATES_QUERY, SERVICE_AGENT_REGISTRY_QUERY, STUDIO_QUERY, VIEWER_QUERY } from './graphql/operations'
 import AgentEditor from './AgentEditor'
 import ChatWindow from './ChatWindow'
 import ToolsPage from './ToolsPage'
 import EvaluationPage from './EvaluationPage'
+import MetricsPage from './MetricsPage'
+import UserAgentsPage from './UserAgentsPage'
+import CustomerToolsPage from './CustomerToolsPage'
 import MyAgentsPage from './MyAgentsPage'
 import ModelsPage from './ModelsPage'
 import { trinetUrl } from './links'
@@ -22,26 +25,69 @@ const SERVICES = [
 ]
 
 // Agent Studio is a single page at BASE_URL: the left panel switches views in place and
-// the URL never changes. Saved agents can be tested in My Agents or used by the TriNet payrun page.
-const NAV_GROUPS = [
-  {
-    label: 'Build',
-    items: [
-      { key: 'studio', label: 'Services', icon: 'bi-grid-1x2' },
-      { key: 'tools', label: 'Tools & APIs', icon: 'bi-plug' },
-      { key: 'models', label: 'Models', icon: 'bi-cpu' },
-    ],
-  },
-  {
-    label: 'Manage',
-    items: [
-      { key: 'agents', label: 'My Agents', icon: 'bi-robot' },
-      { key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up' },
-    ],
-  },
-]
+// the URL never changes. What the panel offers depends on the viewer's role and feature flags
+// (backend/graphql/access.js); the API enforces the same rules.
+//   Admin: Services, Tools & APIs (tool catalog), Models, My Agents, Evaluation, Agent Metrics.
+//   Customer: Services (allowed models and tools), Tools & APIs (their agents' tools), My Agents
+//   (playground), Usage.
+const USER_VIEW = { key: 'mine', label: 'My Agents', icon: 'bi-robot' }
 
-function Sidebar({ activeKey, onNavigate, domainName }) {
+function navFor(viewer) {
+  if (!viewer) return []
+  const has = feature => viewer.features.includes(feature)
+  const admin = has('manageAgents')
+  const build = [
+    (admin || has('createAgents')) && { key: 'studio', label: 'Services', icon: 'bi-grid-1x2' },
+    has('tools') ? { key: 'tools', label: 'Tools & APIs', icon: 'bi-plug' }
+      : has('agentTools') && { key: 'agent-tools', label: 'Tools & APIs', icon: 'bi-plug' },
+    has('models') && { key: 'models', label: 'Models', icon: 'bi-cpu' },
+  ].filter(Boolean)
+  const manage = [
+    (admin || has('testAgents')) && { key: 'agents', label: 'My Agents', icon: 'bi-robot' },
+    has('evaluation') && { key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up' },
+    has('metrics') ? { key: 'metrics', label: 'Agent Metrics', icon: 'bi-speedometer2' }
+      : has('usage') && { key: 'usage', label: 'Usage', icon: 'bi-bar-chart' },
+  ].filter(Boolean)
+  const groups = [{ label: 'Build', items: build }, { label: 'Manage', items: manage }].filter(group => group.items.length)
+  // With no features at all, a read-only list of the agents in the viewer's services.
+  return groups.length ? groups : [{ label: 'Your service', items: [USER_VIEW] }]
+}
+
+function AccessBox({ viewer, onSignIn, onSignOut }) {
+  const [open, setOpen] = useState(false)
+  const [key, setKey] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  if (!viewer) return null
+  if (viewer.authMode === 'open') {
+    return <div className="sidebar-access small" title="Set STUDIO_ADMIN_KEY on the server to require admin sign-in.">
+      <i className="bi bi-unlock me-1" aria-hidden="true" />Open access · everyone is admin
+    </div>
+  }
+  const submit = async event => {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try { await onSignIn(key); setKey(''); setOpen(false) } catch (signInError) { setError(signInError.message) } finally { setBusy(false) }
+  }
+  return <div className="sidebar-access small">
+    <div className="d-flex align-items-center justify-content-between gap-2">
+      <span><i className={`bi ${viewer.role === 'admin' ? 'bi-shield-lock' : 'bi-person'} me-1`} aria-hidden="true" />{viewer.role === 'admin' ? 'Admin' : 'User'}</span>
+      {viewer.role === 'admin'
+        ? <button type="button" className="btn btn-link btn-sm p-0 sidebar-access-link" onClick={onSignOut}>Sign out</button>
+        : <button type="button" className="btn btn-link btn-sm p-0 sidebar-access-link" aria-expanded={open} onClick={() => setOpen(value => !value)}>Admin sign in</button>}
+    </div>
+    {open && viewer.role !== 'admin' && <form className="mt-2" onSubmit={submit}>
+      <label htmlFor="admin-key" className="visually-hidden">Admin key</label>
+      <input id="admin-key" type="password" className="form-control form-control-sm" placeholder="Admin key" autoComplete="current-password"
+        value={key} onChange={event => setKey(event.target.value)} required autoFocus />
+      {error && <div className="text-warning mt-1" role="alert">{error}</div>}
+      <button type="submit" className="btn btn-light btn-sm w-100 mt-2" disabled={busy || !key}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    </form>}
+  </div>
+}
+
+function Sidebar({ activeKey, onNavigate, domainName, viewer, onSignIn, onSignOut }) {
   return (
     <aside className="app-sidebar studio-sticky d-flex flex-column flex-shrink-0 p-3">
       <div className="d-flex align-items-center gap-2 px-1 mb-1">
@@ -53,7 +99,7 @@ function Sidebar({ activeKey, onNavigate, domainName }) {
       </div>
       <hr className="sidebar-divider mt-3 mb-3" />
       <nav aria-label="Agent Studio">
-        {NAV_GROUPS.map((group) => (
+        {navFor(viewer).map((group) => (
           <div className="mb-3" key={group.label}>
             <div className="sidebar-group-label px-2 mb-2">{group.label}</div>
             <ul className="nav nav-pills flex-column gap-1">
@@ -76,6 +122,7 @@ function Sidebar({ activeKey, onNavigate, domainName }) {
       </nav>
       <div className="mt-auto">
         <hr className="sidebar-divider mt-0 mb-3" />
+        <AccessBox viewer={viewer} onSignIn={onSignIn} onSignOut={onSignOut} />
         <a className="nav-link sidebar-link d-flex align-items-center gap-2 w-100" href={trinetUrl(domainName)} target="_blank" rel="noreferrer">
           <span className="sidebar-icon"><i className="bi bi-cash-stack" /></span>
           <span className="flex-grow-1">TriNet Payruns</span>
@@ -107,11 +154,14 @@ function App() {
   const [editing, setEditing] = useState(null)
   const [notice, setNotice] = useState('')
   const [agentResult, setAgentResult] = useState(null)
+  const [viewer, setViewer] = useState(null)
+  const [agentReload, setAgentReload] = useState(0)
+  const [viewerReload, setViewerReload] = useState(0)
   const editorRef = useRef(null)
   // In the studio the domain list is limited to the chosen service; other views use all domains.
   const domains = (view === 'studio' ? catalog?.domains.filter(item => item.domain === service) : catalog?.domains) || []
   const domain = domains.find(item => item.name === domainName) || domains[0]
-  const needsAgents = ['tools', 'evaluation'].includes(view)
+  const needsAgents = ['tools', 'evaluation', 'agent-tools', 'metrics', 'usage'].includes(view)
   const agents = agentResult && agentResult.domainName === domain?.name ? agentResult.items : []
   const agentsLoading = domain && (agentResult?.domainName !== domain.name || agentResult.loading)
 
@@ -138,7 +188,7 @@ function App() {
       .then(data => { if (active) setAgentResult({ domainName: domain.name, items: data.getServiceAgentRegistry, loading: false, error: '' }) })
       .catch(error => { if (active) setAgentResult({ domainName: domain.name, items: [], loading: false, error: error.message }) })
     return () => { active = false }
-  }, [domain, needsAgents, standalone])
+  }, [domain, needsAgents, standalone, agentReload])
 
   useEffect(() => {
     if (editing) editorRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
@@ -158,6 +208,32 @@ function App() {
     document.addEventListener('mousedown', closeOnOutsideClick)
     return () => document.removeEventListener('mousedown', closeOnOutsideClick)
   }, [editing])
+
+  // Role and feature flags decide which views are shown (the API enforces them as well).
+  useEffect(() => {
+    if (standalone) return undefined
+    let active = true
+    graphqlRequest(VIEWER_QUERY)
+      .then(data => { if (active) setViewer(data.viewer) })
+      .catch(() => { if (active) setViewer({ role: 'user', features: [], authMode: 'key' }) })
+    return () => { active = false }
+  }, [standalone, viewerReload])
+  const allowedViews = navFor(viewer).flatMap(group => group.items.map(item => item.key))
+  const allowedKey = allowedViews.join(',')
+  // After sign-in or sign-out, leave a view the viewer can no longer open.
+  useEffect(() => {
+    const allowed = allowedKey.split(',')
+    if (viewer && !allowed.includes(view)) setView(allowed[0] || USER_VIEW.key)
+  }, [viewer, view, allowedKey])
+
+  async function access(path, body) {
+    const response = await fetch(`${import.meta.env.BASE_URL}auth/${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || `Sign-in failed (${response.status}).`)
+    setViewerReload(value => value + 1)
+  }
 
   if (standalone?.view === 'chat') {
     return <main className="chat-app-shell">
@@ -188,7 +264,13 @@ function App() {
   }
 
   let content
-  if (view === 'models') {
+  if (!viewer) {
+    content = <Loading>Checking access…</Loading>
+  } else if (!allowedViews.includes(view)) {
+    content = <Loading />
+  } else if (view === USER_VIEW.key) {
+    content = catalog ? <UserAgentsPage domains={catalog.domains} /> : <Loading>Loading your agents…</Loading>
+  } else if (view === 'models') {
     content = <ModelsPage templates={catalog?.templates} />
   } else if (catalogError) {
     content = <div className="alert alert-danger" role="alert">Could not load Agent Studio: {catalogError}
@@ -203,8 +285,13 @@ function App() {
   } else if (view === 'evaluation') {
     content = <EvaluationPage key={domain.name} domain={domain} agents={agents} agentsLoading={agentsLoading}
       onBrowseTemplates={() => openService(domain.domain)} />
+  } else if (view === 'metrics' || view === 'usage') {
+    content = <MetricsPage key={domain.name} domain={domain} agents={agents} agentsLoading={agentsLoading} />
+  } else if (view === 'agent-tools') {
+    content = <CustomerToolsPage key={domain.name} domain={domain} templates={catalog.templates} agents={agents}
+      agentsLoading={agentsLoading} viewer={viewer} onChanged={() => setAgentReload(value => value + 1)} />
   } else if (view === 'agents') {
-    content = <MyAgentsPage domains={catalog.domains} onCreate={() => openService(null)} />
+    content = <MyAgentsPage domains={catalog.domains} onCreate={() => openService(null)} canChat={viewer.features.includes('testAgents')} />
   } else if (!service || !domain) {
     const categories = [...SERVICES.map(item => item.category),
       ...new Set(catalog.domains.map(item => item.domain).filter(category => !SERVICES.some(item => item.category === category)))]
@@ -254,19 +341,21 @@ function App() {
       </div>
       {!templates.length && <p>No templates are available for this domain.</p>}
       {editing && <div id="configure" ref={editorRef} className="mt-4 studio-section" aria-label="Configure agent">
-        <AgentEditor key={`${domain.name}:${editing.templateId}`}
+        <AgentEditor key={`${domain.name}:${editing.templateId}`} viewer={viewer}
           domain={domain} agent={null} templateId={editing.templateId}
           onSaved={saved} onCancel={() => setEditing(null)} />
       </div>}
     </section>
   }
 
-  const showDomain = !['models', 'agents'].includes(view) && domain && (view !== 'studio' || service)
+  const showDomain = !['models', 'agents', USER_VIEW.key].includes(view) && viewer && domain && (view !== 'studio' || service)
+  const isAdmin = viewer?.role === 'admin'
   return <div className="app-shell d-flex">
-    <Sidebar activeKey={view} onNavigate={key => key === 'studio' ? openService(null) : showView(key)} domainName={domain?.name} />
+    <Sidebar activeKey={view} onNavigate={key => key === 'studio' ? openService(null) : showView(key)} domainName={domain?.name}
+      viewer={viewer} onSignIn={key => access('admin', { key })} onSignOut={() => access('logout')} />
     <main className="studio-page flex-grow-1 min-vw-0 p-4 p-xl-5">
       <header className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div><h1 className="h3 fw-bold mb-0">Agent Studio</h1><p className="text-muted mb-0">Create an AI agent for a service and domain.</p></div>
+        <div><h1 className="h3 fw-bold mb-0">Agent Studio</h1><p className="text-muted mb-0">{viewer && !isAdmin ? 'Build and try AI agents for your services.' : 'Create an AI agent for a service and domain.'}</p></div>
         {showDomain && <div className="d-flex align-items-center gap-2">
           <label htmlFor="domain" className="fw-semibold">Domain</label>
           <select id="domain" className="form-select w-auto" value={domain.name} onChange={event => chooseDomain(event.target.value)}>

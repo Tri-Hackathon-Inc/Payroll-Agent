@@ -5,6 +5,7 @@ const { ApolloServer } = require('@apollo/server');
 const { startStandaloneServer } = require('@apollo/server/standalone');
 const { openDatabase } = require('./db');
 const { typeDefs, resolvers } = require('./schema');
+const { createEventNotifier } = require('./events');
 
 function createApolloServer() {
   return new ApolloServer({ typeDefs, resolvers, introspection: true });
@@ -13,11 +14,12 @@ function createApolloServer() {
 async function main() {
   const databasePath = process.env.DATABASE_PATH || ':memory:';
   const store = openDatabase(databasePath);
+  const events = createEventNotifier();
   const { url } = await startStandaloneServer(createApolloServer(), {
     listen: { host: process.env.HOST || '127.0.0.1', port: Number(process.env.PORT || 4100) },
-    context: async () => ({ store }),
+    context: async () => ({ store, events }),
   });
-  console.log(`Mock TriNet payroll GraphQL API and Sandbox: ${url} (database: ${databasePath})`);
+  console.log(`Mock TriNet payroll GraphQL API and Sandbox: ${url} (database: ${databasePath}; change events: ${events.enabled ? 'on' : 'off'})`);
 }
 
 if (require.main === module) {

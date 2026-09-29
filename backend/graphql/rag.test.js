@@ -60,7 +60,8 @@ test('RAG uses separate intent and answer calls, employee/topic-filtered documen
 test('follow-up rules retain employee focus and change the requested topic when intent inference is disconnected', async () => {
   const reply = await new PayrollRagPipeline(dependencies({ env: {} })).run({ ...args, question: 'What about their deductions?',
     conversation: { focus: { employeeIds: ['E1002'], topics: ['overtime'] }, history: [{ role: 'user', content: args.question }, { role: 'assistant', content: 'Overtime increased.' }] } });
-  assert.deepEqual(reply.focus, { employeeIds: ['E1002'], topics: ['deductions'] });
+  assert.deepEqual(reply.focus, { employeeIds: ['E1002'], topics: ['deductions'], metrics: ['deductions'],
+    period: 'current', question: 'What about their deductions?' });
   assert.equal(reply.retrieval.intent.status, 'rules');
   assert.ok(reply.retrieval.sources.every(source => source.topic === 'deductions' && source.employeeId === 'E1002'));
   assert.equal(reply.analysis.modelStatus, 'not_configured');

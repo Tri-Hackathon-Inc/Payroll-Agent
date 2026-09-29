@@ -74,3 +74,47 @@ class Agent(models.Model):
     class Meta:
         db_table = "agent_info"
         ordering = ["created_at", "id"]
+
+
+class AgentInteraction(models.Model):
+    """One question answered by an agent, recorded for the admin metrics view.
+
+    Holds measurements only (how the answer was produced, latency, tokens, checks, findings,
+    incidents, feedback); never model credentials or full payroll data.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE, related_name="interactions")
+    # Agents can be edited or removed later; the ID and a name snapshot keep history readable.
+    agent_id = models.UUIDField(db_index=True)
+    agent_name = models.CharField(max_length=150)
+    template_id = models.CharField(max_length=100, blank=True)
+    source = models.CharField(max_length=60, blank=True)
+    session_id = models.CharField(max_length=100, blank=True)
+    payrun_id = models.CharField(max_length=100, blank=True)
+    question = models.CharField(max_length=500)
+    answered_by = models.CharField(max_length=40)
+    intent = models.CharField(max_length=60, blank=True)
+    model_id = models.CharField(max_length=100, blank=True)
+    latency_ms = models.PositiveIntegerField(default=0)
+    model_latency_ms = models.PositiveIntegerField(null=True)
+    prompt_tokens = models.PositiveIntegerField(null=True)
+    completion_tokens = models.PositiveIntegerField(null=True)
+    cached = models.BooleanField(default=False)
+    check_status = models.CharField(max_length=20, blank=True)
+    unverified_count = models.PositiveIntegerField(default=0)
+    findings = models.JSONField(default=dict)
+    amount_at_risk = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    incident_id = models.CharField(max_length=100, blank=True)
+    suggested_count = models.PositiveIntegerField(default=0)
+    error = models.CharField(max_length=300, blank=True)
+    feedback = models.CharField(max_length=10, blank=True)
+    feedback_at = models.DateTimeField(null=True)
+    # Fingerprint of the reply text: the same question getting different answers shows up in
+    # the consistency metric. The reply itself is not stored.
+    answer_hash = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        db_table = "agent_interaction"
+        ordering = ["-created_at"]

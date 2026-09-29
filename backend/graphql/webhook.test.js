@@ -188,11 +188,11 @@ test('answerQuestion acknowledges when the model is not connected', async () => 
   assert.equal(answer.metrics, null);
 });
 
-test('answerQuestion sends instructions, payrun data, and the question to the model', async () => {
+test('answerQuestion sends instructions, payrun data, and the question to the model, without employee names', async () => {
   let prompt;
   const modelUrl = await standIn(request => {
     prompt = request.body.messages;
-    return { json: { choices: [{ message: { content: 'Maya Chen gross doubled from 4500 to 9000.' } }], usage: { completion_tokens: 12 } } };
+    return { json: { choices: [{ message: { content: 'E1001 gross doubled from 4500 to 9000.' } }], usage: { completion_tokens: 12 } } };
   });
   const payrollUrl = await standIn(() => ({ json: { data: { payrun: run('PR-B', 'PENDING_APPROVAL', 9000), payrunHistory: [run('PR-A', 'COMPLETED', 4500)] } } }));
   const answer = await answerQuestion({
@@ -200,12 +200,14 @@ test('answerQuestion sends instructions, payrun data, and the question to the mo
     config: { model: 'qwen-2-5-72b', service: 'payrun', description: 'Flags anomalies.', instructions: 'Compare payrun inputs against history.' },
     invocation: { page: 'payrun', payrunId: 'PR-B' },
   }, { env: { HF_TOKEN: 'hf_test', HF_INFERENCE_BASE_URL: modelUrl }, endpoint: payrollUrl });
-  assert.equal(answer.reply, 'Maya Chen gross doubled from 4500 to 9000.');
+  assert.equal(answer.reply, 'E1001 Maya Chen gross doubled from 4500 to 9000.', 'the name is restored for the reader');
   assert.equal(answer.model.modelId, 'Qwen/Qwen2.5-72B-Instruct');
   assert.equal(answer.context.payrunId, 'PR-B');
   assert.match(prompt[0].content, /Instructions: Compare payrun inputs against history\./);
   assert.match(prompt[0].content, /one-sentence direct answer[\s\S]*Never paste raw data lines/);
-  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Why are Maya Chen's taxes so high\?/);
+  assert.match(prompt[1].content, /Current payrun PR-B[\s\S]*Question: Why are E1001's taxes so high\?/);
+  assert.ok(!JSON.stringify(prompt).includes('Maya Chen'), 'the name never reaches the model');
+  assert.ok(answer.privacy.namesMasked > 0);
   assert.equal(answer.answeredBy, 'model');
   assert.equal(answer.check.ok, true);
 });
@@ -231,4 +233,26 @@ test('generic webhook follow-ups pass restored session history before the new qu
     question: 'Which one?', conversation: { history } }, { env: { HF_TOKEN: 'test', HF_INFERENCE_BASE_URL: url } });
   assert.deepEqual(messages.slice(1, 3), history);
   assert.match(messages.at(-1).content, /Which one\?/);
+});
+
+test('payroll follow-ups preserve employee focus while masking resolved context and history', async () => {
+  let messages;
+  const current = run('PR-B', 'PENDING_APPROVAL', 9000);
+  const answer = await answerQuestion({ agent: { name: 'Follow-up assistant' },
+    config: { instructions: 'Explain payroll.' }, model, question: 'Why are her taxes so high?',
+    invocation: { page: 'payrun', payrunId: 'PR-B' },
+    conversation: { focus: { employeeIds: ['E1001'], topics: ['earnings'] },
+      history: [{ role: 'user', content: 'Tell me about Maya Chen.' }] },
+  }, { env: { HF_TOKEN: 'test', RAG_ENABLED: 'false' },
+    loadContext: async () => ({ payrunId: current.id, payrun: current, history: [], signals: [] }),
+    fetchImpl: async (url, request) => {
+      messages = JSON.parse(request.body).messages;
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'Check E1001 withholding settings.' } }] }) };
+    } });
+  assert.equal(answer.answeredBy, 'model');
+  assert.deepEqual(answer.focus.employeeIds, ['E1001']);
+  assert.deepEqual(answer.focus.topics, ['deductions']);
+  assert.match(messages.at(-1).content, /Follow-up context: E1001; tax withholding/);
+  assert.doesNotMatch(JSON.stringify(messages), /Maya Chen/);
+  assert.match(answer.reply, /E1001 Maya Chen/);
 });

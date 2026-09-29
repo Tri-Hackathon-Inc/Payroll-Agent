@@ -33,7 +33,7 @@ function Loading({ children }) {
   return <p role="status" className="text-muted py-4 px-4 mb-0"><span className="spinner-border spinner-border-sm me-2" />{children}</p>
 }
 
-function AgentRow({ agent, domain, onChat }) {
+function AgentRow({ agent, domain, onChat, canChat = true }) {
   const runtime = agentRuntime(agent)
   return <li className="list-group-item d-flex align-items-center gap-3 px-4 py-3 my-agent-row">
     <span className="registry-icon flex-shrink-0"><i className="bi bi-stars" /></span>
@@ -45,14 +45,14 @@ function AgentRow({ agent, domain, onChat }) {
       </div>
       <div className="text-muted small text-truncate">{agent.config?.description}</div>
     </div>
-    <button className="btn btn-dark btn-sm flex-shrink-0" onClick={onChat}>Chat with agent</button>
+    {canChat && <button className="btn btn-dark btn-sm flex-shrink-0" onClick={onChat}>Chat with agent</button>}
     {agent.config?.page === 'payrun' && <a className="btn btn-outline-secondary btn-sm flex-shrink-0" href={trinetUrl(domain.name)} target="_blank" rel="noreferrer">
       Open in payrun <i className="bi bi-box-arrow-up-right ms-1" />
     </a>}
   </li>
 }
 
-export default function MyAgentsPage({ domains, onCreate }) {
+export default function MyAgentsPage({ domains, onCreate, canChat = true }) {
   const [result, setResult] = useState(null)
   const [reload, setReload] = useState(0)
   const [search, setSearch] = useState('')
@@ -109,7 +109,7 @@ export default function MyAgentsPage({ domains, onCreate }) {
             <span className="small text-muted">{agents.length} {agents.length === 1 ? 'agent' : 'agents'}</span>
           </div>
           {agents.length ? <ul className="list-group list-group-flush rounded-bottom">
-            {agents.map(agent => <AgentRow key={agent.id} agent={agent} domain={domain} onChat={() => setChat({ agent, domain })} />)}
+            {agents.map(agent => <AgentRow key={agent.id} agent={agent} domain={domain} onChat={() => setChat({ agent, domain })} canChat={canChat} />)}
           </ul> : <p className="text-muted small px-4 py-3 mb-0">{query ? 'No agents match your search.' : 'No agents yet.'}</p>}
         </div>)}
       </section>)}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import AssistantPanel from './AssistantPanel'
 import EmployeeDrawer from './EmployeeDrawer'
+import LiveAlerts, { useLiveAlerts } from './LiveAlerts'
 import PayrollDetail from './PayrollDetail'
 import PayrollList from './PayrollList'
 import { agentStudioRequest, payrollRequest } from './api'
@@ -105,9 +106,19 @@ export default function App() {
   const assistantEmployee = run?.lines.find((line) => line.employeeId === assistantEmployeeId)
 
   const assistantAvailable = Boolean(run && domain)
+  // Agent Studio's real-time checks for this payrun (see LiveAlerts.jsx).
+  const live = useLiveAlerts(run ? domain?.name : null, run?.id)
+  // A change saved elsewhere (another reviewer, an integration) shows up here with its alert.
+  const latestVersion = live.alerts.reduce((highest, alert) => Math.max(highest, alert.version || 0), 0)
+  useEffect(() => {
+    if (run && latestVersion > run.version && !lineId) setReloadDetail((value) => value + 1)
+  }, [latestVersion, run, lineId])
   return <div className={`tn-app${assistantAvailable && assistantOpen ? ' tn-with-assistant' : ''}`}>
     <header className="tn-header">
       <span className="tn-logo">TriNet</span><span className="tn-mock-tag">Mock</span>
+      {run && live.connected && <span className="tn-live-status" title="Agent Studio checks every saved change to this payroll">
+        <span className="tn-live-dot" aria-hidden="true" />Live monitoring
+      </span>}
       {assistantAvailable && <button type="button" className={`tn-assistant-toggle${assistantOpen ? ' active' : ''}`}
         aria-pressed={assistantOpen} aria-controls="tn-assistant" onClick={() => { setLineId(null); setAssistantOpen((value) => !value) }}>
         <i className="bi bi-stars" aria-hidden="true" /><span>Payroll Assistant{assistantEmployee && ` · ${assistantEmployee.name}`}</span>
@@ -125,6 +136,7 @@ export default function App() {
             setLineId(id)
           }} />}
     </main>
+    <LiveAlerts alerts={live.alerts} onDismiss={live.dismiss} />
     {drawerLine && <EmployeeDrawer key={`${drawerLine.lineId}-${run.version}`} line={drawerLine} run={run}
       onClose={() => setLineId(null)} onSaved={saved} onReload={reload} />}
     {assistantAvailable && <AssistantPanel key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}

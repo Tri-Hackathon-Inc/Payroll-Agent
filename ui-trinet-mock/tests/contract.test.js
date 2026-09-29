@@ -12,7 +12,7 @@ const agentStudioSchema = buildSchema(agentStudioTypeDefs)
 
 // Each operation must match the backend it is sent to (see src/api.js).
 const PAYROLL = ['PAYRUNS_QUERY', 'PAYRUN_QUERY', 'UPDATE_PAY_LINE_MUTATION']
-const AGENT_STUDIO = ['DOMAINS_QUERY', 'SERVICE_AGENT_REGISTRY_QUERY']
+const AGENT_STUDIO = ['DOMAINS_QUERY', 'SERVICE_AGENT_REGISTRY_QUERY', 'RATE_ANSWER_MUTATION']
 
 test('every operation validates against its backend schema', () => {
   assert.deepEqual(Object.keys(operations).sort(), [...PAYROLL, ...AGENT_STUDIO].sort())

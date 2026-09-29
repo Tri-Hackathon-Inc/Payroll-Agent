@@ -75,6 +75,21 @@ class ai_studioStub(object):
                 request_serializer=registry_dot_proto_dot_templates__pb2.ChatAgentRequest.SerializeToString,
                 response_deserializer=registry_dot_proto_dot_templates__pb2.ChatAgentResponse.FromString,
                 _registered_method=True)
+        self.RecordInteraction = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/RecordInteraction',
+                request_serializer=registry_dot_proto_dot_templates__pb2.RecordInteractionRequest.SerializeToString,
+                response_deserializer=registry_dot_proto_dot_templates__pb2.InteractionRef.FromString,
+                _registered_method=True)
+        self.RateInteraction = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/RateInteraction',
+                request_serializer=registry_dot_proto_dot_templates__pb2.RateInteractionRequest.SerializeToString,
+                response_deserializer=registry_dot_proto_dot_templates__pb2.InteractionRef.FromString,
+                _registered_method=True)
+        self.GetAgentMetrics = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/GetAgentMetrics',
+                request_serializer=registry_dot_proto_dot_templates__pb2.AgentMetricsRequest.SerializeToString,
+                response_deserializer=registry_dot_proto_dot_templates__pb2.AgentMetrics.FromString,
+                _registered_method=True)
 
 
 class ai_studioServicer(object):
@@ -128,6 +143,24 @@ class ai_studioServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def RecordInteraction(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RateInteraction(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetAgentMetrics(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ai_studioServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -170,6 +203,21 @@ def add_ai_studioServicer_to_server(servicer, server):
                     servicer.ChatAgent,
                     request_deserializer=registry_dot_proto_dot_templates__pb2.ChatAgentRequest.FromString,
                     response_serializer=registry_dot_proto_dot_templates__pb2.ChatAgentResponse.SerializeToString,
+            ),
+            'RecordInteraction': grpc.unary_unary_rpc_method_handler(
+                    servicer.RecordInteraction,
+                    request_deserializer=registry_dot_proto_dot_templates__pb2.RecordInteractionRequest.FromString,
+                    response_serializer=registry_dot_proto_dot_templates__pb2.InteractionRef.SerializeToString,
+            ),
+            'RateInteraction': grpc.unary_unary_rpc_method_handler(
+                    servicer.RateInteraction,
+                    request_deserializer=registry_dot_proto_dot_templates__pb2.RateInteractionRequest.FromString,
+                    response_serializer=registry_dot_proto_dot_templates__pb2.InteractionRef.SerializeToString,
+            ),
+            'GetAgentMetrics': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAgentMetrics,
+                    request_deserializer=registry_dot_proto_dot_templates__pb2.AgentMetricsRequest.FromString,
+                    response_serializer=registry_dot_proto_dot_templates__pb2.AgentMetrics.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -388,6 +436,87 @@ class ai_studio(object):
             '/ai_studio_agents.ai_studio/ChatAgent',
             registry_dot_proto_dot_templates__pb2.ChatAgentRequest.SerializeToString,
             registry_dot_proto_dot_templates__pb2.ChatAgentResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RecordInteraction(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/RecordInteraction',
+            registry_dot_proto_dot_templates__pb2.RecordInteractionRequest.SerializeToString,
+            registry_dot_proto_dot_templates__pb2.InteractionRef.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RateInteraction(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/RateInteraction',
+            registry_dot_proto_dot_templates__pb2.RateInteractionRequest.SerializeToString,
+            registry_dot_proto_dot_templates__pb2.InteractionRef.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAgentMetrics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/GetAgentMetrics',
+            registry_dot_proto_dot_templates__pb2.AgentMetricsRequest.SerializeToString,
+            registry_dot_proto_dot_templates__pb2.AgentMetrics.FromString,
             options,
             channel_credentials,
             insecure,

@@ -1,5 +1,6 @@
 // GraphQL schema and resolvers for the mock TriNet payroll API. The context holds `store`,
-// the SQLite-backed store from db.js.
+// the SQLite-backed store from db.js, and optionally `events` (events.js), which is told about
+// every saved change.
 const fs = require('node:fs');
 const path = require('node:path');
 const { updatePayLine, fail } = require('./payroll');
@@ -26,7 +27,13 @@ const resolvers = {
     }),
   },
   Mutation: {
-    updatePayLine: (_, { input }, { store }) => updatePayLine(store, input),
+    updatePayLine: (_, { input }, { store, events }) => {
+      const run = updatePayLine(store, input);
+      const line = store.getLines(run.id).find(item => item.lineId === input.lineId);
+      events?.notify({ type: 'payrun.changed', payrunId: run.id, version: run.version, lineId: input.lineId,
+        employeeId: line?.employeeId || null, changedAt: new Date().toISOString() });
+      return run;
+    },
     resetPayrollData: (_, __, { store }) => {
       store.reset();
       return true;

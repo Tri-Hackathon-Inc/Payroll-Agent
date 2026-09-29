@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { agentStudioRequest, askAgent, conversationKey, resetAgentConversation } from './api'
-import { SERVICE_AGENT_REGISTRY_QUERY } from './operations'
+import { RATE_ANSWER_MUTATION, SERVICE_AGENT_REGISTRY_QUERY } from './operations'
 import { QUESTION_LIBRARY } from './questionLibrary'
 import IncidentCard from './IncidentCard'
 
@@ -81,6 +81,19 @@ export default function AssistantPanel({ domain, run, employeeId, onEmployeeChan
   }
   const lastAgentMessage = [...visibleMessages].reverse().find((item) => item.role === 'agent' || item.role === 'incident')
 
+  // Thumbs up or down on an answer (clicking the same one again clears it); shown in Agent Metrics.
+  async function rate(item, choice) {
+    const rating = item.rating === choice ? '' : choice
+    const setRating = (value) => setMessages((current) => current.map((message) => (message.id === item.id ? { ...message, rating: value } : message)))
+    setRating(rating)
+    try {
+      await agentStudioRequest(RATE_ANSWER_MUTATION, { input: { domainName: domain.name, interactionId: item.interactionId, rating } })
+    } catch (requestError) {
+      setRating(item.rating)
+      setError(`Feedback not saved: ${requestError.message}`)
+    }
+  }
+
   async function ask(text) {
     const trimmed = text.trim()
     if (!trimmed || !agent || busy) return
@@ -95,6 +108,7 @@ export default function AssistantPanel({ domain, run, employeeId, onEmployeeChan
       })
       setMessages((current) => [...current, { id: response.id, role: 'agent', text: response.reply, agent: agent.name,
         modelStatus: response.analysis?.modelStatus, sources: response.retrieval?.sources, scope, source: response.source,
+        interactionId: response.interactionId, rating: '',
         // Suggestions and already-raised incidents are shown only under review answers.
         suggested: response.incidentAlert?.review ? response.incidentAlert.suggested || [] : [],
         alreadyRaised: response.incidentAlert?.review && !response.incidentAlert.raised ? response.incidentAlert.alreadyRaised || 0 : 0,
@@ -198,9 +212,18 @@ export default function AssistantPanel({ domain, run, employeeId, onEmployeeChan
                 {item.sources?.length > 0 && <details className="small mt-2"><summary>Historical sources ({item.sources.length})</summary>
                   <ul>{item.sources.map((source) => <li key={source.id}>{source.employeeId} · {source.payrunId} · {source.topic}{source.cited ? ' (cited)' : ''}</li>)}</ul>
                 </details>}
-                {item.source && <div className={`tn-copilot-source ${item.source.kind}`}>
-                  <i className={`bi ${item.source.kind === 'data' ? 'bi-calculator' : 'bi-cpu'} me-1`} aria-hidden="true" />{item.source.label}
-                  {item.source.checked === true && <span title="Every employee and dollar amount matches the payroll data"> · figures checked</span>}
+                {(item.source || item.interactionId) && <div className="tn-copilot-meta">
+                  {item.source && <span className={`tn-copilot-source ${item.source.kind}`}>
+                    <i className={`bi ${item.source.kind === 'data' ? 'bi-calculator' : 'bi-cpu'} me-1`} aria-hidden="true" />{item.source.label}
+                    {item.source.checked === true && <span title="Every employee and dollar amount matches the payroll data"> · figures checked</span>}
+                  </span>}
+                  {item.interactionId && <span className="tn-copilot-rating">
+                    {[['up', 'Helpful'], ['down', 'Not helpful']].map(([choice, label]) => (
+                      <button key={choice} type="button" aria-label={label} aria-pressed={item.rating === choice} title={label}
+                        onClick={() => rate(item, choice)}>
+                        <i className={`bi bi-hand-thumbs-${choice}${item.rating === choice ? '-fill' : ''}`} aria-hidden="true" />
+                      </button>))}
+                  </span>}
                 </div>}
                 {item.alertNote && <div className="tn-copilot-alert"><i className="bi bi-exclamation-triangle me-1" aria-hidden="true" />{item.alertNote}</div>}
                 {item.alreadyRaised > 0 && <div className="tn-copilot-alert info">

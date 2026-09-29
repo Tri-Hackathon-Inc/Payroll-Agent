@@ -148,6 +148,12 @@ button { cursor: pointer; }
 .tn-copilot-message.agent .tn-copilot-bubble { background: #f4f6f8; border: 1px solid var(--tn-line); color: var(--tn-ink); border-bottom-left-radius: 4px; }
 .tn-copilot-source { margin-top: 4px; font-size: 0.72rem; color: var(--tn-muted, #6b7280); }
 .tn-copilot-source.data { color: #1f7a4d; }
+.tn-copilot-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 4px; }
+.tn-copilot-meta .tn-copilot-source { margin-top: 0; }
+.tn-copilot-rating { display: inline-flex; gap: 2px; margin-left: auto; }
+.tn-copilot-rating button { border: 0; background: none; padding: 2px 5px; border-radius: 4px; color: var(--tn-muted, #5b6573); font-size: 0.8rem; line-height: 1; }
+.tn-copilot-rating button:hover { background: #eef1f4; color: var(--tn-ink); }
+.tn-copilot-rating button[aria-pressed="true"] { color: var(--tn-orange); }
 .tn-copilot-alert { margin-top: 6px; padding: 6px 8px; border-radius: 6px; font-size: 0.75rem; background: #fdecea; color: #8a1c12; }
 .tn-copilot-alert.warning { background: #fff4e0; color: #7a4a00; }
 .tn-copilot-alert.info { background: #eaf5ee; color: #1f5f3a; }
@@ -201,3 +207,16 @@ button { cursor: pointer; }
   .tn-copilot { width: 100%; }
   .tn-assistant-toggle span { display: none; }
 }
+
+/* Real-time anomaly detection alerts */
+.tn-live-status { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 12px; color: var(--tn-muted); }
+.tn-live-dot { width: 8px; height: 8px; border-radius: 50%; background: #1f7a4d; box-shadow: 0 0 0 3px rgba(31, 122, 77, .15); }
+.tn-live-alerts { position: fixed; left: 24px; bottom: 24px; z-index: 1080; display: flex; flex-direction: column; gap: 8px; width: min(440px, calc(100vw - 48px)); max-height: calc(100vh - 120px); overflow-y: auto; }
+.tn-live-alert { padding: 12px 14px; border-radius: 8px; background: #fff; border: 1px solid var(--tn-line); border-left-width: 4px; box-shadow: 0 8px 24px rgba(31, 41, 51, .14); font-size: 13px; color: var(--tn-ink); }
+.tn-live-alert.critical { border-left-color: #c0392b; }
+.tn-live-alert.critical > div > i { color: #c0392b; }
+.tn-live-alert.checked { border-left-color: #1f7a4d; }
+.tn-live-alert.checked > div > i { color: #1f7a4d; }
+.tn-live-alert.warning { border-left-color: #b7791f; }
+.tn-live-link { border: 0; background: none; padding: 0; margin-top: 4px; color: var(--tn-blue); font-size: 12px; font-weight: 600; }
+.tn-live-close { border: 0; background: none; padding: 0 2px; color: var(--tn-muted); line-height: 1; }

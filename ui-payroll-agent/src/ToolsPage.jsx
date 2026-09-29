@@ -33,8 +33,9 @@ const TOOL_INFO = {
     via: 'Sent by the Incident Report agent when EMAIL_API_BASE_URL is set; otherwise the report says it wasn’t sent.',
   },
   'slack-webhook': {
-    icon: 'bi-slack', group: 'action', status: 'catalog',
-    description: 'Posts payroll alerts to a Slack channel.',
+    icon: 'bi-slack', group: 'action', status: 'configurable',
+    description: 'Posts incident alerts to a Slack channel.',
+    via: 'Sent by the Incident Report agent when this tool is attached and SLACK_WEBHOOK_URL is set.',
   },
   'alert-manager': {
     icon: 'bi-bell', group: 'action', status: 'catalog',

@@ -40,6 +40,13 @@ export const DOMAINS_QUERY = `
   }
 `
 
+// Thumbs up or down on an agent's answer, for the Agent Metrics view ("" clears the rating).
+export const RATE_ANSWER_MUTATION = `
+  mutation RateAnswer($input: RateAnswerInput!) {
+    rateAnswer(input: $input)
+  }
+`
+
 export const SERVICE_AGENT_REGISTRY_QUERY = `
   query GetServiceAgentRegistry($domainName: String) {
     getServiceAgentRegistry(domainName: $domainName) { id name templateId config }

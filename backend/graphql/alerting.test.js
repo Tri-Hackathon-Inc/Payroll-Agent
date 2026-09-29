@@ -55,12 +55,13 @@ test('the model gets only the pay lines a question needs; totals, facts, and fin
 });
 
 test('critical findings are raised once, warnings are suggested, and alerts can be turned off', () => {
-  const store = createIncidentStore();
-  const plan = planIncidents({ signals: context.signals, alerts: { enabled: true, severity: 'warning' }, domainName: 'd', payrunId: 'PR', store });
+  const plan = planIncidents({ signals: context.signals, alerts: { enabled: true, severity: 'warning' } });
   assert.deepEqual(plan.toRaise.map(signal => signal.employeeId), ['E1004', 'E1005', 'E1006', 'E1009']);
   assert.deepEqual(plan.suggested.map(signal => signal.employeeId), ['E1002', 'E1007', 'E1008']);
-  assert.deepEqual(planIncidents({ signals: context.signals, alerts: { enabled: true, severity: 'critical' }, domainName: 'd', payrunId: 'PR', store }).suggested, []);
-  assert.equal(planIncidents({ signals: context.signals, alerts: { enabled: false, severity: 'warning' }, domainName: 'd', payrunId: 'PR', store }), null);
+  assert.deepEqual(planIncidents({ signals: context.signals, alerts: { enabled: true, severity: 'critical' } }).suggested, []);
+  assert.equal(planIncidents({ signals: context.signals, alerts: { enabled: false, severity: 'warning' } }), null);
+  assert.deepEqual(planIncidents({ signals: context.signals, alerts: { enabled: true }, raised: new Set(['E1005|duplicate payment']) })
+    .toRaise.map(signal => signal.employeeId), ['E1004', 'E1006', 'E1009'], 'already-raised findings are skipped');
 });
 
 test('an anomaly agent hands new critical findings to the Incident Report agent automatically', async () => {
@@ -94,4 +95,44 @@ test('an anomaly agent hands new critical findings to the Incident Report agent 
   const noAgent = await raiseIncidents(request, { ...deps, store: createIncidentStore(), findIncidentAgent: async () => null });
   assert.match(noAgent.note, /no Incident Report agent/);
   assert.equal(await raiseIncidents({ ...request, invocation: { ...request.invocation, answerMode: 'model' } }, deps), null, 'benchmarks never raise incidents');
+});
+
+test('concurrent triggers raise each finding once, and a failed incident releases its claim for a retry', async () => {
+  const store = createIncidentStore();
+  let reports = 0, fail = true;
+  const deps = {
+    store,
+    loadContext: async () => context,
+    findIncidentAgent: async () => ({ agent: { id: 'inc-1', name: 'Incident bot' }, config: {}, model: null }),
+    createReport: async () => {
+      if (fail) throw new Error('capture service down');
+      reports += 1;
+      await new Promise(resolve => setTimeout(resolve, 10));
+      return { reply: 'ok', incident: { id: `INC-${reports}` } };
+    },
+  };
+  const request = { agent: { name: 'Monitor' }, config: { capabilities: { alerts: { enabled: true, severity: 'critical' } } },
+    invocation: { page: 'payrun', payrunId: 'PR-2026-09-B' }, domainName: 'payroll-services', reason: 'pay line changed', trigger: 'realtime' };
+  const failed = await raiseIncidents(request, deps);
+  assert.match(failed.note, /could not be created: capture service down/);
+  assert.equal((await store.raisedKeys('payroll-services', 'PR-2026-09-B')).size, 0, 'the claim is released');
+
+  fail = false;
+  const [first, second] = await Promise.all([raiseIncidents(request, deps), raiseIncidents(request, deps)]);
+  assert.equal(reports, 1, 'only one of two simultaneous triggers raises the incident');
+  assert.equal([first, second].filter(result => result.raised).length, 1);
+  assert.equal([first, second].find(result => !result.raised).alreadyRaised, 4);
+});
+
+test('the Postgres store claims findings with one atomic insert', async () => {
+  const { createPostgresIncidentStore } = require('./incidentTrigger');
+  const statements = [];
+  const pool = { query: async (text, values) => {
+    statements.push(text.replace(/\s+/g, ' ').trim());
+    return { rows: /RETURNING/.test(text) ? values[2].slice(1).map(key => ({ finding_key: key })) : [] };
+  } };
+  const store = createPostgresIncidentStore(pool);
+  assert.deepEqual(await store.claim('d', 'PR', ['E1|a', 'E2|b']), ['E2|b'], 'only newly inserted keys are claimed');
+  assert.match(statements[0], /^CREATE TABLE IF NOT EXISTS payroll_incident_findings/);
+  assert.match(statements[1], /INSERT INTO payroll_incident_findings .* ON CONFLICT DO NOTHING RETURNING finding_key/);
 });

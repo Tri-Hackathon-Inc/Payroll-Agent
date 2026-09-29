@@ -2,6 +2,7 @@ const { AnomalyPreprocessor } = require('./anomalyPreprocessor');
 const { AnomalyPostprocessor } = require('./anomalyPostprocessor');
 const { ChatModel, unavailableReason, ModelUnavailable } = require('./modelRuntime');
 const { loadPayrunContext } = require('./payrunContext');
+const { createPseudonymizer, employeesIn, unmaskJsonProse } = require('./piiMask');
 
 const MAX_MODEL_CONTEXT = 40000;
 
@@ -21,6 +22,8 @@ class AnomalyDetectionPipeline {
     const reason = model ? unavailableReason(model, this.dependencies.env) : 'The selected model is unavailable. Choose an enabled model in Agent Studio.';
     const modelContext = JSON.stringify({ payrunId: evidence.payrunId, currency: evidence.currency,
       method: evidence.method, employees: evidence.employees, findings: evidence.findings });
+    // Names never reach the model (piiMask); they are restored in the reply's prose fields.
+    const pii = createPseudonymizer(employeesIn(context), this.dependencies.env || process.env);
     let result = { modelStatus: 'not_configured', reason }, metrics = null;
     if (!evidence.findings.length) result = { modelStatus: 'not_needed', reason: 'No calculated findings need a model explanation.' };
     else if (!reason && modelContext.length > MAX_MODEL_CONTEXT) {
@@ -35,12 +38,12 @@ class AnomalyDetectionPipeline {
           'Include every supplied finding exactly once. Each explanation and reviewAction must be at most 600 characters.',
           'A zero baseline has no percentage comparison. Small history samples are preliminary. Multiple lines may be valid split payments.',
         ].join('\n') },
-        { role: 'user', content: JSON.stringify({ question, agentInstructions: config.instructions || '', evidence: JSON.parse(modelContext) }) },
+        { role: 'user', content: pii.mask(JSON.stringify({ question, agentInstructions: config.instructions || '', evidence: JSON.parse(modelContext) })) },
       ];
       try {
         const output = await new ChatModel(model, this.dependencies).generate(messages, { responseFormat: { type: 'json_object' } });
         metrics = output.metrics;
-        result = { text: output.text, modelStatus: 'completed' };
+        result = { text: unmaskJsonProse(output.text, pii), modelStatus: 'completed' };
       } catch (error) {
         if (!(error instanceof ModelUnavailable)) throw error;
         result = { modelStatus: 'unavailable', reason: error.message };

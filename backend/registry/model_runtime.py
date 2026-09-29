@@ -38,6 +38,16 @@ class NoRedirects(HTTPRedirectHandler):
         return None
 
 
+HTTP_REASONS = {
+    401: "the access token was rejected",
+    402: "the account has no inference credits left",
+    403: "the access token lacks permission to call this model",
+    404: "the model is not served by the provider",
+    429: "the provider rate limit was reached; try again shortly",
+    503: "the model is overloaded at the provider; try again shortly",
+}
+
+
 class CompatibleChatModel(ModelRuntime):
     """Client for a configured /v1/chat/completions compatible model server."""
 
@@ -49,7 +59,8 @@ class CompatibleChatModel(ModelRuntime):
                 or parsed.username or parsed.password or parsed.query or parsed.fragment):
             raise ModelConfigurationError("Configure the model's server URL before chatting.")
         self.url = base_url + "/chat/completions"
-        self.headers = {"Content-Type": "application/json"}
+        # An explicit User-Agent: some providers (Groq) refuse urllib's default one with HTTP 403.
+        self.headers = {"Content-Type": "application/json", "User-Agent": "AgentStudio/1.0"}
         credential_env = config.get("credential_env", "")
         if credential_env:
             credential = os.getenv(credential_env)
@@ -82,7 +93,9 @@ class CompatibleChatModel(ModelRuntime):
             raise ModelTimeout("The model timed out. Please try again.") from error
         except HTTPError as error:
             error.close()
-            raise ModelExecutionError("The model server rejected the request.") from error
+            # A safe reason per status; the provider's own text is never returned.
+            reason = HTTP_REASONS.get(error.code, "the model server rejected the request")
+            raise ModelExecutionError(f"Model call failed: {reason}.") from error
         except URLError as error:
             if isinstance(error.reason, (TimeoutError, socket.timeout)):
                 raise ModelTimeout("The model timed out. Please try again.") from error

@@ -18,8 +18,11 @@ the HTTP chat webhook described below.
 | List domains | `ListDomains` | `listDomains` |
 | List templates for a domain | `GetDomainAgentsTemplates` | `getDomainAgentsTemplates(domainName)` |
 | List saved agents for a service or domain | `GetServiceAgentRegistry` | `getServiceAgentRegistry(domainName: ...)` |
+| Agent metrics for the admin view | `GetAgentMetrics` | `agentMetrics(domainName, agentId?, sinceHours?)` |
+| Rate an answer (thumbs up/down) | `RateInteraction` | `rateAnswer(input)` |
+| Record an answered question (webhook only) | `RecordInteraction` | none; `recordInteraction` in `graphql/aistudio.js` |
 
-These are the eight public operations. Model and external API choices are included
+These are the public operations (the last three serve the Agent Metrics view). Model and external API choices are included
 in template details rather than exposed as separate list operations.
 
 ## Domain, template, and agent
@@ -513,6 +516,56 @@ against the data (`replyCheck.js`: unknown employee IDs or dollar amounts add a 
 acting" note), and are cached per payrun version (`answerCache.js`, in process). Agents with
 alerts enabled raise new critical findings as incidents automatically (`findingPolicy.js`,
 `incidentTrigger.js`; raised-incident memory is in process until it moves to shared storage).
+Every answer is recorded for the Agent Metrics view: `graphql/interactionLog.js` builds the
+record (how it was answered, response time, model tokens, reply check, the payrun's findings
+and dollars at risk, incidents) and `registry/metrics.py` stores it in `agent_interaction` and
+aggregates it; replies carry an `interactionId` for `rateAnswer` feedback. Records hold
+measurements only (no credentials or pay lines; Redis session IDs are hashed), benchmark runs
+are excluded from the metrics, and a failed metrics write never breaks a chat.
+
+Real-time anomaly detection (`graphql/payrollEvents.js`): the payroll platform reports each
+saved change to `POST /events/payroll` (the TriNet mock's `events.js` sends
+`{ type: "payrun.changed", payrunId, version, lineId, employeeId }`; `PAYROLL_EVENTS_TOKEN`, when
+set, must match the `X-Payroll-Events-Token` header). Events are queued on the Redis stream
+`payroll:events` (consumer group `realtime-monitor`; an in-process queue without `REDIS_URL`)
+and a worker in the GraphQL process checks the payrun for every domain whose Anomaly Detection
+agent has alerts enabled: code-only checks, then new critical findings go to the Incident
+Report agent through the same `raiseIncidents` path as chat. Findings are claimed atomically in
+Postgres (`payroll_incident_findings`, created on first use), so each is raised once across
+workers and restarts; without Postgres the claims are in memory. Each check is pushed to open
+payrun pages over `GET /events/stream?domain=&payrunId=` (server-sent events, proxied as
+`/ai_studio/events/stream`) and recorded for Agent Metrics with source `realtime-monitor`
+(counted as checks, not questions). The live stream is per process: several backend replicas
+would need Redis pub/sub for it.
+
+Admin and customer views (`graphql/access.js`): the GraphQL `viewer` query returns the role,
+feature flags, and the customer allow-lists. With `STUDIO_ADMIN_KEY` set, an admin signs in with
+it (`POST /auth/admin`, proxied as `/ai_studio/auth/admin`; limited to 10 attempts a minute),
+which sets an HttpOnly, SameSite cookie holding an HMAC of the key (8 hours; rotating the key
+signs everyone out); everyone else is a customer. Without the key the Studio is open (everyone
+is admin). Flags per role (`ADMIN_FEATURES`, default all; `USER_FEATURES`, default the customer
+set; "all", "none", or a list): customers get `createAgents`, `testAgents`, `agentTools`,
+`usage`; admins also `manageAgents`, `tools`, `models`, `evaluation`, `metrics`.
+`CUSTOMER_MODELS` and `CUSTOMER_TOOLS` limit the models and tools a customer may give an agent.
+The resolvers enforce all of it (`createAgent`/`updateAgent` need `createAgents` or
+`manageAgents` and, for customers, allowed choices; Studio `chatAgent` needs `testAgents`;
+`agentMetrics` returns full metrics with `metrics` and usage only with `usage`; FORBIDDEN
+otherwise). The Studio shows admins Services, the tool catalog, Models, My Agents, Evaluation,
+and Agent Metrics; customers Services, their agents' tools (with Attach tool), My Agents
+(playground), and Usage. The payrun page's chat webhook, answer feedback, and live alerts are
+not gated. This is a shared admin key, not per-user accounts.
+
+Privacy (`graphql/piiMask.js`): employee names never reach a model. Before any model call
+(generic answers, the RAG pipeline, the anomaly pipeline) each employee's name is replaced with
+their employee ID in the payroll context, question, conversation, and retrieved documents; names
+are restored in the reply's prose (for JSON replies only in `answer`, `explanation`, and
+`reviewAction`, so IDs used as keys stay exact). Pay figures are kept because the model needs
+them. `PII_MASKING=false` turns it off. Answers computed from the data use no model at all.
+
+Slack alerts: when the Incident Report agent has the `slack-webhook` tool attached and
+`SLACK_WEBHOOK_URL` (a Slack incoming-webhook URL, https only; secret) is set, each incident is
+also posted to Slack as a short summary; the incident's `slack` field reports sent, not-sent, or
+failed, next to `email`.
 Domain filtering and role
 metadata do not provide authentication or authorization.
 
