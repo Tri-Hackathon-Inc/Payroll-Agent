@@ -12,6 +12,7 @@ const { typeDefs, resolvers, catalogRpc } = require('../graphql/aistudio');
 const { isWebhookRequest, handleWebhook } = require('../graphql/webhook');
 const { isEventsRequest, handleEvents, startPayrollMonitor } = require('../graphql/payrollEvents');
 const { viewerFor, createAuthHandler, isAuthRequest } = require('../graphql/access');
+const { isAgentRequest, handleAgent } = require('../graphql/agents');
 
 async function readBody(req) {
   let body = '';
@@ -76,6 +77,7 @@ async function main() {
       const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner, viewer: viewerFor(req.headers) } };
       try {
         if (isAuthRequest(url.pathname)) await handleAuth(req, res, url.pathname);
+        else if (isAgentRequest(url.pathname)) await handleAgent(req, res, url.pathname, context);
         else if (isWebhookRequest(url.pathname)) await handleWebhook(req, res, url.pathname, context);
         else if (isEventsRequest(url.pathname)) await handleEvents(req, res, url, context);
         else await handleGraphQL(server, req, res, url, context);

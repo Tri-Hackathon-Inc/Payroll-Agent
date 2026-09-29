@@ -5,6 +5,11 @@ Install Docker Desktop with Compose v2, or Podman with `podman-compose`.
 
 ## 1. Starter
 
+Agent Studio (`ui-payroll-agent`) uses Angular with TypeScript components and
+separate HTML templates in `src/app/`. The TriNet demo remains a separate UI.
+Containers include Node 22; local Angular development requires Node 22.12+ or
+Node 24. The Python and GraphQL backend APIs are unchanged by the UI migration.
+
 **Docker:** start Docker Desktop.
 
 ```sh
@@ -45,6 +50,48 @@ bash docker/podman.sh up --build -d
 
 For Docker settings in both files, use `--env-file .env --env-file backend/.env`.
 
+### Where to access the backend
+
+After the containers start, the backend HTTP host is **http://localhost:4000**.
+Open the GraphQL Sandbox in your browser to explore the API, or send requests to
+the endpoints below.
+
+| Service | Address on your computer |
+| --- | --- |
+| GraphQL API and Sandbox | [http://localhost:4000/](http://localhost:4000/) |
+| Agent chat webhook (POST) | `http://localhost:4000/webhook/<domainName>/<agentId>` |
+| Delete a saved agent (DELETE) | `http://localhost:4000/agents/<domainName>/<agentId>` |
+| gRPC API (use a gRPC client) | `localhost:50051` |
+| Agent Studio UI | [http://localhost:5173/ai_studio/](http://localhost:5173/ai_studio/) |
+| GraphQL through the Studio proxy | `http://localhost:5173/ai_studio/graphql` |
+
+For the chat webhook, replace `<domainName>` with the agent's domain (for example,
+`payroll-services`) and `<agentId>` with its saved agent ID. Send a JSON body such
+as `{"question":"What is the total net pay?","context":{"page":"payrun","payrunId":"PR-2026-09-B"}}`
+with `Content-Type: application/json`, using a payrun ID from your data.
+
+Other containers on the Compose network reach the backend at `http://backend:4000`
+(gRPC: `backend:50051`). The published backend ports bind to `127.0.0.1`, so these
+local URLs work only on the computer running the stack. Access from another
+computer requires a separately configured shared host; this repository does not
+configure a public backend URL. The Studio paths above use the default
+`STUDIO_BASE_PATH=/ai_studio/`.
+
+### Delete an agent
+
+In **My Agents**, select **Delete** beside an agent and confirm. Deletion requires
+the `manageAgents` feature (enabled for admins by default). The agent disappears
+from the registry and can no longer be invoked. Its recorded interaction metrics
+remain available.
+
+API clients can call `DELETE /agents/<domainName>/<agentId>` on the backend host.
+No request body is needed. With admin authentication enabled, include the admin
+session cookie obtained from `POST /auth/admin`. Success returns `204 No Content`;
+invalid IDs return `400`, missing permission returns `403`, and an absent agent
+or a domain mismatch returns `404`. Repeating a successful deletion returns `404`.
+GraphQL clients can use `deleteAgent(id: ID!, domainName: String!): Boolean!`;
+this mutation applies the same permission and domain checks.
+
 ### Reload after adding or changing files
 
 Source files are copied into images, so adding or changing them requires a rebuild.
@@ -62,6 +109,31 @@ docker compose -f docker/docker-compose.yaml --env-file backend/.env up --build 
 ```sh
 bash docker/podman.sh up --build --force-recreate --no-deps -d backend ui trinet-mock trinet-ui evidence-capture
 ```
+
+### Develop Agent Studio locally
+
+From `ui-payroll-agent/`, install dependencies with `npm ci`, then use:
+
+```sh
+npm run dev
+npm run build
+npm test
+npm run test:browser
+```
+
+The Angular development server runs on port 5173 and proxies GraphQL, chat,
+authentication, agent deletion, and event streams to `API_PROXY_TARGET`
+(default `http://127.0.0.1:4000`). Set `GRAPHQL_MODE=mock` in the shell or
+`ui-payroll-agent/.env` for the in-memory API. Browser tests use this mock by
+default and need a Playwright Chromium installation (`npx playwright install chromium`),
+or `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` pointing to an installed Chrome binary.
+
+`STUDIO_BASE_PATH` controls the UI mount path for development and production
+builds. `TRINET_MOCK_URL` controls the link to the separate payroll UI. Both
+settings are public UI configuration; provider credentials belong in the backend.
+Production output is in `ui-payroll-agent/dist/browser/`. Serve it under the
+configured base path with the same API proxy routes. `npm run lint` runs the
+Angular compiler's strict TypeScript and HTML template checks.
 
 ### Stop and remove containers
 

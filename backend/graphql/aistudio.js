@@ -115,6 +115,7 @@ const typeDefs = `
     rateAnswer(input: RateAnswerInput!): ID!
     createAgent(input: CreateAgentInput!): Agent!
     updateAgent(input: UpdateAgentInput!): Agent!
+    deleteAgent(id: ID!, domainName: String!): Boolean!
   }
   type Query {
     listTemplates(serviceName: String!): [Template!]!
@@ -185,6 +186,9 @@ const resolvers = {
       id: input.id, domain_name: input.domainName,
       name: input.name, config: encodeStruct(input.config),
     }))),
+    deleteAgent: requireFeature('manageAgents', rpcResolver('DeleteAgent', ({ id, domainName }) => ({
+      id, domain_name: domainName,
+    }), () => true)),
   },
   Agent: {
     domainName: agent => agent.domain_name,

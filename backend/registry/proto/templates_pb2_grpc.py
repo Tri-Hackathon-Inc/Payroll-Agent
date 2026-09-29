@@ -70,6 +70,11 @@ class ai_studioStub(object):
                 request_serializer=registry_dot_proto_dot_templates__pb2.UpdateAgentRequest.SerializeToString,
                 response_deserializer=registry_dot_proto_dot_templates__pb2.Agent.FromString,
                 _registered_method=True)
+        self.DeleteAgent = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/DeleteAgent',
+                request_serializer=registry_dot_proto_dot_templates__pb2.DeleteAgentRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                _registered_method=True)
         self.ChatAgent = channel.unary_unary(
                 '/ai_studio_agents.ai_studio/ChatAgent',
                 request_serializer=registry_dot_proto_dot_templates__pb2.ChatAgentRequest.SerializeToString,
@@ -137,6 +142,12 @@ class ai_studioServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def DeleteAgent(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def ChatAgent(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -198,6 +209,11 @@ def add_ai_studioServicer_to_server(servicer, server):
                     servicer.UpdateAgent,
                     request_deserializer=registry_dot_proto_dot_templates__pb2.UpdateAgentRequest.FromString,
                     response_serializer=registry_dot_proto_dot_templates__pb2.Agent.SerializeToString,
+            ),
+            'DeleteAgent': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteAgent,
+                    request_deserializer=registry_dot_proto_dot_templates__pb2.DeleteAgentRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
             'ChatAgent': grpc.unary_unary_rpc_method_handler(
                     servicer.ChatAgent,
@@ -409,6 +425,33 @@ class ai_studio(object):
             '/ai_studio_agents.ai_studio/UpdateAgent',
             registry_dot_proto_dot_templates__pb2.UpdateAgentRequest.SerializeToString,
             registry_dot_proto_dot_templates__pb2.Agent.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteAgent(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/DeleteAgent',
+            registry_dot_proto_dot_templates__pb2.DeleteAgentRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
             channel_credentials,
             insecure,

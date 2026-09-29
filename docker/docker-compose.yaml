@@ -132,7 +132,7 @@ services:
       GRAPHQL_MODE: backend
       API_PROXY_TARGET: http://backend:4000
       STUDIO_BASE_PATH: ${STUDIO_BASE_PATH:-/ai_studio/}
-      VITE_TRINET_MOCK_URL: http://localhost:5174/trinet/
+      TRINET_MOCK_URL: http://localhost:5174/trinet/
     ports:
       - "127.0.0.1:5173:5173"
     depends_on:

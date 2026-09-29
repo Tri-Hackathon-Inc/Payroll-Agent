@@ -1,0 +1,30 @@
+@if (chat) { <app-agent-chat [agent]="chat.agent" [domain]="chat.domain" (back)="chat = null" /> }
+@else if (editing) { <app-agent-editor [agent]="editing.agent" [domain]="editing.domain" [templateId]="editing.agent.templateId" [viewer]="viewer" (saved)="saved($event)" (cancel)="editing = null" /> }
+@else {
+  <div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="h4 fw-bold">My Agents</h2><p class="text-muted">Agents available to your services.</p></div><div class="d-flex gap-2 align-items-center"><span class="badge text-bg-secondary">{{agents.length}} agents</span>
+    @if (has('createAgents') || has('manageAgents')) { <button class="btn btn-dark" (click)="create.emit()">New agent</button> }
+  </div></div>
+  <input class="form-control mb-4" type="search" aria-label="Search agents" placeholder="Search agents…" [(ngModel)]="search">
+  @if (error) { <div role="alert" class="alert alert-danger">{{error}} <button class="btn btn-link" (click)="load()">Refresh</button></div> }
+  @if (notice) { <div role="status" class="alert alert-success">{{notice}}</div> }
+  @if (loading) { <p role="status">Loading agents…</p> }
+  @else if (!agents.length) { <div class="card card-body text-center py-5"><h3 class="h6">No agents yet</h3><p>Create your first agent from a template to see it listed here.</p></div> }
+  @else {
+    @for (group of groups; track group.domain.name) {
+      <section class="mb-4" [attr.aria-label]="group.domain.domain + ' agents'"><h3 class="h6 text-muted">{{group.domain.domain}} service</h3><div class="card border-0 shadow-sm">
+        <div class="card-header bg-white d-flex justify-content-between"><strong>{{group.domain.label}}</strong><span>{{group.agents.length}} agents</span></div>
+        <ul class="list-group list-group-flush">
+          @for (agent of group.agents; track agent.id) {
+            <li class="list-group-item d-flex flex-wrap align-items-center gap-3 p-3 my-agent-row"><span class="registry-icon"><i aria-hidden="true" class="bi bi-stars"></i></span>
+              <div class="flex-grow-1"><strong>{{agent.name}}</strong> <span class="runtime-badge runtime-interactive">{{runtime(agent)}}</span><div class="small text-muted">{{agent.config.description}}</div><div class="small text-muted">{{agent.templateId}} · {{agent.modelConfig?.name || agent.config.model}} · {{agent.config.page || 'No page'}}</div></div>
+              @if (has('testAgents')) { <button class="btn btn-dark btn-sm" [disabled]="!!deleting" (click)="chat = { agent: agent, domain: group.domain }">Chat with agent</button> }
+              @if (has('manageAgents')) { <button class="btn btn-outline-secondary btn-sm" [disabled]="!!deleting" (click)="editing = { agent: agent, domain: group.domain }">Edit</button> }
+              @if (agent.config.page === 'payrun') { <a class="btn btn-outline-secondary btn-sm" [href]="api.trinet(group.domain.name)" target="_blank" rel="noreferrer">Open in payrun</a> }
+              @if (has('manageAgents')) { <button class="btn btn-outline-danger btn-sm" [disabled]="!!deleting" [attr.aria-label]="'Delete ' + agent.name" (click)="remove(agent, group.domain)">{{deleting === agent.id ? 'Deleting…' : 'Delete'}}</button> }
+            </li>
+          } @empty { <li class="list-group-item text-muted">{{search ? 'No agents match your search.' : 'No agents yet.'}}</li> }
+        </ul>
+      </div></section>
+    }
+  }
+}

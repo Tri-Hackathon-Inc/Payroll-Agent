@@ -14,6 +14,7 @@ the HTTP chat webhook described below.
 | Get template properties and configuration choices | `GetTemplate` | `getTemplate(id)` |
 | Create a configured agent for a domain | `CreateAgent` | `createAgent(input)` |
 | Update a configured agent within its domain | `UpdateAgent` | `updateAgent(input)` |
+| Delete a configured agent within its domain | `DeleteAgent` | `deleteAgent(id, domainName)` |
 | Chat with a saved agent | `ChatAgent` | `chatAgent(input)` |
 | List domains | `ListDomains` | `listDomains` |
 | List templates for a domain | `GetDomainAgentsTemplates` | `getDomainAgentsTemplates(domainName)` |
@@ -41,7 +42,7 @@ in template details rather than exposed as separate list operations.
 `GetTemplate` and `ListTemplates` supply `config` defaults, resolved `model_config`,
 `service`, `attached_services`, and enabled `model_options` and `service_options`. Service
 options match the template's domain. The UI can use these properties to populate
-its configurable form. The React UI uses this contract in both backend and mock modes;
+its configurable form. The Angular Agent Studio UI uses this contract in both backend and mock modes;
 see the [overall application flow](#overall-application-flow) for the domain/agent walkthrough.
 
 ## Overall application flow
@@ -121,7 +122,7 @@ of the webhook URL parameters and `question`.
 | 5. Retrieve with filters and KNN | `graphql/rag/vectorStore.js` embeds the search query and uses parameterized SQL with pgvector cosine distance. Filter by domain/service/company scope, eligible historical IDs, embedding version, employee selection and topic. Default `RAG_TOP_K=6`, maximum 20; this is exact KNN. |
 | 6. Generate the answer | `graphql/rag/pipeline.js` creates `ChatModel` for the selected agent model. The prompt includes instructions, current employee details, recent turns, retrieved documents and calculated evidence. New AD agents default to `meta-llama/Llama-3.3-70B-Instruct`; this is a separate inference call from intent classification. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
 | 7. Postprocess | `PayrollAnswerPostprocessor` in `graphql/rag/postprocessor.js` validates the structured answer, supplied source IDs and exactly one valid comment per calculated finding. Invalid model output is discarded; calculated evidence remains available. |
-| 8. Save and display | `ConversationStore` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `AssistantPanel.jsx` or `AgentChat.jsx` renders it and retains the session ID for follow-ups. |
+| 8. Save and display | `ConversationStore` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `AssistantPanel.jsx` or `agent-chat.component.ts` renders it and retains the session ID for follow-ups. |
 
 Historical retrieval considers up to `RAG_HISTORY_LIMIT=100` runs (maximum 500);
 `retrieval.historyLimitReached` signals that the fetch limit was reached. Only
@@ -225,7 +226,7 @@ Agent Studio mount.
 **Choose template -> configure agent and services -> validate with AgentFactory
 -> save agent_info -> discover the agent for its service/page -> start querying.**
 
-Agent Studio loads domains and their templates, then `AgentEditor.jsx` fetches
+Agent Studio loads domains and their templates, then `agent-editor.component.ts` fetches
 `getTemplate(id)` to populate defaults and enabled model/service choices. The
 current UI uses `getDomainAgentsTemplates(domainName)` for discovery. API clients
 can also use `listTemplates(serviceName: "payrun")`; this argument is the primary
@@ -448,6 +449,14 @@ when `EMAIL_API_BASE_URL` is configured; the response reports delivery status.
 Ordinary chat requests continue through the RAG/session flow above.
 
 ## Configuration and persistence rules
+
+Agent deletion uses `services.delete_agent` through the `DeleteAgent` gRPC method.
+Both the GraphQL `deleteAgent(id, domainName)` mutation and HTTP
+`DELETE /agents/<domainName>/<agentId>` require `manageAgents`. Deletion validates
+the UUID and domain, removes the saved agent, and preserves interaction metrics
+and template records. The HTTP adapter returns 204 on success, 400 for invalid IDs,
+403 for missing permission, and 404 for missing agents or domain mismatches.
+The My Agents page confirms deletion and removes the row only after success.
 
 Template JSON in `templates/`, models in `templates/Model_config/`, and external
 API definitions in `templates/services.json` are authoritative for the catalog.

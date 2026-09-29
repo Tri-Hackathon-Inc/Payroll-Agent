@@ -9,6 +9,22 @@ import { createMockExecutor } from '../mock/graphqlMock.js'
 const require = createRequire(import.meta.url)
 const { typeDefs, resolvers } = require('../../backend/graphql/aistudio.js')
 
+test('mock deletion removes only the selected domain agent and prevents subsequent chat', async () => {
+  const execute = createMockExecutor()
+  const created = await execute({ query: operations.CREATE_AGENT_MUTATION, variables: { input: {
+    domainName: 'payroll-services', templateId: 'anomaly-detection', name: 'Delete test', config: {},
+  } } })
+  const id = created.data.createAgent.id
+  const remove = domainName => execute({ query: operations.DELETE_AGENT_MUTATION, variables: { id, domainName } })
+  assert.equal((await remove('payroll-demo')).errors[0].extensions.code, 'NOT_FOUND')
+  assert.equal((await remove('payroll-services')).data.deleteAgent, true)
+  assert.equal((await remove('payroll-services')).errors[0].extensions.code, 'NOT_FOUND')
+  const chat = await execute({ query: operations.CHAT_AGENT_MUTATION, variables: { input: {
+    agentId: id, domainName: 'payroll-services', message: 'Hello',
+  } } })
+  assert.equal(chat.errors[0].extensions.code, 'NOT_FOUND')
+})
+
 test('chat forwards agent, domain, message and history to gRPC', async () => {
   const history = [{ role: 'user', content: 'Hello' }, { role: 'assistant', content: 'Hi' }]
   const reply = await resolvers.Mutation.chatAgent(null, { input: { agentId: 'agent', domainName: 'payroll-services', message: 'Next', history } }, {

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "payrun-assistant",
+      "version": 1,
+      "page": "payrun",
+      "entry": "./payrun-assistant/index.html",
+      "transport": "iframe",
+      "protocol": "agent-ui-v1"
+    }
+  ]
+}

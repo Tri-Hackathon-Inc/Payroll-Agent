@@ -56,6 +56,14 @@ class DomainGrpcTests(TransactionTestCase):
                 self.assertEqual(len(client.GetServiceAgentRegistry(pb.ServiceAgentRegistryRequest(service_name="payrun"), timeout=5).agents), 0)
                 self.assertEqual(client.GetServiceAgentRegistry(pb.ServiceAgentRegistryRequest(service_name="diagnostics"), timeout=5).agents[0].id, agent.id)
                 with self.assertRaises(grpc.RpcError) as error:
+                    client.DeleteAgent(pb.DeleteAgentRequest(id=agent.id, domain_name="hr"), timeout=5)
+                self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
+                client.DeleteAgent(pb.DeleteAgentRequest(id=agent.id, domain_name="payroll-services"), timeout=5)
+                self.assertEqual(len(client.GetServiceAgentRegistry(pb.ServiceAgentRegistryRequest(domain_name="payroll-services"), timeout=5).agents), 0)
+                with self.assertRaises(grpc.RpcError) as error:
+                    client.DeleteAgent(pb.DeleteAgentRequest(id=agent.id, domain_name="payroll-services"), timeout=5)
+                self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
+                with self.assertRaises(grpc.RpcError) as error:
                     client.GetServiceAgentRegistry(pb.ServiceAgentRegistryRequest(service_name="missing"), timeout=5)
                 self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
         finally:

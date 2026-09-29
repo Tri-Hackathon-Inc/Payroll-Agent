@@ -87,6 +87,7 @@ scalar JSON
     rateAnswer(input: RateAnswerInput!): ID!
     createAgent(input: CreateAgentInput!): Agent!
     updateAgent(input: UpdateAgentInput!): Agent!
+    deleteAgent(id: ID!, domainName: String!): Boolean!
   }
   type Query {
     listTemplates(serviceName: String!): [Template!]!

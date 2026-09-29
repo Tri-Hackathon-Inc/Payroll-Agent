@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { basePath } from '../vite.config.js'
+import { basePath } from '../scripts/settings.mjs'
 
 const BASE = basePath(process.env.STUDIO_BASE_PATH || '/ai_studio/')
 import { execFileSync } from 'node:child_process'
@@ -25,7 +25,7 @@ test('single page: choose template, configure, submit creates the agent', async 
   }
   await expect(page.getByLabel('Domain', { exact: true })).toHaveCount(0)
   const panel = page.getByRole('navigation', { name: 'Agent Studio' })
-  await expect(panel.getByRole('button')).toHaveText(['Services', 'Tools & APIs', 'Models', 'My Agents', 'Evaluation'])
+  await expect(panel.getByRole('button')).toHaveText(['Services', 'Tools & APIs', 'Models', 'My Agents', 'Evaluation', 'Agent Metrics'])
   await page.locator('.service-card').filter({ has: page.getByText('Payroll', { exact: true }) }).click()
   await expect(page.getByRole('heading', { name: 'Payroll templates' })).toBeVisible()
   await expect(page.getByLabel('Domain', { exact: true })).toHaveValue('payroll-services')
@@ -147,7 +147,7 @@ test('tools page shows tool cards by purpose and opens details in a dialog', asy
   for (const [group, tool, status] of [
     ['Data sources', 'Payrun service', 'Live'], ['Data sources', 'Payrun history', 'Live'],
     ['Data sources', 'Employee details', 'Live'], ['Data sources', 'Service diagnostics', 'Catalog only'],
-    ['Actions', 'Email notification', 'Live when configured'], ['Actions', 'Slack alert webhook', 'Catalog only'],
+    ['Actions', 'Email notification', 'Live when configured'], ['Actions', 'Slack alert webhook', 'Live when configured'],
     ['Actions', 'On-call alerting', 'Catalog only'], ['Actions', 'OpenSearch event sink', 'Catalog only'],
   ]) await expect(card(group, tool).locator('.tool-status')).toHaveText(status)
   await expect(card('Data sources', 'Payrun service')).toContainText('Primary API · 5 templates')
@@ -164,7 +164,7 @@ test('tools page shows tool cards by purpose and opens details in a dialog', asy
   await expect(card('Data sources', 'Payrun service')).toBeFocused()
 
   await card('Actions', 'Slack alert webhook').click()
-  await expect(dialog).toContainText('Attached by default, but no agent calls it yet.')
+  await expect(dialog).toContainText('SLACK_WEBHOOK_URL')
   await expect(dialog).toContainText('/services/payroll-alerts')
   await page.mouse.click(5, 5)
   await expect(dialog).toBeHidden()

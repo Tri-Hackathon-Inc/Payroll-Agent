@@ -51,6 +51,12 @@ export const CREATE_AGENT_MUTATION = `
   }
 `
 
+export const DELETE_AGENT_MUTATION = `
+  mutation DeleteAgent($id: ID!, $domainName: String!) {
+    deleteAgent(id: $id, domainName: $domainName)
+  }
+`
+
 export const UPDATE_AGENT_MUTATION = `
   mutation UpdateAgent($input: UpdateAgentInput!) {
     updateAgent(input: $input) { ${AGENT_FIELDS} }

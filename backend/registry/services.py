@@ -263,6 +263,22 @@ def update_agent(agent_id, domain_name, name, config):
     return agent_data(agent)
 
 
+@transaction.atomic
+def delete_agent(agent_id, domain_name):
+    domain = get_domain(domain_name)
+    try:
+        parsed_id = UUID(str(agent_id))
+    except ValueError as error:
+        raise InvalidInput("id must be a valid agent UUID.") from error
+    try:
+        agent = Agent.objects.select_for_update().get(pk=parsed_id, domain=domain)
+    except Agent.DoesNotExist as error:
+        raise NotFound(
+            f"Agent {agent_id!r} not found in domain {domain_name!r}."
+        ) from error
+    agent.delete()
+
+
 def get_domain_agents_templates(domain_name):
     domain = get_domain(domain_name)
     return templates_with_options(template_queryset().filter(config__domain=domain.domain))

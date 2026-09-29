@@ -1,5 +1,7 @@
 node_modules/
 dist/
+.angular/
+out-tsc/
 .env
 
 __pycache__/

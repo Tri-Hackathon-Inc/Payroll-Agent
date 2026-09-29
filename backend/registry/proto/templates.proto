@@ -11,6 +11,7 @@ service ai_studio {
   rpc GetServiceAgentRegistry(ServiceAgentRegistryRequest) returns (AgentList);
   rpc CreateAgent(CreateAgentRequest) returns (Agent);
   rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
+  rpc DeleteAgent(DeleteAgentRequest) returns (google.protobuf.Empty);
   rpc ChatAgent(ChatAgentRequest) returns (ChatAgentResponse);
   rpc RecordInteraction(RecordInteractionRequest) returns (InteractionRef);
   rpc RateInteraction(RateInteractionRequest) returns (InteractionRef);
@@ -59,6 +60,7 @@ message UpdateAgentRequest {
   google.protobuf.Struct config = 4;
 }
 
+message DeleteAgentRequest { string id = 1; string domain_name = 2; }
 message ServiceAgentRegistryRequest { string service_name = 1; string domain_name = 2; }
 message ChatMessage { string role = 1; string content = 2; }
 message ChatAgentRequest {

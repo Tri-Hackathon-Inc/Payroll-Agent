@@ -1,0 +1,29 @@
+@if (loadError) { <div class="alert alert-danger" role="alert">{{loadError}} <button class="btn btn-link" (click)="load()">Retry</button><button class="btn btn-link" (click)="cancel.emit()">Back</button></div> }
+@else if (config && template) {
+  <div class="row g-4"><div class="col-lg-8"><div class="card border-0 shadow-sm"><div class="card-body p-4">
+    <h3 class="h4 fw-bold">{{agent ? 'Edit ' + agent.name : 'Configure ' + template.name}}</h3><p class="text-muted">{{domain.label}} · {{domain.domain}}</p>
+    @if (archived) { <p class="alert alert-warning">The source template is no longer available. You can edit the saved configuration.</p> }
+    <form (ngSubmit)="submit()" #form="ngForm">
+      @if (error) { <div class="alert alert-danger" role="alert">{{error}}</div> }
+      <fieldset [disabled]="saving">
+        <div class="mb-3"><label for="agent-name" class="form-label">Agent name</label><input id="agent-name" name="name" class="form-control" [(ngModel)]="name" maxlength="150" required></div>
+        <div class="mb-3"><label for="description" class="form-label">Description</label><textarea id="description" name="description" class="form-control" [(ngModel)]="config.description" rows="3" maxlength="10000" required></textarea></div>
+        <div class="mb-3"><label for="instructions" class="form-label">Instructions</label><textarea id="instructions" name="instructions" class="form-control" [(ngModel)]="config.instructions" rows="6" maxlength="10000" required></textarea></div>
+        <app-model-picker [models]="template.modelOptions" [(value)]="config.model" />
+        <div class="mb-3"><label for="service" class="form-label">Primary external API</label><select id="service" name="service" class="form-select" [(ngModel)]="config.service" required>
+          @if (savedService) { <option [value]="config.service">{{config.service}} (saved selection)</option> }
+          @for (item of services; track item.id) { <option [value]="item.id">{{item.name}}</option> }
+        </select></div>
+        <div class="mb-3"><label for="page" class="form-label">Page attachment</label><input id="page" name="page" class="form-control" [(ngModel)]="config.page" maxlength="255"></div>
+        <fieldset class="border-top pt-3 mb-3"><legend class="h6">Attached external APIs</legend>
+          @for (item of attachments; track item.id) { <div class="form-check"><input [id]="'api-' + item.id" type="checkbox" class="form-check-input" [checked]="config.attached_services.includes(item.id)" (change)="toggle(item.id, $any($event.target).checked)"><label [for]="'api-' + item.id" class="form-check-label">{{item.name}}</label></div> }
+        </fieldset>
+        <fieldset class="border-top pt-3 mb-3"><legend class="h6">Starting questions</legend>
+          @for (question of config.questions; track $index; let i = $index) { <div class="d-flex gap-2 mb-2"><input class="form-control" [name]="'question-' + i" [attr.aria-label]="'Starting question ' + (i + 1)" [(ngModel)]="config.questions[i]" maxlength="1000"><button type="button" class="btn btn-outline-secondary" [attr.aria-label]="'Remove question ' + (i + 1)" (click)="config.questions.splice(i, 1)">Remove</button></div> }
+          <button type="button" class="btn btn-link" [disabled]="config.questions.length >= 50" (click)="config.questions.push('')">Add question</button>
+        </fieldset>
+        <div class="d-flex justify-content-end gap-2"><button type="button" class="btn btn-outline-secondary" (click)="cancel.emit()">Cancel</button><button type="submit" class="btn btn-dark" [disabled]="form.invalid || saving">{{saving ? 'Saving…' : agent ? 'Save changes' : 'Create agent'}}</button></div>
+      </fieldset>
+    </form>
+  </div></div></div><div class="col-lg-4"><div class="card border-0 shadow-sm"><div class="card-body"><h2 class="h5">{{name || template.name}}</h2><p>{{config.description}}</p><dl><dt>Domain</dt><dd>{{domain.label}}</dd><dt>Template</dt><dd>{{templateId}}</dd><dt>Version</dt><dd>{{agent?.templateVersion || template.version}}</dd></dl></div></div></div></div>
+} @else { <p role="status">Loading template configuration…</p> }

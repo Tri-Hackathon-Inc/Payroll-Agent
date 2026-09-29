@@ -1,0 +1,19 @@
+<fieldset class="border-top pt-3 mb-3">
+  <legend class="h6 float-none w-auto">Model</legend>
+  <p class="small text-muted">{{models.length}} models supported by this template. Scores link to their published sources.</p>
+  <div class="row row-cols-1 row-cols-md-2 g-2" role="radiogroup" aria-label="Model">
+    @for (model of options; track model.id) {
+      <div class="col"><label class="card h-100 model-option" [class.model-option-selected]="model.id === value">
+        <span class="card-body p-3 d-block">
+          <span class="d-flex gap-2"><input type="radio" class="form-check-input" name="model" [value]="model.id" [checked]="model.id === value" (change)="valueChange.emit(model.id)">
+            <span class="fw-semibold">{{model.name}}</span></span>
+          <span class="d-block small text-muted">{{model.details.vendor || model.provider}} · {{model.details.context_window}}</span>
+          @for (benchmark of model.details.benchmarks || []; track benchmark.name) { <span class="badge model-strength-chip">{{benchmark.name}} {{benchmark.score}}</span> }
+          @for (source of sources(model); track source) { <a class="small ms-1" [href]="source" target="_blank" rel="noreferrer" (click)="$event.stopPropagation()">Source</a> }
+          @if (!model.details.benchmarks?.length) { <span class="small text-muted">No published score recorded</span> }
+          <span class="d-block small text-muted mt-1">Measured latency and tokens/s: not measured yet</span>
+        </span>
+      </label></div>
+    }
+  </div>
+</fieldset>

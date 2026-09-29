@@ -1,0 +1,8 @@
+<h2 class="h5 fw-bold">Tools &amp; APIs</h2><p class="text-muted">What each {{domain.label}} agent can read and do.</p>
+@if (error) { <div role="alert" class="alert alert-danger">{{error}}</div> }
+<div class="row row-cols-1 row-cols-xl-2 g-3">
+  @for (agent of agents; track agent.id) { <div class="col"><div class="card card-body h-100"><h3 class="h6">{{agent.name}}</h3><p class="small text-muted">{{agent.templateId}} · {{agent.config.page}}</p><strong class="small">Reads</strong><span class="tool-chip primary">{{name(agent, agent.config.service)}}</span><strong class="small mt-3">Attached tools</strong><div>
+    @for (id of agent.config.attached_services; track id) { <span class="tool-chip me-1">{{name(agent, id)}}</span> } @empty { <span class="text-muted small">None yet</span> }
+    </div><div class="d-flex gap-2 mt-3"><select class="form-select form-select-sm" [attr.aria-label]="'Tool to attach to ' + agent.name" [(ngModel)]="adding[agent.id]" [disabled]="!!saving || !available(agent).length"><option value="">Choose a tool to attach…</option>@for (tool of available(agent); track tool.id) { <option [value]="tool.id">{{tool.name}}</option> }</select><button class="btn btn-dark btn-sm text-nowrap" [disabled]="!!saving || !adding[agent.id]" (click)="attach(agent)">{{saving === agent.id ? 'Attaching…' : 'Attach tool'}}</button></div>
+  </div></div> } @empty { <p>No agents yet. Create one under Services.</p> }
+</div>

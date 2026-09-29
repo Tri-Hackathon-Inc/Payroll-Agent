@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { basePath } from '../vite.config.js'
+import { basePath } from '../scripts/settings.mjs'
 
 const BASE = basePath(process.env.STUDIO_BASE_PATH || '/ai_studio/')
 

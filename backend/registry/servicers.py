@@ -4,6 +4,7 @@ from functools import wraps
 import grpc
 from django.db import close_old_connections
 from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.empty_pb2 import Empty
 
 from . import metrics, services
 from .agent_chat import AgentChat
@@ -104,6 +105,11 @@ class AIStudioServicer(rpc.ai_studioServicer):
             ),
             pb.Agent(),
         )
+
+    @rpc_handler
+    def DeleteAgent(self, request, context):
+        services.delete_agent(request.id, request.domain_name)
+        return Empty()
 
     @rpc_handler
     def RecordInteraction(self, request, context):

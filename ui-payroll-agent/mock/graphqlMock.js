@@ -106,6 +106,13 @@ export function createMockExecutor() {
       fail('Answer not found in this domain.', 'NOT_FOUND')
     },
     createAgent: ({ input }) => save(input),
+    deleteAgent: ({ id, domainName }) => {
+      domain(domainName)
+      const index = agents.findIndex(agent => agent.id === id && agent.domainName === domainName)
+      if (index < 0) fail('Agent not found in this domain.', 'NOT_FOUND')
+      agents.splice(index, 1)
+      return true
+    },
     updateAgent: ({ input }) => {
       domain(input.domainName)
       const agent = agents.find(item => item.id === input.id && item.domainName === input.domainName)
@@ -124,7 +131,7 @@ const describeContext = context => context?.page
   ? `Invoked from the ${context.page} page${context.payrunId ? ` for payrun ${context.payrunId}` : ''}. ` : ''
 
 // Mock of the Apollo chat webhook: POST <webhookPath>/<domainName>/<agentId> with { question }.
-async function mockWebhook(execute, req, res) {
+export async function mockWebhook(execute, req, res) {
   const send = (status, body) => { res.statusCode = status; res.end(JSON.stringify(body)) }
   res.setHeader('Content-Type', 'application/json')
   const [domainName, agentId] = req.url.split('?')[0].split('/').filter(Boolean).map(decodeURIComponent)
@@ -140,25 +147,4 @@ async function mockWebhook(execute, req, res) {
   if (!agent) return send(404, { message: `Agent ${agentId} was not found for ${domainName}.` })
   send(200, { agent: { id: agent.id, name: agent.name },
     reply: `${agent.name} received your question: "${question.trim()}". It is configured with model ${agent.config.model} and service ${agent.config.service}. ${describeContext(context)}Agent execution is not active yet, so no answer was generated.` })
-}
-
-export function graphqlMock(path = '/graphql', webhookPath = '/webhook') {
-  const execute = createMockExecutor()
-  return {
-    name: 'graphql-mock',
-    configureServer(server) {
-      server.middlewares.use(webhookPath, (req, res) => mockWebhook(execute, req, res))
-      server.middlewares.use(path, async (req, res) => {
-        res.setHeader('Content-Type', 'application/json')
-        try {
-          let body = ''
-          for await (const chunk of req) body += chunk
-          res.end(JSON.stringify(await execute(JSON.parse(body))))
-        } catch {
-          res.statusCode = 400
-          res.end(JSON.stringify({ errors: [{ message: 'Invalid GraphQL request.' }] }))
-        }
-      })
-    },
-  }
 }

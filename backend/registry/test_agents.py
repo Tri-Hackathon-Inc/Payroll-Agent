@@ -9,7 +9,7 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
 
 from . import services
-from .models import Agent, Domain, Template
+from .models import Agent, AgentInteraction, Domain, Template
 
 
 class AgentWorkflowTests(TestCase):
@@ -29,6 +29,24 @@ class AgentWorkflowTests(TestCase):
         return services.create_agent(
             domain, "anomaly-detection", " Payroll review ", config or {}
         )
+
+    def test_delete_agent_is_domain_scoped_and_preserves_metrics_and_catalog(self):
+        agent = self.create()
+        other = self.create(domain="other-payroll")
+        metric = AgentInteraction.objects.create(domain_id="payroll-services", agent_id=agent["id"],
+                                                agent_name=agent["name"], question="Hello", answered_by="model")
+        with self.assertRaises(services.NotFound):
+            services.delete_agent(agent["id"], "other-payroll")
+        with self.assertRaises(services.InvalidInput):
+            services.delete_agent("not-a-uuid", "payroll-services")
+        self.assertTrue(Agent.objects.filter(pk=agent["id"]).exists())
+        services.delete_agent(agent["id"], "payroll-services")
+        self.assertFalse(Agent.objects.filter(pk=agent["id"]).exists())
+        self.assertTrue(Agent.objects.filter(pk=other["id"]).exists())
+        self.assertTrue(AgentInteraction.objects.filter(pk=metric.pk).exists())
+        self.assertTrue(Template.objects.filter(pk=agent["template_id"]).exists())
+        with self.assertRaises(services.NotFound):
+            services.delete_agent(agent["id"], "payroll-services")
 
     def test_domain_provisioning_is_repeatable_and_preserves_domain(self):
         output = StringIO()
