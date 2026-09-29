@@ -4,6 +4,7 @@
 // null and goes to the model. Matching is deliberately strict: a question that is ambiguous,
 // names several employees, or asks for an explanation beyond the findings is left to the model.
 const { historyByEmployee, dollars, money } = require('./payrunContext');
+const { AnomalyPreprocessor } = require('./anomalyPreprocessor');
 
 // Why each automated finding matters, shown after the finding.
 const WHY_IT_MATTERS = {
@@ -88,8 +89,61 @@ function build(context) {
   return { run, history, employees, pastById, previous, sum, issues, infos, employeeCount, previousGross, multiLine };
 }
 
+// Read dated historical values, rather than answering a previous-payment question
+// with the current amount. Eligibility is shared with the anomaly baselines.
+function historicalEmployeeAnswer(q, employee, data) {
+  if (/\b(why|explain|reason|how come)\b/.test(q)) return null;
+  const fields = [
+    ['gross pay', /\bgross\b/, [['gross']]],
+    ['net pay', /\bnet\b|\btake[ -]home\b/, [['net']]],
+    ['overtime hours', /\bovertime\b.*\bhours\b|\bhours\b.*\bovertime\b/, [['hours', 'overtime']], true],
+    ['overtime pay', /\bovertime\b/, [['earnings', 'overtime']]],
+    ['bonus', /\bbonus\w*\b/, [['earnings', 'bonus']]],
+    ['health deduction', /\bhealth\b/, [['deductions', 'health']]],
+    ['401(k) deduction', /\b401k\b|\bretirement\b/, [['deductions', 'retirement401k']]],
+    ['garnishment', /\bgarnish\w*\b/, [['deductions', 'garnishment']]],
+    ['reimbursement', /\breimburse\w*\b/, [['earnings', 'reimbursement']]],
+    ['tax withholding', /\btax\w*\b|\bwithh\w*\b/, ['federal', 'state', 'socialSecurity', 'medicare'].map(key => ['taxes', key])],
+  ];
+  let selected = fields.filter(([, pattern]) => pattern.test(q));
+  if (selected.some(([label]) => label === 'overtime hours')) selected = selected.filter(([label]) => label !== 'overtime pay');
+  if (selected.length !== 1) return null;
+  const [label, , paths, hours] = selected[0];
+  const valueOf = lines => {
+    const values = lines.flatMap(line => paths.map(path => path.reduce((value, key) => value?.[key], line)));
+    return values.length && values.every(value => typeof value === 'number' && Number.isFinite(value))
+      ? values.reduce((sum, value) => sum + Math.round(value * 100), 0) / 100 : null;
+  };
+  const format = value => value === null ? 'not available' : hours ? `${money(value)} hours` : dollars(value);
+  let evidence;
+  try { evidence = new AnomalyPreprocessor().process(data.run, data.history, { employeeId: employee.employeeId }); }
+  catch { return null; }
+  const runs = evidence.historyPayrunIds.map(id => data.history.find(run => run.id === id));
+  const matching = run => run.lines.filter(line => line.employeeId === employee.employeeId && line.payType === employee.payType);
+  const previousRun = /\b(previous|prior|last) (completed )?(payrun|pay run|run|period)\b/.test(q);
+  if (previousRun && runs.length && !matching(runs[0]).length) {
+    return `${who(employee)} has no matching payment in ${runs[0].id} (${runs[0].payDate}).`;
+  }
+  const available = runs.filter(run => matching(run).length);
+  if (!available.length) return `No compatible completed historical payments are available for ${who(employee)}. I cannot compare their ${label} with an earlier payment.`;
+  const count = Number(q.match(/\b(?:last|past|previous) (\d+)\b/)?.[1]);
+  const single = previousRun || /\b(previous|prior|last) (payment|one)\b/.test(q);
+  const chosen = available.slice(0, single ? 1 : count ? Math.min(count, 6) : 6);
+  const current = valueOf(data.run.lines.filter(line => line.employeeId === employee.employeeId));
+  const rows = chosen.map(run => `${run.id} (${run.payDate}): ${format(valueOf(matching(run)))}`);
+  const compare = /\b(compar\w*|change\w*|difference|higher|lower|increase\w*|decrease\w*)\b/.test(q);
+  const previousValue = valueOf(matching(chosen[0]));
+  const difference = compare && chosen.length === 1 && current !== null && previousValue !== null
+    ? ` Change: ${current >= previousValue ? '+' : '-'}${format(Math.abs(current - previousValue))}.` : '';
+  const limit = count > chosen.length ? ` Only ${chosen.length} compatible earlier payruns are available in the loaded history.` : '';
+  return `${who(employee)} — ${label}:\n${rows.map(row => `- ${row}`).join('\n')}`
+    + (compare ? `\nCurrent ${data.run.id}: ${format(current)}.${difference}` : '') + limit;
+}
+
 // Answers about one named employee.
 function employeeAnswer(q, employee, data) {
+  if (/\b(history|historical|previous|prior|earlier|last (run|payrun|payment|period)|past (payments|runs)|trend\w*|compar\w*)\b/.test(q)
+    || /\b(last|past|previous) \d+\b/.test(q)) return historicalEmployeeAnswer(q, employee, data);
   const { run, pastById, multiLine } = data;
   const signals = data.issues.concat(data.infos).filter(signal => signal.employeeId === employee.employeeId);
   const past = pastById.get(employee.employeeId) || [];
@@ -334,7 +388,7 @@ function answerFromData(question, context) {
   let reply;
   if (named.length > 1) return null;
   if (named.length === 1) reply = employeeAnswer(q, named[0], data);
-  else if (/\b(he|she|his|her|him)\b/.test(q)) return null; // A follow-up about someone named earlier.
+  else if (/\b(he|she|his|her|him|they|their|them|that|those)\b/.test(q)) return null; // Resolve conversational references first.
   else reply = payrunAnswer(q, data);
   return reply ? { intent: named.length ? 'employee' : 'payrun', reply } : null;
 }

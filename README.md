@@ -60,6 +60,22 @@ docker compose -f docker/docker-compose.yaml --env-file backend/.env up --build 
 bash docker/podman.sh up --build --force-recreate --no-deps -d backend ui trinet-mock trinet-ui evidence-capture
 ```
 
+### Stop and remove containers
+
+Stop and remove this project's containers and network. Keep database volumes and images.
+
+**Docker:**
+
+```sh
+docker compose -f docker/docker-compose.yaml --env-file backend/.env down
+```
+
+**Podman:**
+
+```sh
+bash docker/podman.sh down
+```
+
 ## 3. Troubleshooting
 
 **Docker:** check the engine, settings, container status and logs.

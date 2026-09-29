@@ -14,6 +14,7 @@ const { answerFromData, normalize } = require('./factAnswers');
 const { checkReply, checkNote } = require('./replyCheck');
 const { createAnswerCache } = require('./answerCache');
 const { scopeContext, isReviewQuestion } = require('./contextScope');
+const { resolveQuestionContext, focusFromAnswer } = require('./queryContext');
 const { createIncidentStore, planIncidents, findingKey, findingsMessage, brief } = require('./incidentTrigger');
 
 const answerCache = createAnswerCache();
@@ -79,42 +80,52 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
     contextError = error.message;
   }
   const contextInfo = { payrunId: payrunContext?.payrunId || null, characters: payrunContext?.text?.length || 0, error: contextError };
-  const anomalyReview = templateId === 'anomaly-detection' && isReviewQuestion(question);
+  const employees = payrunContext?.current?.lines || payrunContext?.payrun?.lines || [];
+  const resolution = employees.length ? resolveQuestionContext({ question, employees,
+    selectedEmployee: invocation?.employeeId, previousFocus: conversation?.focus, history: conversation?.history }) : { question };
+  const finish = result => ({ ...result, ...(resolution.focus ? { focus: focusFromAnswer(resolution, result.reply, employees) } : {}) });
+  if (resolution.clarification) return finish({ reply: resolution.clarification, answeredBy: 'clarification', model: null,
+    metrics: null, context: contextInfo });
+  const resolvedQuestion = resolution.question;
+  const anomalyReview = templateId === 'anomaly-detection' && isReviewQuestion(resolvedQuestion);
 
-  const computed = modelOnly || anomalyReview ? null : answerFromData(question, payrunContext);
+  const computed = modelOnly || anomalyReview ? null : answerFromData(resolvedQuestion, payrunContext);
   if (computed) {
-    return { reply: computed.reply, answeredBy: 'payroll-data', intent: computed.intent, model: null,
-      metrics: { latencyMs: Math.round(performance.now() - started) }, context: contextInfo };
+    return finish({ reply: computed.reply, answeredBy: 'payroll-data', intent: computed.intent, model: null,
+      metrics: { latencyMs: Math.round(performance.now() - started) }, context: contextInfo });
   }
   if (invocation?.page === 'payrun' && env.RAG_ENABLED !== 'false' && (env.REDIS_URL || deps.vectorStore)) {
     const { PayrollRagPipeline } = require('./rag/pipeline');
-    return { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation }) };
+    return { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question, invocation, domainName, conversation, queryContext: resolution }) };
   }
   if (templateId === 'anomaly-detection') {
-    return { answeredBy: 'anomaly-pipeline', ...await new AnomalyDetectionPipeline(deps).run({ config, model, question, invocation }) };
+    const scopedInvocation = resolution.focus?.employeeIds.length === 1 ? { ...invocation, employeeId: resolution.focus.employeeIds[0] } : invocation;
+    return finish({ answeredBy: 'anomaly-pipeline', ...await new AnomalyDetectionPipeline(deps).run({ config, model,
+      question: resolvedQuestion, invocation: scopedInvocation }) });
   }
 
   const acknowledgement = `${agent.name} received your question: "${question}". `
     + `It is configured with model ${config.model} and service ${config.service}. `
     + describeContext(invocation);
   const reason = model ? unavailableReason(model, deps.env) : `Model ${config.model} is not offered by this agent's template.`;
-  if (reason) return { reply: `${acknowledgement}Agent execution is not active: ${reason}`, model: null, metrics: null, context: null };
+  if (reason) return finish({ reply: `${acknowledgement}Agent execution is not active: ${reason}`, model: null, metrics: null, context: null });
 
   // Conversation history changes the answer, so only first questions are cached.
   const history = conversation?.history || [];
   const cache = deps.cache || answerCache;
   const cacheKey = cache.key([agent.id || agent.name, model.id, model.modelId, config.description, config.instructions,
-    payrunContext?.payrunId || null, payrunContext?.payrun?.version ?? null, normalize(question)]);
+    domainName, config.service, invocation?.employeeId || null, resolution.focus?.employeeIds,
+    payrunContext?.payrunId || null, payrunContext?.payrun, payrunContext?.history, normalize(resolvedQuestion)]);
   const cacheable = !modelOnly && !history.length;
   const cached = cacheable ? cache.get(cacheKey) : null;
   if (cached) {
     const { sent, ...answer } = cached;
-    return { ...answer, cached: true, context: { ...contextInfo, ...sent } };
+    return finish({ ...answer, cached: true, context: { ...contextInfo, ...sent } });
   }
 
   // Only the pay lines this question needs go to the model (contextScope).
-  const modelContext = scopeContext(payrunContext, question);
-  const messages = buildMessages({ agentName: agent.name, config, question, context: modelContext, history });
+  const modelContext = scopeContext(payrunContext, resolvedQuestion);
+  const messages = buildMessages({ agentName: agent.name, config, question: resolvedQuestion, context: modelContext, history });
   const { text, metrics } = await callModel(model, messages, deps);
   const check = checkReply(text, modelContext);
   const sent = { characters: modelContext?.text?.length || 0, scope: modelContext?.scope || null };
@@ -126,7 +137,7 @@ async function answerQuestion({ agent, config, model, question, invocation, doma
     check,
   };
   if (!modelOnly) cache.set(cacheKey, { ...answer, sent });
-  return { ...answer, cached: false, context: { ...contextInfo, ...sent } };
+  return finish({ ...answer, cached: false, context: { ...contextInfo, ...sent } });
 }
 
 // After an agent with alerts enabled answers on a payrun, raise new critical findings as an
@@ -203,7 +214,7 @@ async function handleWebhook(req, res, pathname, context) {
         invocation: effective, domainName, conversation }, { loadContext });
       return { answer: result, focus };
     });
-    const incidentAlert = await raiseIncidents({ agent, config, invocation: effective, domainName, question: question.trim() }, {
+    const incidentAlert = answer.answeredBy === 'clarification' ? null : await raiseIncidents({ agent, config, invocation: effective, domainName, question: question.trim() }, {
       loadContext,
       async findIncidentAgent() {
         const incidentAgent = agents.find(item => resolvers.Agent.templateId(item) === INCIDENT_TEMPLATE);
