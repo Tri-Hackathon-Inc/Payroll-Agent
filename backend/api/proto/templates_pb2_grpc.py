@@ -61,6 +61,16 @@ class ai_studioStub(object):
                 request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
                 _registered_method=True)
+        self.ListAnomalies = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/ListAnomalies',
+                request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                _registered_method=True)
+        self.ReviewAnomaly = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/ReviewAnomaly',
+                request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                _registered_method=True)
         self.WatchPayrollEvents = channel.unary_stream(
                 '/ai_studio_agents.ai_studio/WatchPayrollEvents',
                 request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
@@ -156,6 +166,18 @@ class ai_studioServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def PreviewPayrollChange(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListAnomalies(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReviewAnomaly(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -264,6 +286,16 @@ def add_ai_studioServicer_to_server(servicer, server):
             ),
             'PreviewPayrollChange': grpc.unary_unary_rpc_method_handler(
                     servicer.PreviewPayrollChange,
+                    request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                    response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            ),
+            'ListAnomalies': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListAnomalies,
+                    request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                    response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            ),
+            'ReviewAnomaly': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReviewAnomaly,
                     request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
                     response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
             ),
@@ -466,6 +498,60 @@ class ai_studio(object):
             request,
             target,
             '/ai_studio_agents.ai_studio/PreviewPayrollChange',
+            google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListAnomalies(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/ListAnomalies',
+            google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ReviewAnomaly(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/ReviewAnomaly',
             google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
             google_dot_protobuf_dot_struct__pb2.Struct.FromString,
             options,

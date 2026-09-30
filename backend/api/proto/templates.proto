@@ -9,6 +9,8 @@ service ai_studio {
   rpc Authenticate(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc PublishPayrollEvent(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc PreviewPayrollChange(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ListAnomalies(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ReviewAnomaly(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc WatchPayrollEvents(google.protobuf.Struct) returns (stream google.protobuf.Struct);
   rpc ListTemplates(ServiceName) returns (TemplateList);
   rpc GetTemplate(TemplateId) returns (Template);

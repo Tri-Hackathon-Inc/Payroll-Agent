@@ -46,4 +46,7 @@ class AgentFactory(AgentFactoryInterface):
         data = services.agent_data(saved)
         if not ModelConfiguration.objects.filter(pk=saved.config["model"], enabled=True).exists():
             data["model_config"] = {**data["model_config"], "enabled": False}
+        if saved.template_id == "anomaly-detection":
+            from agents.anomaly_detection.agent import AnomalyDetectionAgent
+            return AnomalyDetectionAgent(data, runtime_factory=runtime_factory)
         return ConfiguredAgent(data, runtime_factory=runtime_factory)

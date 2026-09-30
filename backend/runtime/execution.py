@@ -80,7 +80,7 @@ def execute(payload, headers):
             raise RuntimeFailure("A browser session owner is required.", 400)
         answer = with_conversation({**payload, "question": question, "context": invocation, "scope": {"domainName": domain, "agentId": agent_id, "channel": channel, "owner": owner}}, run)
         invocation = effective
-        if answer.get("status") != "confirmation_required" and answer.get("answeredBy") != "clarification" and effective.get("payrunId") and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
+        if agent["template_id"] != "anomaly-detection" and answer.get("status") != "confirmation_required" and answer.get("answeredBy") != "clarification" and effective.get("payrunId") and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
             context = load(effective)
             try:
                 answer["incidentAlert"] = raise_incidents(agent, services.get_service_agent_registry("", domain), domain, context, preprocess(context["current"], context["history"]))

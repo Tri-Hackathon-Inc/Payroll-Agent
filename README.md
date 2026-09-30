@@ -12,22 +12,26 @@ Node 24. `backend/graphql/` contains only the JavaScript GraphQL-to-gRPC adapter
 Python services in `backend/` own question matching, historical retrieval,
 model calls, response validation, sessions, access checks and real-time monitoring.
 Node manifests are at `backend/`; the HTTP/SSE transport is in `backend/local_server/`.
-Payrun questions default to selecting a matched question before retrieval and inference.
-Unsaved payroll edits receive read-only historical checks; saved edits trigger the monitor.
+General payrun questions default to selecting a matched question before retrieval and inference.
+Anomaly Detection checks saved changes and unsaved previews without inference.
+Saved checks persist `NORMAL`, `REVIEW`, or `CRITICAL`; only an explicit **Review**
+action invokes the anomaly agent's model to explain the findings.
 
 Python services live directly under `backend/`: `agents/`, `agent_factory/`,
 `template/`, `model/`, `pipelines/`, and `runtime/`. Contracts live alongside
 implementations in each component's `interface.py`; anomaly contracts live in
 `agents/anomaly_detection/interface.py`. There are no `registry/` or `interfaces/`
 wrapper folders. The `agents/` folder owns runtime composition and saved-agent
-chat, with `anomaly_detection/` for detector logic and the investigation agent,
+chat, with `anomaly_detection/` for its agent, detector, draft checks, investigation and case model,
 `question/` for question matching, and `response/` for citation/finding validation
 and answer formatting. Shared runtime helpers remain in `runtime/`, catalog
 operations live in `template/`, and Python tests and fixtures live in `tests/`.
-Shared Django persistence lives in `storage/models.py`, and gRPC definitions
-and handlers live in `api/`.
+Shared Django persistence lives in `storage/models.py`; the real anomaly case model
+lives in `agents/anomaly_detection/models.py` and is registered with that app.
+gRPC definitions and handlers live in `api/`.
 Django retains the `registry` app label to preserve existing tables and migration
-history; this folder reorganization changes neither the schema nor deployment.
+history. Migration `0010_anomaly_case` adds persisted anomaly reviews without
+recreating existing tables or database volumes.
 `POST /agents` accepts `domainName`, `templateId`,
 `name` and `config`, invokes the domain-aware Python factory, and returns the saved
 agent with HTTP 201. Optional `config.pipelines` controls question selection,
@@ -85,6 +89,8 @@ the endpoints below.
 | GraphQL API and Sandbox | [http://localhost:4000/](http://localhost:4000/) |
 | Agent chat webhook (POST) | `http://localhost:4000/webhook/<domainName>/<agentId>` |
 | Delete a saved agent (DELETE) | `http://localhost:4000/agents/<domainName>/<agentId>` |
+| Saved anomaly checks (GET) | `http://localhost:4000/anomalies?domain=<domainName>&payrunId=<payrunId>` |
+| Investigate a saved check (POST) | `http://localhost:4000/anomalies/review` |
 | gRPC API (use a gRPC client) | `localhost:50051` |
 | Agent Studio UI | [http://localhost:5173/ai_studio/](http://localhost:5173/ai_studio/) |
 | GraphQL through the Studio proxy | `http://localhost:5173/ai_studio/graphql` |
@@ -100,6 +106,32 @@ local URLs work only on the computer running the stack. Access from another
 computer requires a separately configured shared host; this repository does not
 configure a public backend URL. The Studio paths above use the default
 `STUDIO_BASE_PATH=/ai_studio/`.
+
+### Review a payroll anomaly
+
+After payroll saves a change, `POST /events/payroll` queues a check. The Python
+worker asks each enabled Anomaly Detection agent to calculate and persist its
+findings; the payrun page receives the result over SSE. `NORMAL` needs no
+investigation. `REVIEW` and `CRITICAL` appear as review cards with a **Review**
+button. Unsaved edits use `/events/preview` and remain transient.
+
+The button sends `POST /anomalies/review` with `action: "REVIEW"`, `domainName`,
+`agentId`, `anomalyId`, and the displayed payroll `expectedVersion`. The backend
+checks the `testAgents` permission, browser session, agent scope, and current
+payroll version. It reuses completed investigations and claims in-progress work
+to prevent simultaneous duplicate calls. Failed work can be retried explicitly;
+an abandoned claim becomes retryable after five minutes.
+
+The model receives masked, bounded payroll evidence. Validated citations and
+finding comments accompany a brief explanation; failed validation preserves
+the calculated review. This action does not create incidents, send notifications,
+or change payroll. The page reloads persisted cases using `GET /anomalies` on
+load and reconnect, so missed SSE messages do not erase saved reviews.
+
+History is read from the payroll backend for each check; there is no feature
+store, Kafka consumer, or connected policy/compensation-change API. Decisions
+are rule-based categories, not probability scores. The stored reviewer session
+hash is not a durable user identity. See [anomaly workflow details](backend/AGENTS.md#anomaly-detection-and-explicit-review).
 
 ### Delete an agent
 

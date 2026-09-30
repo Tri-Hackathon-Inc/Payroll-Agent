@@ -37,6 +37,9 @@ class AgentChat:
             raise InvalidInput("Conversation is too long. Start a new chat.")
         if not ModelConfiguration.objects.filter(pk=agent.config["model"], enabled=True).exists():
             raise ModelConfigurationError("The agent's model is no longer enabled in the catalog.")
+        if agent.template_id == "anomaly-detection":
+            return {"agent_id": str(agent.id), "model_id": agent.model_config["model_id"], "demo": False,
+                    "output": "Select a payrun to check it, then choose Review to investigate a flagged result."}
         runtime = Model(agent.model_config, self.runtime_factory)
         messages = [
             {"role": "system", "content": agent.config["instructions"]},

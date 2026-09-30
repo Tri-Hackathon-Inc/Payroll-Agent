@@ -75,6 +75,16 @@ class AIStudioServicer(rpc.ai_studioServicer):
         from runtime.events import preview
         return ParseDict(preview(MessageToDict(request)), Struct())
 
+    @rpc_handler
+    def ListAnomalies(self, request, context):
+        from agents.anomaly_detection.agent import list_anomalies
+        return ParseDict(list_anomalies(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
+    @rpc_handler
+    def ReviewAnomaly(self, request, context):
+        from agents.anomaly_detection.agent import review_anomaly
+        return ParseDict(review_anomaly(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
     def WatchPayrollEvents(self, request, context):
         from runtime.events import watch
         try:

@@ -237,7 +237,7 @@ class PreviewTests(SimpleTestCase):
 
     def test_unsaved_draft_is_checked_without_mutating_source_or_delivering_incidents(self):
         before = deepcopy(self.context)
-        with patch("runtime.events.raise_incidents") as incident, patch("runtime.events.broadcast") as broadcast:
+        with patch("runtime.incidents.raise_incidents") as incident, patch("runtime.events.broadcast") as broadcast:
             result = preview(self.body, load=lambda _: self.context)
         self.assertFalse(result["saved"])
         self.assertTrue(result["derivedAmountsPending"])
@@ -269,38 +269,44 @@ class PreviewTests(SimpleTestCase):
             with self.assertRaises(RuntimeFailure):
                 validate_event(event)
 
-    def test_saved_changes_publish_paycheck_and_payrun_findings_without_question_mapping(self):
+    def test_saved_events_delegate_to_the_anomaly_agent_and_broadcast_its_result(self):
         from runtime.events import process
         monitor = agent() | {"template_id": "anomaly-detection"}
         monitor["config"]["capabilities"] = {"alerts": {"enabled": True}}
+        event = {"payrunId": self.body["payrunId"]}
+        result = {"type": "checked", "anomaly": {"summary": "Payroll needs review."}, "decision": "REVIEW"}
         with patch("runtime.events.load_context", return_value=self.context), \
                 patch("runtime.events.services.list_domains", return_value=[{"name": "domain"}]), \
                 patch("runtime.events.services.get_service_agent_registry", return_value=[monitor]), \
-                patch("runtime.events.raise_incidents", return_value={"raised": None}), \
+                patch("runtime.events.AnomalyDetectionAgent") as runtime, \
+                patch("runtime.incidents.raise_incidents") as incident, \
                 patch("runtime.events.broadcast") as broadcast, \
                 patch("runtime.events.record") as record:
-            process({"payrunId": self.body["payrunId"], "employeeId": self.context["current"]["lines"][0]["employeeId"]})
-        result = broadcast.call_args.args[0]
-        self.assertEqual(result["type"], "checked")
-        self.assertTrue(result["analysis"]["payrunFindings"])
-        self.assertTrue(result["analysis"]["findings"])
-        self.assertEqual(result["version"], self.context["current"]["version"])
+            runtime.return_value.on_change.return_value = result
+            process(event)
+        runtime.assert_called_once_with(monitor | {"domain_name": "domain"})
+        runtime.return_value.on_change.assert_called_once_with(event, self.context)
+        broadcast.assert_called_once_with(result)
+        incident.assert_not_called()
         self.assertEqual(record.call_args.args[6], "realtime-monitor")
 
-    def test_incident_storage_failure_preserves_findings_and_requests_retry(self):
+    def test_failed_case_persistence_does_not_broadcast_or_investigate(self):
         from runtime.events import process
         monitor = agent() | {"template_id": "anomaly-detection"}
         monitor["config"]["capabilities"] = {"alerts": {"enabled": True}}
         with patch("runtime.events.load_context", return_value=self.context), \
                 patch("runtime.events.services.list_domains", return_value=[{"name": "domain"}]), \
                 patch("runtime.events.services.get_service_agent_registry", return_value=[monitor]), \
-                patch("runtime.events.raise_incidents", side_effect=RuntimeError("unavailable")), \
+                patch("runtime.events.AnomalyDetectionAgent") as runtime, \
+                patch("runtime.incidents.raise_incidents") as incident, \
                 patch("runtime.events.broadcast") as broadcast, \
-                patch("runtime.events.record"):
-            with self.assertRaises(RuntimeFailure):
+                patch("runtime.events.record") as record:
+            runtime.return_value.on_change.side_effect = RuntimeError("Case storage unavailable")
+            with self.assertRaisesRegex(RuntimeError, "Case storage unavailable"):
                 process({"payrunId": self.body["payrunId"]})
-        self.assertTrue(broadcast.call_args.args[0]["analysis"]["findings"])
-        self.assertIn("retry", broadcast.call_args.args[0]["note"])
+        broadcast.assert_not_called()
+        incident.assert_not_called()
+        record.assert_not_called()
 
 
 class MemoryRedis:

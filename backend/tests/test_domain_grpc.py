@@ -43,8 +43,8 @@ class DomainGrpcTests(TransactionTestCase):
                 agent = client.CreateAgent(pb.CreateAgentRequest(domain_name="payroll-services", template_id="anomaly-detection", name="RPC agent", config=config), timeout=5)
                 self.assertEqual(agent.domain_name, "payroll-services")
                 reply = client.ChatAgent(pb.ChatAgentRequest(agent_id=agent.id, domain_name="payroll-services", message="Hello"), timeout=5)
-                self.assertTrue(reply.demo)
-                self.assertEqual(reply.output, "Demo response (no model inference): Hello")
+                self.assertFalse(reply.demo)
+                self.assertIn("choose Review", reply.output)
                 # The public transports execute the Python-owned workflow over gRPC.
                 execution = client.ExecuteAgent(ParseDict({"agentId": agent.id, "domainName": "payroll-services",
                     "message": "Hello", "channel": "studio"}, Struct()), metadata=(("x-session-owner", "b"*64),), timeout=5)

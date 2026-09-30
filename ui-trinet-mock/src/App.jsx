@@ -109,7 +109,7 @@ export default function App() {
   // Agent Studio's real-time checks for this payrun (see LiveAlerts.jsx).
   const live = useLiveAlerts(run ? domain?.name : null, run?.id)
   // A change saved elsewhere (another reviewer, an integration) shows up here with its alert.
-  const latestVersion = live.alerts.reduce((highest, alert) => Math.max(highest, alert.version || 0), 0)
+  const latestVersion = [...live.alerts, ...live.cases].reduce((highest, alert) => Math.max(highest, alert.version || 0), live.snapshot?.version || 0)
   useEffect(() => {
     if (run && latestVersion > run.version && !lineId) setReloadDetail((value) => value + 1)
   }, [latestVersion, run, lineId])
@@ -137,7 +137,7 @@ export default function App() {
             setLineId(id)
           }} />}
     </main>
-    <LiveAlerts alerts={live.alerts} onDismiss={live.dismiss} />
+    <LiveAlerts alerts={live.alerts} cases={live.cases} onDismiss={live.dismiss} onReview={live.review} />
     {drawerLine && <EmployeeDrawer key={`${drawerLine.lineId}-${run.version}`} line={drawerLine} run={run}
       onClose={() => setLineId(null)} onSaved={saved} onReload={reload} />}
     {assistantAvailable && <AgentUiTemplate key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}

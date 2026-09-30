@@ -86,3 +86,72 @@ test('POST /agents forwards creation to Python and returns the persisted agent',
   const denied = await fetch(url, { method: 'POST', body: JSON.stringify({ ...body, name: 'Denied' }) });
   assert.equal(denied.status, 403);
 });
+
+test('anomaly HTTP routes preserve scoped cases, review payload and caller metadata', async t => {
+  const calls = [];
+  const pending = { id: 'case-1', domainName: 'payroll-services', agentId: 'agent-1',
+    agentName: 'Payroll anomalies', payrunId: 'payrun 1', version: 7, decision: 'REVIEW',
+    reviewStatus: 'pending', summary: 'Bonus above history.', findings: [], investigation: null, createdAt: 'now' };
+  const investigated = { ...pending, reviewStatus: 'completed', investigation: {
+    summary: 'Review the bonus amount.', evidence: [], findings: [], modelStatus: 'completed',
+  } };
+  const context = { context: { headers: { cookie: 'studio_admin=signed', authorization: 'Bearer caller' },
+    sessionOwner: 'trusted-browser' }, dataSources: { grpc: { call: async (...args) => {
+    calls.push({ method: args[3], input: decodeStruct(args[4]), metadata: args[5] });
+    return encodeStruct(args[3] === 'ListAnomalies' ? { items: [pending] } : investigated);
+  } } } };
+  assert.equal(isHttpRequest('/anomalies'), true);
+  assert.equal(isHttpRequest('/anomalies/review'), true);
+  const server = http.createServer((req, res) => handleHttp(req, res, new URL(req.url, 'http://localhost'), context));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const listed = await fetch(base+'/anomalies?domain=payroll-services&payrunId=payrun%201');
+  assert.equal(listed.status, 200);
+  assert.deepEqual(await listed.json(), { items: [pending] });
+  assert.equal(calls[0].method, 'ListAnomalies');
+  assert.deepEqual(calls[0].input, { domainName: 'payroll-services', payrunId: 'payrun 1' });
+  const body = { domainName: 'payroll-services', agentId: 'agent-1', anomalyId: 'case-1',
+    action: 'REVIEW', expectedVersion: 7 };
+  const reviewed = await fetch(base+'/anomalies/review', { method: 'POST', body: JSON.stringify(body) });
+  assert.equal(reviewed.status, 200);
+  assert.deepEqual(await reviewed.json(), investigated);
+  assert.equal(calls[1].method, 'ReviewAnomaly');
+  assert.deepEqual(calls[1].input, body);
+  for (const call of calls) {
+    assert.deepEqual(call.metadata.get('cookie'), ['studio_admin=signed']);
+    assert.deepEqual(call.metadata.get('authorization'), ['Bearer caller']);
+    assert.deepEqual(call.metadata.get('x-session-owner'), ['trusted-browser']);
+  }
+  for (const [path, method, allow] of [['/anomalies', 'POST', 'GET'], ['/anomalies/review', 'GET', 'POST']]) {
+    const invalid = await fetch(base+path, { method });
+    assert.equal(invalid.status, 405);
+    assert.equal(invalid.headers.get('allow'), allow);
+  }
+  const malformed = await fetch(base+'/anomalies/review', { method: 'POST', body: '[]' });
+  assert.equal(malformed.status, 400);
+  assert.equal(calls.length, 2);
+});
+
+test('anomaly HTTP routes preserve Python permission and stale-version errors', async t => {
+  const context = { context: {}, dataSources: { grpc: { call: async (...args) => {
+    if (args[3] === 'ListAnomalies') throw { code: 7, details: 'Review access required.' };
+    if (decodeStruct(args[4]).expectedVersion === 1) throw { code: 10, details: 'Payroll changed. Reload it.' };
+    throw { code: 16, details: 'Sign in to review.' };
+  } } } };
+  const server = http.createServer((req, res) => handleHttp(req, res, new URL(req.url, 'http://localhost'), context));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const denied = await fetch(base+'/anomalies?domain=payroll-services&payrunId=p');
+  assert.equal(denied.status, 403);
+  assert.deepEqual(await denied.json(), { message: 'Review access required.' });
+  const stale = await fetch(base+'/anomalies/review', { method: 'POST', body: JSON.stringify({ expectedVersion: 1 }) });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await stale.json(), { message: 'Payroll changed. Reload it.' });
+  const unauthenticated = await fetch(base+'/anomalies/review', { method: 'POST', body: '{}' });
+  assert.equal(unauthenticated.status, 401);
+  assert.deepEqual(await unauthenticated.json(), { message: 'Sign in to review.' });
+});

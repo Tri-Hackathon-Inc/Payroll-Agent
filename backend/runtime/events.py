@@ -7,16 +7,13 @@ import os
 import queue
 import re
 import threading
-from copy import deepcopy
 from uuid import uuid4
 
 from django.db import close_old_connections
 from template import services
 from runtime.common import RuntimeFailure, now_iso, numeric, redis_client
 from runtime.execution import record
-from runtime.incidents import brief, raise_incidents, signals
-from agents.anomaly_detection.logic import PayrollAnomalyDetector
-from agents.anomaly_detection.agent import PayrollAnomalyInvestigator
+from agents.anomaly_detection.agent import AnomalyDetectionAgent
 from runtime.payroll import load_context
 
 logger = logging.getLogger(__name__)
@@ -56,46 +53,7 @@ def publish(body, headers):
 
 
 def preview(body, *, load=load_context):
-    if not isinstance(body, dict) or not all(isinstance(body.get(k), str) and body[k] for k in ("payrunId", "lineId")):
-        raise RuntimeFailure("A payrun and payment line are required.", 400)
-    context = deepcopy(load(body))
-    current = context["current"]
-    if current["status"] != "PENDING_APPROVAL":
-        raise RuntimeFailure("Completed payroll cannot be edited.", 409)
-    if body.get("expectedVersion") != current.get("version"):
-        raise RuntimeFailure("This payroll has changed. Reload it before checking edits.", 409)
-    line = next((line for line in current["lines"] if line.get("lineId") == body["lineId"]), None)
-    if not line:
-        raise RuntimeFailure("The payment line is not in this payrun.", 404)
-    changes = body.get("changes")
-    allowed = {"hours": {"regular", "overtime"}, "earnings": {"bonus", "reimbursement"}, "deductions": {"health", "garnishment"}, "paymentMethod": None}
-    if not isinstance(changes, dict) or not changes or set(changes) - set(allowed):
-        raise RuntimeFailure("Supply editable payroll fields only.", 400)
-    derived_pending = False
-    for group, values in changes.items():
-        if group == "paymentMethod":
-            if values not in ("Direct Deposit", "Live Check"):
-                raise RuntimeFailure("Invalid payment method.", 400)
-            line[group] = values
-            continue
-        if not isinstance(values, dict) or not values or set(values) - allowed[group]:
-            raise RuntimeFailure("Invalid draft payroll fields.", 400)
-        if group == "hours" and line.get("payType") != "hourly":
-            raise RuntimeFailure("Hours cannot be edited on a salaried payment.", 400)
-        for key, value in values.items():
-            maximum = 200 if group == "hours" else 1000000
-            if not numeric(value) or not 0 <= value <= maximum:
-                raise RuntimeFailure(f"Enter a valid {group}.{key} from 0 to {maximum}.", 400)
-            line[group][key] = value
-        derived_pending = True
-    if derived_pending:
-        # Payroll owns tax/retirement calculations. Never compare stale totals as if
-        # they had already been recalculated for a draft input.
-        line["gross"] = line["net"] = None
-        line["deductions"]["retirement401k"] = None
-    evidence = PayrollAnomalyDetector().detect(context, line["employeeId"])["analysis"]
-    return {"type": "preview", "saved": False, "payrunId": current["id"], "version": current["version"], "lineId": line["lineId"], "employeeId": line["employeeId"],
-            "checkedAt": now_iso(), "analysis": evidence, "findings": [brief(item) for item in signals(evidence)], "derivedAmountsPending": derived_pending}
+    return AnomalyDetectionAgent.preview(body, load=load)
 
 
 def broadcast(result):
@@ -110,34 +68,19 @@ def broadcast(result):
                     pass
 
 
-def process(event, *, detector=None, investigator=None):
+def process(event):
     context = load_context(event)
-    detection = (detector or PayrollAnomalyDetector()).detect(context)
-    evidence, findings = detection["analysis"], detection["findings"]
-    investigator = investigator or PayrollAnomalyInvestigator(raise_incidents)
-    incident_failure = False
     for domain in services.list_domains():
         name = domain["name"]
-        agents = services.get_service_agent_registry("", name)
-        monitor = next((agent for agent in agents if agent["template_id"] == "anomaly-detection" and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled")), None)
-        if not monitor:
-            continue
-        try:
-            alert = investigator.investigate(detection, monitor, agents, name, context) if detection["suspiciousFindings"] else {}
-        except Exception:
-            incident_failure = True
-            alert = {"raised": None, "suggested": [], "alreadyRaised": 0, "note": "Incident processing is unavailable and will retry. Calculated findings remain available."}
-        employee = next((item for item in evidence["employees"] if item["employeeId"] == event.get("employeeId")), None)
-        result = {"type": "incident" if alert.get("raised") else "checked", "domainName": name, "payrunId": event["payrunId"], "version": context["current"].get("version"),
-                  "detection": {key: detection[key] for key in ("id", "type", "detectorVersion")},
-                  "checkedAt": now_iso(), "monitor": {"id": monitor["id"], "name": monitor["name"]}, "reason": "a saved payroll change", "analysis": evidence,
-                  "findings": [brief(item) for item in findings], "critical": sum(item["severity"] == "critical" for item in findings),
-                  "changedEmployee": {"employeeId": employee["employeeId"], "name": employee["name"], "findings": [brief(item) for item in findings if item["employeeId"] == employee["employeeId"]]} if employee else None,
-                  **alert}
-        broadcast(result)
-        record(name, monitor, "Real-time payroll change check", event, {"reply": "Payroll checked.", "answeredBy": "anomaly-pipeline", "incidentAlert": alert}, 0, "realtime-monitor", context)
-    if incident_failure:
-        raise RuntimeFailure("Incident processing is unavailable; retry the saved change.")
+        monitors = services.get_service_agent_registry("", name)
+        for definition in monitors:
+            if definition["template_id"] != "anomaly-detection" or not definition["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
+                continue
+            agent = AnomalyDetectionAgent({**definition, "domain_name": name})
+            result = agent.on_change(event, context)
+            broadcast(result)
+            record(name, definition, "Real-time payroll change check", event,
+                   {"reply": result["anomaly"]["summary"], "answeredBy": "anomaly-detection"}, 0, "realtime-monitor", context)
 
 
 def watch(filters, active):

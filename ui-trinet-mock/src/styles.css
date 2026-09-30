@@ -161,3 +161,8 @@ button { cursor: pointer; }
 
 .tn-agent-host iframe { width: 100%; height: 100%; border: 0; flex: 1; min-height: 0; }
 .tn-agent-host-status { padding: 20px; font-size: 14px; }
+
+.tn-review-investigation { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--tn-line); }
+.tn-review-evidence { margin-top: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.tn-review-evidence summary { cursor: pointer; color: var(--tn-blue); }
+.tn-review-evidence ul { padding-left: 18px; margin: 6px 0; }

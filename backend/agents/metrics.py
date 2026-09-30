@@ -17,7 +17,8 @@ from django.utils import timezone
 from storage.models import Agent, AgentInteraction
 from template.services import InvalidInput, NotFound, get_domain
 
-ANSWER_TYPES = ("payroll-data", "model", "rag", "anomaly-pipeline", "incident-report", "acknowledged", "error")
+ANSWER_TYPES = ("payroll-data", "model", "rag", "anomaly-pipeline", "anomaly-detection",
+                "anomaly-investigation", "incident-report", "clarification", "acknowledged", "error")
 CHECK_STATUSES = ("", "passed", "flagged")
 SEVERITIES = ("critical", "warning", "info")
 RATINGS = ("up", "down", "")
@@ -196,7 +197,7 @@ def agent_metrics(domain_name, agent_id="", since_hours=0):
     checks = [row for row in rows if row.source == REALTIME]
     all_rows, rows = rows, [row for row in rows if row.source != REALTIME]
     answered = [row for row in rows if row.answered_by != "error"]
-    model_rows = [row for row in rows if row.answered_by == "model"]
+    model_rows = [row for row in rows if row.answered_by in ("model", "anomaly-investigation")]
     checked = [row for row in model_rows if row.check_status]
 
     # Findings and dollars at risk describe a payrun, so each payrun counts once: its latest
@@ -214,7 +215,7 @@ def agent_metrics(domain_name, agent_id="", since_hours=0):
         by_type[row.answered_by].append(row)
     by_model = defaultdict(list)
     for row in rows:
-        if row.model_id and row.answered_by in ("model", "rag", "anomaly-pipeline", "error"):
+        if row.model_id and row.answered_by in ("model", "rag", "anomaly-pipeline", "anomaly-investigation", "error"):
             by_model[row.model_id].append(row)
     by_agent = defaultdict(list)
     for row in rows:

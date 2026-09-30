@@ -118,3 +118,7 @@ class AgentInteraction(models.Model):
     class Meta:
         db_table = "agent_interaction"
         ordering = ["-created_at"]
+
+
+# Register agent-owned persistence with the existing Django application.
+from agents.anomaly_detection.models import AnomalyCase

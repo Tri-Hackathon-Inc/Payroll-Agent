@@ -18,8 +18,11 @@ backend/
 |-- agents/         # interface.py, agent.py, chat.py, metrics.py
 |   |-- anomaly_detection/
 |   |   |-- interface.py
-|   |   |-- agent.py # investigation agent
+|   |   |-- agent.py # detection, persistence and explicit Review orchestration
 |   |   |-- logic.py # historical detection
+|   |   |-- draft.py # transient unsaved checks
+|   |   |-- investigation.py # read-only model explanation and validation
+|   |   |-- models.py # persisted AnomalyCase
 |   |   `-- rules.py # finding policy
 |   |-- question/   # logic.py, payroll_questions.json
 |   `-- response/   # logic.py: citation and finding validation
@@ -43,13 +46,17 @@ backend/
 Contract modules use only standard-library imports and never import Django,
 persistence models, transport adapters or provider SDKs. Implementations depend
 on these contracts. Each service and the test directory is a Python package with
-`__init__.py`. Shared Django definitions live in `storage/models.py`; shared
+`__init__.py`. Shared Django definitions live in `storage/models.py`; the real
+`AnomalyCase` model lives with its agent in `agents/anomaly_detection/models.py`
+and is imported by `storage/models.py` for app registration. Shared
 catalog operations live in
 `template/services.py`, `template/catalog.py` and `template/configuration.py`.
 The Django app's Python package is `storage`, while its app label remains
 `registry` for database compatibility. Keep that label, historical migration
 references and existing table names unchanged: this move does not require a
-schema migration or reset of persisted agents.
+schema migration or reset of persisted agents. The subsequent
+`0010_anomaly_case` migration adds the anomaly case table; preserve existing
+database volumes and apply migrations normally.
 
 `agents/` groups the configured-agent runtime with anomaly detection, question
 matching and response validation. Shared payroll retrieval and execution helpers
@@ -62,7 +69,9 @@ Python together.
 Creation follows `POST /agents` (or GraphQL `createAgent`) -> gRPC `CreateAgent`
 -> `AgentFactory` -> domain-aware `TemplateConfig` -> validated database record.
 `AgentFactory.load` rehydrates a `ConfiguredAgent` from its saved snapshot and checks
-the domain and current model availability. `ConfiguredAgent` composes an optional
+the domain and current model availability. An `anomaly-detection` template instead
+loads `AnomalyDetectionAgent`, which owns checks and explicit human review.
+`ConfiguredAgent` composes an optional
 query pipeline, a `ModelInterface`, and a response pipeline. No generated Python
 class or executable code is stored in the database.
 
@@ -131,8 +140,10 @@ Model overrides allow only `temperature` (0-2), `top_p` (0-1) and `max_tokens`
 | Agent metrics for the admin view | `GetAgentMetrics` | `agentMetrics(domainName, agentId?, sinceHours?)` |
 | Rate an answer (thumbs up/down) | `RateInteraction` | `rateAnswer(input)` |
 | Record an answered question (webhook only) | `RecordInteraction` | none; `recordInteraction` in `graphql/aistudio.js` |
+| List latest saved anomaly checks | `ListAnomalies` | none; HTTP `GET /anomalies?domain=&payrunId=` |
+| Explicitly investigate an anomaly | `ReviewAnomaly` | none; HTTP `POST /anomalies/review` |
 
-These are the public operations (the last three serve the Agent Metrics view). Model and external API choices are included
+These are the public operations; metrics and interaction operations serve the Agent Metrics view. Model and external API choices are included
 in template details rather than exposed as separate list operations.
 
 ## Domain, template, and agent
@@ -156,16 +167,18 @@ see the [overall application flow](#overall-application-flow) for the domain/age
 
 ## Overall application flow
 
-There are two flows:
+There are three flows:
 
 | Flow | Trigger | Result |
 | --- | --- | --- |
 | Query flow | A user submits a question to a saved agent in the UI | For payrun queries, the backend semantically matches existing questions, waits for selection, retrieves historical payments, calls the answer model, and postprocesses the result. |
 | Agent creation and service attachment flow | A user chooses a template, model, primary service, attached services and host page | `AgentFactory` saves the validated agent and service associations in `agent_info`; the host UI discovers the saved agent through the registry. No model call occurs during creation. |
+| Anomaly check and Review flow | A saved change, unsaved preview, or anomaly-agent chat requests a check | The agent calculates findings without inference. Saved checks persist a decision; an explicit Review action invokes a model explanation with validated citations and findings. |
 
 ### 1. Query flow end to end: UI -> backend -> models -> UI
 
-The payrun webhook and GraphQL `chatAgent` with payrun context require Redis and
+For templates other than Anomaly Detection, the payrun webhook and GraphQL
+`chatAgent` with payrun context require Redis and
 use this two-stage semantic search flow. The first search returns existing
 questions for user selection. Only after selection does historical retrieval run,
 followed by one answer-model call with the enriched context. Agent Studio chat
@@ -301,7 +314,7 @@ still govern which stored documents may enter a model prompt.
 | TriNet Payroll Assistant | `POST /webhook/<domainName>/<agentId>` with `question`, `context`, optional `sessionId` and `requestId` -> Redis -> payroll RAG | `agent`, `reply`, `analysis`, `retrieval`, `session`, `model`, `metrics`, `context` |
 | Agent Studio with payrun context | GraphQL `chatAgent(input)` with `context.payrunId` -> Redis -> payroll RAG | `agentId`, `modelId`, `output`, `demo`, `analysis`, `retrieval`, `session` |
 | Agent Studio without payrun context | GraphQL `chatAgent(input)` -> gRPC `ExecuteAgent` -> Redis with restored history in Python -> saved model runtime | `output`, `demo`, `session` |
-| Agent Studio webhook chat window | `POST /webhook/<domainName>/<agentId>` -> Redis -> generic prompt with restored recent turns (anomaly agents require payrun context) | `reply`, `session` |
+| Agent Studio webhook chat window | `POST /webhook/<domainName>/<agentId>` -> Redis -> generic prompt with restored recent turns; anomaly agents calculate checks or ask for payrun selection, without inference | `reply`, `session` |
 
 Failed question matching returns an error before payroll retrieval or inference.
 Missing answer credentials, failed historical retrieval, or invalid model output
@@ -662,9 +675,10 @@ token requires the user's provider account. The model dropdown must select a rea
 enabled provider model; setting a token must not silently change saved agents.
 By default, public payrun questions use question confirmation and historical retrieval before the
 answer model. Agent pipeline configuration can disable question matching or payroll preprocessing as described below. Calculations and comparison cards remain available when inference fails.
-Legacy JavaScript fact-answer and response-cache shortcuts have been retired. Agents with
-alerts enabled use `agents/anomaly_detection/rules.py` and `incidents.py`; PostgreSQL
-claims prevent duplicate incidents across chat and saved-change workers.
+Legacy JavaScript fact-answer and response-cache shortcuts have been retired. Other
+templates with alerts enabled use `agents/anomaly_detection/rules.py` and
+`runtime/incidents.py`; PostgreSQL claims prevent duplicate incidents. Anomaly
+Detection uses the explicit Review workflow below.
 Every answer is recorded for the Agent Metrics view: `runtime/execution.py` builds the
 record (how it was answered, response time, model tokens, reply check, the payrun's findings
 and dollars at risk, incidents) and `agents/metrics.py` stores it in `agent_interaction` and
@@ -672,20 +686,28 @@ aggregates it; replies carry an `interactionId` for `rateAnswer` feedback. Recor
 measurements only (no credentials or pay lines; Redis session IDs are hashed), benchmark runs
 are excluded from the metrics, and a failed metrics write never breaks a chat.
 
+### Anomaly detection and explicit Review
+
 The streaming detection and investigation contracts live in `agents/anomaly_detection/interface.py`.
 `PayrollAnomalyDetector` (`agents/anomaly_detection/logic.py`) calculates historical features
 and policy findings without model calls or delivery. Its state is the loaded,
 comparable payroll history, not a rolling wall-clock window. It returns a versioned
 `payroll.anomaly` or `payroll.checked` result with evidence and warning/critical
 findings; severity is rule-based, not an invented probability score.
-`PayrollAnomalyInvestigator` (`agents/anomaly_detection/agent.py`) receives
-only suspicious results and applies the
-existing agent/incident policies, reusing detector findings. Normal checks still
-reach the UI but do not invoke investigation. Unsaved previews use the detector
-and never invoke investigation or create incidents.
+`AnomalyDetectionAgent` (`agents/anomaly_detection/agent.py`) owns detection,
+persisted cases, and investigation. Saved checks persist an `AnomalyCase` without
+calling a model. Only a human's `POST /anomalies/review` with `action: "REVIEW"`
+authorizes investigation of that case. The agent validates its domain, agent,
+browser session, permission, and current payroll version, claims the review,
+then invokes its selected model using the saved evidence. Completed reviews are
+reused; failed or abandoned work requires another explicit Review to retry.
+`investigation.py` validates citations and finding coverage before returning a
+brief explanation. Review never changes payroll or sends incidents. Normal
+checks still reach the UI but cannot invoke investigation. Unsaved previews use
+the agent's `draft.py` and detector without persistence or model calls.
 
-The current transport remains Redis Streams. Detection and investigation are
-separate interfaces but execute sequentially in the existing worker. Kafka,
+The current event transport remains Redis Streams. Detection runs in the worker;
+investigation runs only through the human Review request to the same agent. Kafka,
 a separate anomaly topic/consumer, time-window state and independent worker
 replication are not implemented by this refactor. Historical reads are still
 performed per event; no millisecond latency guarantee is made.
@@ -696,10 +718,9 @@ saved change to `POST /events/payroll` (the TriNet mock's `events.js` sends
 set, must match the `X-Payroll-Events-Token` header). Events are queued on the Redis stream
 `payroll:events` (consumer group `realtime-monitor`; an in-process queue without `REDIS_URL`)
 and a worker in the Python gRPC process checks the payrun for every domain whose Anomaly Detection
-agent has alerts enabled: code-only checks, then new critical findings go to the Incident
-Report agent through the same `raiseIncidents` path as chat. Findings are claimed atomically in
-Postgres (`payroll_incident_findings`, created on first use), so each is raised once across
-workers and restarts. If PostgreSQL is unavailable, incident delivery does not fall back to process-local claims; event processing retries. Each check is pushed to open
+agent has alerts enabled. These code-only checks persist the decision and findings
+in MySQL; persistence failures cause event processing to retry. Suspicious results
+wait for human Review, including critical findings. Each check is pushed to open
 payrun pages over `GET /events/stream?domain=&payrunId=` (server-sent events, proxied as
 `/ai_studio/events/stream`) and recorded for Agent Metrics with source `realtime-monitor`
 (counted as checks, not questions). Python publishes checks through Redis pub/sub. The Node SSE adapter forwards a server-streaming gRPC subscription. Unsaved edits use `POST /events/preview` after a 400 ms typing pause; Python overlays validated editable inputs on a copy, compares history, and never saves the draft or sends incidents. Stale versions are rejected. Derived gross/net/tax/retirement amounts wait for payroll recalculation on save.

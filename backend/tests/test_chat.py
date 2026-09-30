@@ -23,7 +23,7 @@ class AgentChatTests(TestCase):
         Domain.objects.create(name="other", label="Other", domain="Payroll")
 
     def create(self):
-        return AgentFactory().create("payroll-services", "anomaly-detection", "Review", {"created_by": "reviewer", "model": "poc-demo"})
+        return AgentFactory().create("payroll-services", "general-query", "Review", {"created_by": "reviewer", "model": "poc-demo"})
 
     def test_factory_uses_template_interface_and_persists_model_user_and_services(self):
         template = Mock(wraps=CatalogTemplate())
