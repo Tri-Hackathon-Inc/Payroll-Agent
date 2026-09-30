@@ -9,11 +9,31 @@ Agent Studio (`ui-payroll-agent`) uses Angular with TypeScript components and
 separate HTML templates in `src/app/`. The TriNet demo remains a separate UI.
 Containers include Node 22; local Angular development requires Node 22.12+ or
 Node 24. `backend/graphql/` contains only the JavaScript GraphQL-to-gRPC adapters.
-Python in `backend/registry/runtime/` owns question matching, historical retrieval,
+Python services in `backend/` own question matching, historical retrieval,
 model calls, response validation, sessions, access checks and real-time monitoring.
 Node manifests are at `backend/`; the HTTP/SSE transport is in `backend/local_server/`.
-Payrun questions require selection of a matched question before retrieval and inference.
+Payrun questions default to selecting a matched question before retrieval and inference.
 Unsaved payroll edits receive read-only historical checks; saved edits trigger the monitor.
+
+Python services live directly under `backend/`: `agents/`, `agent_factory/`,
+`template/`, `model/`, `pipelines/`, and `runtime/`. Contracts live alongside
+implementations in each component's `interface.py`; anomaly contracts live in
+`agents/anomaly_detection/interface.py`. There are no `registry/` or `interfaces/`
+wrapper folders. The `agents/` folder owns runtime composition and saved-agent
+chat, with `anomaly_detection/` for detector logic and the investigation agent,
+`question/` for question matching, and `response/` for citation/finding validation
+and answer formatting. Shared runtime helpers remain in `runtime/`, catalog
+operations live in `template/`, and Python tests and fixtures live in `tests/`.
+Each service, including the `agents/` subservices and `runtime/`, contains a
+`models/` Python package for service-local data models. Shared Django persistence
+lives in `storage/`, and gRPC definitions and handlers live in `api/`.
+Django retains the `registry` app label to preserve existing tables and migration
+history; this folder reorganization changes neither the schema nor deployment.
+`POST /agents` accepts `domainName`, `templateId`,
+`name` and `config`, invokes the domain-aware Python factory, and returns the saved
+agent with HTTP 201. Optional `config.pipelines` controls question selection,
+retrieval and response formatting; `config.model_parameters` supplies validated
+model overrides. See [backend configuration and API details](backend/AGENTS.md#interfaces-and-configurable-execution).
 
 **Docker:** start Docker Desktop.
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import IncidentCard from './IncidentCard'
 
 // Real-time anomaly detection on the payrun page: Agent Studio checks every saved change
-// (backend/registry/runtime/events.py) and pushes the result here over server-sent events.
+// (backend/runtime/events.py) and pushes the result here over server-sent events.
 const STREAM = `${import.meta.env.BASE_URL}agent-studio/events/stream`
 const CHECK_TOAST_MS = 10000
 const MAX_ALERTS = 4

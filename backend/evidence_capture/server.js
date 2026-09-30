@@ -1,6 +1,6 @@
 // Evidence capture: a headless browser that opens the payroll UI the way a user would and takes
 // read-only screenshots of each problem employee's pay row and their "Edit employee pay" drawer.
-// It never saves or edits anything. Used by the Incident Report agent (registry/runtime/incidents.py).
+// It never saves or edits anything. Used by the Incident Report agent (runtime/incidents.py).
 //
 //   POST /capture { domain, payrunId, items: [{ id, employeeId, name }] }
 //     -> { capturedAt, captures: [{ id, screenshots: [{ label, dataUrl }], error? }] }

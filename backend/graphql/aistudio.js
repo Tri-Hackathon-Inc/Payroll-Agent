@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { createRpcResolver, encodeStruct, decodeStruct, jsonResolver } = require('./client');
 const catalogRpc = {
-  protoPath: path.join(__dirname, '../registry/proto/templates.proto'),
+  protoPath: path.join(__dirname, '../api/proto/templates.proto'),
   packageName: 'ai_studio_agents',
   serviceName: 'ai_studio'
 };

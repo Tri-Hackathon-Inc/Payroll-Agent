@@ -7,6 +7,124 @@ service with GraphQL adapters**. Django has no HTTP routes; names such as
 only `aistudio.js` and `client.js`; no business logic, tests, manifests or assets
 belong there. Python owns execution behind gRPC, including the chat webhook flow.
 
+## Interfaces and configurable execution
+
+Python services live directly under `backend/`. Each component keeps its
+contracts in its own `interface.py`, alongside the implementation. There are no
+`registry/` or `interfaces/` wrapper folders.
+
+```text
+backend/
+|-- agents/         # interface.py, agent.py, chat.py, metrics.py
+|   |-- models/
+|   |-- anomaly_detection/
+|   |   |-- interface.py
+|   |   |-- agent.py # investigation agent
+|   |   |-- logic.py # historical detection
+|   |   |-- rules.py # finding policy
+|   |   `-- models/
+|   |-- question/   # logic.py, payroll_questions.json
+|   |   `-- models/
+|   `-- response/   # logic.py: citation and finding validation
+|       `-- models/
+|-- agent_factory/  # interface.py, factory.py
+|   `-- models/
+|-- template/       # interface.py, config.py, services.py, catalog.py, configuration.py
+|   `-- models/
+|-- model/          # interface.py, model.py, runtime.py
+|   `-- models/
+|-- pipelines/      # interface.py, config.py, payroll.py
+|   `-- models/
+|-- runtime/        # execution, events, sessions and payroll helpers
+|   `-- models/
+|-- storage/
+|   |-- apps.py
+|   |-- models.py
+|   |-- management/
+|   `-- migrations/
+|-- api/
+|   |-- servicers.py
+|   `-- proto/
+`-- tests/          # Python and JavaScript tests
+    `-- fixtures/
+```
+
+Contract modules use only standard-library imports and never import Django,
+persistence models, transport adapters or provider SDKs. Implementations depend
+on these contracts. Each service and the test directory is a Python package with
+`__init__.py`. Each service, including the `agents/` subservices and `runtime/`,
+has a `models/` Python package for service-local data models. Shared Django
+definitions live in `storage/models.py`; shared catalog operations live in
+`template/services.py`, `template/catalog.py` and `template/configuration.py`.
+The Django app's Python package is `storage`, while its app label remains
+`registry` for database compatibility. Keep that label, historical migration
+references and existing table names unchanged: this move does not require a
+schema migration or reset of persisted agents.
+
+`agents/` groups the configured-agent runtime with anomaly detection, question
+matching and response validation. Shared payroll retrieval and execution helpers
+remain in `runtime/`; `pipelines/payroll.py` composes these services. These module
+boundaries support independent implementations. They do not introduce separately
+deployed services or change execution behavior. The existing gRPC boundary supports
+a separately deployed Python runtime; local Compose still supervises Node and
+Python together.
+
+Creation follows `POST /agents` (or GraphQL `createAgent`) -> gRPC `CreateAgent`
+-> `AgentFactory` -> domain-aware `TemplateConfig` -> validated database record.
+`AgentFactory.load` rehydrates a `ConfiguredAgent` from its saved snapshot and checks
+the domain and current model availability. `ConfiguredAgent` composes an optional
+query pipeline, a `ModelInterface`, and a response pipeline. No generated Python
+class or executable code is stored in the database.
+
+The creation request uses `domainName`, `templateId`, `name`, and `config`; success
+returns HTTP 201 with the saved agent, effective config and model snapshot.
+For example:
+
+```json
+{
+  "domainName": "payroll-services",
+  "templateId": "general-query",
+  "name": "Paycheck questions",
+  "config": {
+    "model": "poc-demo",
+    "questions": ["Why did my net pay change?"],
+    "pipelines": {
+      "query": {
+        "enabled": true,
+        "questionMatching": true,
+        "includeSharedQuestions": false,
+        "candidateLimit": 3,
+        "confirmationTtlSeconds": 600,
+        "historyLimit": 100,
+        "retrievalLimit": 6
+      },
+      "response": {"enabled": true, "includeDetails": true}
+    },
+    "model_parameters": {"temperature": 0.2, "max_tokens": 1024}
+  }
+}
+```
+
+`config.questions` is persisted with the agent and semantically indexed in pgvector.
+Question matching defaults to including the shared question library; disable
+`includeSharedQuestions` to restrict it to saved questions. Candidate count is 1-5,
+confirmation lifetime 60-3600 seconds, history limit 1-500, and retrieval limit 1-20.
+Defaults are shown above, except that shared questions are included by default.
+`RAG_HISTORY_LIMIT` and `RAG_TOP_K` supply deployment defaults when omitted;
+creation saves their resolved values. Old saved agents resolve missing settings
+at runtime without a database migration.
+
+With `query.questionMatching: false`, payroll retrieval uses the submitted question
+directly. With `query.enabled: false`, execution uses instructions and conversation
+without loading payroll or proposing questions. Default payroll execution retains
+the selection -> historical retrieval -> enriched model call sequence.
+`response.includeDetails: false` omits detailed explanations while retaining the
+brief answer, findings, citations and comparison data. `response.enabled: false`
+disables optional presentation processing; grounded payroll answers still require
+citation and finding validation. Neither setting bypasses evidence validation.
+Model overrides allow only `temperature` (0-2), `top_p` (0-1) and `max_tokens`
+(integer 1-32768); endpoints and credentials remain catalog/environment settings.
+
 ## Supported capabilities
 
 | Capability | gRPC operation | GraphQL operation |
@@ -128,13 +246,13 @@ of the webhook URL parameters and `question`.
 
 | Step | Implementation and behavior |
 | --- | --- |
-| 1. Resolve request and session | `registry/runtime/execution.py` or `graphql/aistudio.js` resolves the saved agent within its domain and the selected model from current template options through gRPC. `registry/runtime/sessions.py` restores scoped messages and focus. Both adapters call Python ExecuteAgent, which resolves the agent before opening the session. |
-| 2. Match and select a question | `registry/runtime/questions.py` combines configured and shared questions. Python `VectorStore` indexes their embeddings in `payroll_agent_vectors` (kind `questions`) and ranks them by cosine distance. Return candidates and wait for a valid selection before retrieval or inference. |
-| 3. Load and preprocess payroll | After selection, `registry/runtime/payroll.py` fetches source data. `preprocess` computes baselines and findings. The pipeline resolves employees and topics from the confirmed question and conversation without an intent-model call. |
-| 4. Index historical context | `registry/runtime/retrieval.py` builds earnings, overtime and deduction documents. `registry/runtime/retrieval.py` uses local FastEmbed `sentence-transformers/all-MiniLM-L6-v2` with CPU ONNX inference and 384 dimensions. Stable content IDs avoid re-embedding unchanged documents. First use downloads public weights to `embedding_cache`; no embedding API key is needed. |
-| 5. Retrieve with filters and KNN | `registry/runtime/retrieval.py` embeds the search query and uses parameterized SQL with pgvector cosine distance. Filter by domain/service/company scope, eligible historical IDs, embedding version, employee selection and topic. Default `RAG_TOP_K=6`, maximum 20; this is exact KNN. |
-| 6. Generate the answer | `registry/runtime/pipeline.py` creates `ModelRuntimeFactory` for the selected agent model. The prompt includes the confirmed question, original query, instructions, current employee details, recent turns, retrieved documents and calculated evidence. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
-| 7. Postprocess | `postprocess` in `registry/runtime/postprocess.py` validates JSON, supplied source IDs and exactly one valid comment per calculated finding. It deduplicates citations, resolves their metadata from retrieved history, and formats the summary, historical sources and calculated review. Invalid model output is discarded as a whole; calculated evidence remains available. |
+| 1. Resolve request and session | `runtime/execution.py` or `graphql/aistudio.js` resolves the saved agent within its domain and the selected model from current template options through gRPC. `runtime/sessions.py` restores scoped messages and focus. Both adapters call Python ExecuteAgent, which resolves the agent before opening the session. |
+| 2. Match and select a question | `agents/question/logic.py` combines configured and shared questions. Python `VectorStore` indexes their embeddings in `payroll_agent_vectors` (kind `questions`) and ranks them by cosine distance. Return candidates and wait for a valid selection before retrieval or inference. |
+| 3. Load and preprocess payroll | After selection, `runtime/payroll.py` fetches source data. `preprocess` computes baselines and findings. The pipeline resolves employees and topics from the confirmed question and conversation without an intent-model call. |
+| 4. Index historical context | `runtime/retrieval.py` builds earnings, overtime and deduction documents. `runtime/retrieval.py` uses local FastEmbed `sentence-transformers/all-MiniLM-L6-v2` with CPU ONNX inference and 384 dimensions. Stable content IDs avoid re-embedding unchanged documents. First use downloads public weights to `embedding_cache`; no embedding API key is needed. |
+| 5. Retrieve with filters and KNN | `runtime/retrieval.py` embeds the search query and uses parameterized SQL with pgvector cosine distance. Filter by domain/service/company scope, eligible historical IDs, embedding version, employee selection and topic. Default `RAG_TOP_K=6`, maximum 20; this is exact KNN. |
+| 6. Generate the answer | `pipelines/payroll.py` calls the `ModelInterface` implemented by `model/model.py`, which resolves the selected provider through `ModelRuntimeFactory`. The prompt includes the confirmed question, original query, instructions, current employee details, recent turns, retrieved documents and calculated evidence. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
+| 7. Postprocess | `postprocess` in `agents/response/logic.py` validates JSON, supplied source IDs and exactly one valid comment per calculated finding. It deduplicates citations, resolves their metadata from retrieved history, and formats the summary, historical sources and calculated review. Invalid model output is discarded as a whole; calculated evidence remains available. |
 | 8. Save and display | `with_conversation` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `ui-payroll-agent/src/ui-templates/payrun-assistant/payrun-assistant.component.ts` or `agent-chat.component.ts` renders it and retains the session ID for follow-ups. |
 
 Historical retrieval considers up to `RAG_HISTORY_LIMIT=100` runs (maximum 500);
@@ -171,7 +289,7 @@ Preloaded vectors do not provide an offline fallback when the payroll API fails.
 -> local embeddings -> PostgreSQL scoped IDs and pgvector vectors -> reuse
 on subsequent queries.**
 
-`registry/management/commands/ingest_payroll_history.py` preloads completed payroll history independently
+`storage/management/commands/ingest_payroll_history.py` preloads completed payroll history independently
 of a question. It validates the complete source before indexing and uses the
 same document builder and vector store as the query path, including historical
 employees not present in a current run. From the repository root with the services running:
@@ -249,7 +367,7 @@ Agent Studio loads domains and their templates, then `agent-editor.component.ts`
 current UI uses `getDomainAgentsTemplates(domainName)` for discovery. API clients
 can also use `listTemplates(serviceName: "payrun")`; this argument is the primary
 service ID. Creation uses GraphQL `createAgent(input)` -> gRPC `CreateAgent`;
-there is no HTTP `/create-agent` route.
+`POST /agents` is also available through the HTTP-to-gRPC adapter. Both paths use the same Python permissions, validation and persistence.
 
 Service attachment is saved as part of `createAgent(input)` or
 `updateAgent(input)`. The primary service, additional service references, and
@@ -327,8 +445,8 @@ the payrun service/page; omitted configuration comes from the template:
 }
 ```
 
-`registry/servicers.py` delegates to `services.create_agent`, then
-`AgentFactory.create` in `registry/agent_factory.py`. Its `TemplateInterface`
+`api/servicers.py` delegates to `template.services.create_agent`, then
+`AgentFactory.create` in `agent_factory/factory.py`. It calls the domain-aware `TemplateConfig.resolve`; its `TemplateInterface`
 implementation, `CatalogTemplate.configure`, recursively merges defaults with
 the submitted overrides. `config.model` is the catalog selection ID; the server
 resolves the provider's `model_id` and model name. `config.created_by` records
@@ -418,7 +536,7 @@ to the chat window.
 
 For a single employee, `analysis.payComparison` supplies source-calculated
 previous/current period cards in Agent Studio and the embedded Payroll Assistant.
-`registry/runtime/payroll.py` aggregates split lines in cents, including gross,
+`runtime/payroll.py` aggregates split lines in cents, including gross,
 federal/state tax, FICA, benefits, 401(k), garnishments and net pay. It selects the
 latest eligible employee payrun from the full validated history, independently
 of the semantic top-K and the anomaly median. Missing amounts remain null, and
@@ -479,7 +597,7 @@ to a saved Incident Report agent. Send only messages for the current agent,
 payrun and employee scope, together with `context.task = "incident-report"`,
 `context.employeeId` and `context.handoff`. The webhook handles this request
 before normal Redis chat processing so the handoff payload is preserved.
-`registry/runtime/incidents.py` loads scoped payroll signals, optionally requests read-only
+`runtime/incidents.py` loads scoped payroll signals, optionally requests read-only
 screenshots from `evidence-capture`, and writes a report. It sends email only
 when `EMAIL_API_BASE_URL` is configured; the response reports delivery status.
 Ordinary chat requests continue through the RAG/session flow above.
@@ -496,7 +614,7 @@ The My Agents page confirms deletion and removes the row only after success.
 
 Template JSON in `templates/`, models in `templates/Model_config/`, and external
 API definitions in `templates/services.json` are authoritative for the catalog.
-`registry/catalog.py` loads them and `registry/configuration.py` validates them.
+`template/catalog.py` loads them and `template/configuration.py` validates them.
 `sync_templates` transactionally updates the database catalog, including removal
 of catalog records no longer in the files.
 
@@ -535,7 +653,7 @@ Model selection changes refresh
 the snapshot; other edits retain it. The catalog model must still be enabled.
 
 General execution of arbitrary catalog services as model tools is not implemented. Explicit incident handoffs and configured automatic alerts support email and Slack delivery. Payroll context retrieval and model provider
-calls are implemented through the flows above. `registry/runtime/execution.py` must load the
+calls are implemented through the flows above. `runtime/execution.py` must load the
 agent within the requested domain before executing it. For Anomaly Detection,
 calculate evidence before deciding whether inference can run, and preserve that
 evidence when the model is unavailable. Other templates acknowledge missing
@@ -552,19 +670,37 @@ Keep provider credentials server-side (`HF_TOKEN`, `GROQ_API_KEY`,
 put them in `VITE_` variables, log them, or return raw provider errors. Creating a
 token requires the user's provider account. The model dropdown must select a real
 enabled provider model; setting a token must not silently change saved agents.
-All public payrun questions use question confirmation and historical retrieval before the
-answer model. Calculations and comparison cards remain available when inference fails.
+By default, public payrun questions use question confirmation and historical retrieval before the
+answer model. Agent pipeline configuration can disable question matching or payroll preprocessing as described below. Calculations and comparison cards remain available when inference fails.
 Legacy JavaScript fact-answer and response-cache shortcuts have been retired. Agents with
-alerts enabled use `registry/runtime/finding_policy.py` and `incidents.py`; PostgreSQL
+alerts enabled use `agents/anomaly_detection/rules.py` and `incidents.py`; PostgreSQL
 claims prevent duplicate incidents across chat and saved-change workers.
-Every answer is recorded for the Agent Metrics view: `registry/runtime/execution.py` builds the
+Every answer is recorded for the Agent Metrics view: `runtime/execution.py` builds the
 record (how it was answered, response time, model tokens, reply check, the payrun's findings
-and dollars at risk, incidents) and `registry/metrics.py` stores it in `agent_interaction` and
+and dollars at risk, incidents) and `agents/metrics.py` stores it in `agent_interaction` and
 aggregates it; replies carry an `interactionId` for `rateAnswer` feedback. Records hold
 measurements only (no credentials or pay lines; Redis session IDs are hashed), benchmark runs
 are excluded from the metrics, and a failed metrics write never breaks a chat.
 
-Real-time anomaly detection (`registry/runtime/events.py`): the payroll platform reports each
+The streaming detection and investigation contracts live in `agents/anomaly_detection/interface.py`.
+`PayrollAnomalyDetector` (`agents/anomaly_detection/logic.py`) calculates historical features
+and policy findings without model calls or delivery. Its state is the loaded,
+comparable payroll history, not a rolling wall-clock window. It returns a versioned
+`payroll.anomaly` or `payroll.checked` result with evidence and warning/critical
+findings; severity is rule-based, not an invented probability score.
+`PayrollAnomalyInvestigator` (`agents/anomaly_detection/agent.py`) receives
+only suspicious results and applies the
+existing agent/incident policies, reusing detector findings. Normal checks still
+reach the UI but do not invoke investigation. Unsaved previews use the detector
+and never invoke investigation or create incidents.
+
+The current transport remains Redis Streams. Detection and investigation are
+separate interfaces but execute sequentially in the existing worker. Kafka,
+a separate anomaly topic/consumer, time-window state and independent worker
+replication are not implemented by this refactor. Historical reads are still
+performed per event; no millisecond latency guarantee is made.
+
+Real-time anomaly detection (`runtime/events.py`): the payroll platform reports each
 saved change to `POST /events/payroll` (the TriNet mock's `events.js` sends
 `{ type: "payrun.changed", payrunId, version, lineId, employeeId }`; `PAYROLL_EVENTS_TOKEN`, when
 set, must match the `X-Payroll-Events-Token` header). Events are queued on the Redis stream
@@ -578,7 +714,7 @@ payrun pages over `GET /events/stream?domain=&payrunId=` (server-sent events, pr
 `/ai_studio/events/stream`) and recorded for Agent Metrics with source `realtime-monitor`
 (counted as checks, not questions). Python publishes checks through Redis pub/sub. The Node SSE adapter forwards a server-streaming gRPC subscription. Unsaved edits use `POST /events/preview` after a 400 ms typing pause; Python overlays validated editable inputs on a copy, compares history, and never saves the draft or sends incidents. Stale versions are rejected. Derived gross/net/tax/retirement amounts wait for payroll recalculation on save.
 
-Admin and customer views (`registry/runtime/access.py`): the GraphQL `viewer` query returns the role,
+Admin and customer views (`runtime/access.py`): the GraphQL `viewer` query returns the role,
 feature flags, and the customer allow-lists. With `STUDIO_ADMIN_KEY` set, an admin signs in with
 it (`POST /auth/admin`, proxied as `/ai_studio/auth/admin`; limited to 10 attempts a minute),
 which sets an HttpOnly, SameSite cookie holding an HMAC of the key (8 hours; rotating the key
@@ -595,7 +731,7 @@ and Agent Metrics; customers Services, their agents' tools (with Attach tool), M
 (playground), and Usage. The payrun page's chat webhook, answer feedback, and live alerts are
 not gated. This is a shared admin key, not per-user accounts.
 
-Privacy (`registry/runtime/privacy.py`): employee names never reach a model. Before any model call
+Privacy (`runtime/privacy.py`): employee names never reach a model. Before any model call
 (generic answers, the RAG pipeline, the anomaly pipeline) each employee's name is replaced with
 their employee ID in the payroll context, question, conversation, and retrieved documents; names
 are restored in the reply's prose (for JSON replies only in `answer`, `explanation`, and
@@ -701,19 +837,24 @@ Do not add READMEs in subdirectories.
 
 | File | Responsibility |
 | --- | --- |
-| `registry/models.py`, `registry/migrations/` | Catalog, domain, and agent persistence |
-| `registry/services.py` | Catalog operations, configuration merge, and catalog synchronization |
-| `registry/agent_factory.py` | Template interface and persisted agent creation |
-| `registry/agent_chat.py`, `registry/model_runtime.py` | Saved agent chat and provider abstraction |
-| `registry/catalog.py`, `registry/configuration.py` | JSON loading and validation |
-| `registry/proto/templates.proto`, `registry/servicers.py` | gRPC contract and implementation |
+| `storage/models.py`, `storage/migrations/` | Catalog, domain, and agent persistence |
+| `template/services.py` | Catalog operations, configuration merge, and catalog synchronization |
+| `agents/interface.py`, `agent_factory/interface.py`, `template/interface.py`, `model/interface.py`, `pipelines/interface.py`, `agents/anomaly_detection/interface.py` | Dependency-free contracts colocated with their component implementations |
+| `agent_factory/factory.py`, `template/config.py` | Domain-aware template resolution, persisted creation and agent rehydration |
+| `agents/agent.py`, `model/model.py`, `pipelines/config.py` | Runtime composition, model interface implementation and validated settings |
+| `agents/chat.py`, `model/runtime.py` | Saved agent chat and provider abstraction |
+| `template/catalog.py`, `template/configuration.py` | JSON loading and validation |
+| `api/proto/templates.proto`, `api/servicers.py` | gRPC contract and implementation |
 | `graphql/aistudio.js`, `graphql/client.js` | GraphQL contract and gRPC adapter |
-| `registry/runtime/sessions.py` | Expiring conversations, scope checks and request serialization |
-| `registry/runtime/` | Question selection, historical documents, local embeddings, pgvector KNN and answer model |
-| `registry/management/commands/ingest_payroll_history.py` | Repeatable preload of completed payroll history into PostgreSQL |
-| `registry/runtime/incidents.py`, `evidence_capture/server.js` | Explicit incident handoff, scoped evidence, screenshots and optional email delivery |
-| `registry/runtime/pipeline.py`, `registry/runtime/payroll.py`, `registry/runtime/postprocess.py` | Employee history comparisons, model explanations, and response validation |
-| `registry/test_agents.py`, `registry/test_domain_grpc.py`, `registry/test_domain_migration.py` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
+| `runtime/sessions.py` | Expiring conversations, scope checks and request serialization |
+| `runtime/` | Execution, events, sessions, payroll evidence, local embeddings and pgvector KNN |
+| `agents/anomaly_detection/` | Historical detector logic, investigation agent and finding rules |
+| `agents/question/` | Configured/shared question matching, confirmation and the shared question library |
+| `agents/response/` | Citation and finding validation, fallback and concise response formatting |
+| `storage/management/commands/ingest_payroll_history.py` | Repeatable preload of completed payroll history into PostgreSQL |
+| `runtime/incidents.py`, `evidence_capture/server.js` | Explicit incident handoff, scoped evidence, screenshots and optional email delivery |
+| `pipelines/payroll.py`, `runtime/payroll.py`, `agents/response/logic.py` | Employee history comparisons, model explanations, and response validation |
+| `tests/test_agents.py`, `tests/test_domain_grpc.py`, `tests/test_domain_migration.py` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
 
 From the repository root, after installing `backend/requirements.lock` into a
 Python 3.11+ environment:
@@ -726,22 +867,29 @@ python backend/manage.py sync_templates
 python backend/manage.py rungrpc
 ```
 
+When changing the gRPC schema, regenerate its Python bindings from `backend/`
+using the installed development dependencies:
+
+```sh
+python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. api/proto/templates.proto
+```
+
 The gRPC listener defaults to `127.0.0.1:50051`. Non-loopback listeners require
 TLS unless explicitly started with `--insecure-for-testing`.
 
-Run backend tests with `python backend/manage.py test registry` (SQLite by default).
-Run `npm test` from `backend/` for the JavaScript transport contracts. Python runtime, retrieval, session, privacy, preview and postprocessing tests are in `registry/test_runtime.py`. Node manifests and dependencies belong at `backend/`, outside `graphql/`. The Python migration uses a new embedding version and session serialization prefix; existing chats should start a new session. Old vector records and volumes remain intact. With the Compose services running, exercise real Redis and
+Run backend tests with `python backend/manage.py test tests` (SQLite by default).
+Run `npm test` from `backend/` for the JavaScript transport contracts. Python runtime, retrieval, session, privacy, preview and postprocessing tests are in `tests/test_runtime.py`. Node manifests and dependencies belong at `backend/`, outside `graphql/`. The Python migration uses a new embedding version and session serialization prefix; existing chats should start a new session. Old vector records and volumes remain intact. With the Compose services running, exercise real Redis and
 pgvector using:
 
 ```sh
-docker compose -f docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_TESTS=1 backend python manage.py test registry.test_runtime_storage --noinput
+docker compose -f docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_TESTS=1 backend python manage.py test tests.test_runtime_storage --noinput
 ```
 
 Cover history isolation, missing data, zero baselines, duplicated lines,
 provider failures and invalid model output without calling a paid provider.
 Run `node --test tests/contract.test.js` from `ui-payroll-agent/` after installing
 Node dependencies. The sections above describe container setup, MySQL and API flows.
-GraphQL adapter tests live in `backend/tests/`; fixtures and question data live under `registry/`.
+GraphQL adapter and Python tests live in `backend/tests/`; fixtures live in `tests/fixtures/`, and the shared question library lives in `agents/question/payroll_questions.json`.
 
 `getDomainAgentsTemplates(domainName)` returns reusable templates, not saved agents.
 `getServiceAgentRegistry(serviceName, domainName)` filters saved agents by their

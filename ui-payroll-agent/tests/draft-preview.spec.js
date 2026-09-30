@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 
 test('editing unsaved payroll checks the latest input without saving and rejects stale responses', async ({ page }) => {
-  const run = JSON.parse(readFileSync(new URL('../../backend/registry/fixtures/payrun-PR-2026-09-B.json', import.meta.url), 'utf8')).payrun
+  const run = JSON.parse(readFileSync(new URL('../../backend/tests/fixtures/payrun-PR-2026-09-B.json', import.meta.url), 'utf8')).payrun
   run.lines.forEach((line, index) => { line.lineId ||= `line-${index}` })
   const employee = run.lines.find(line => line.payType === 'hourly')
   const checks = [], mutations = [], errors = []

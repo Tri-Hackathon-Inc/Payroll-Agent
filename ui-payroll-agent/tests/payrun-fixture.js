@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-const fixture = JSON.parse(readFileSync(new URL('../../backend/registry/fixtures/payrun-PR-2026-09-B.json', import.meta.url), 'utf8')).payrun
+const fixture = JSON.parse(readFileSync(new URL('../../backend/tests/fixtures/payrun-PR-2026-09-B.json', import.meta.url), 'utf8')).payrun
 export const payrollUrl = process.env.TRINET_UI_URL || 'http://127.0.0.1:5184/trinet/'
 export const agents = [
   { id: 'scope-ad', name: 'Scope AD', templateId: 'anomaly-detection', config: { page: 'payrun', questions: ['Which payments need review?'] } },

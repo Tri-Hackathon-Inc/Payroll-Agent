@@ -4,7 +4,7 @@ const http = require('node:http');
 const { once } = require('node:events');
 const { resolvers } = require('../graphql/aistudio');
 const { encodeStruct, decodeStruct, getGrpcMetadata } = require('../graphql/client');
-const { handleHttp } = require('../local_server/http-adapter');
+const { handleHttp, isHttpRequest } = require('../local_server/http-adapter');
 
 test('GraphQL executes in Python and preserves structured replies and session metadata', async () => {
   const input = { agentId: 'a', domainName: 'd', message: 'Why less?', context: { payrunId: 'p' }, confirmation: { mappingId: 'm', questionId: 'q' } };
@@ -53,4 +53,36 @@ test('untrusted session-owner headers are not forwarded', () => {
   const metadata = getGrpcMetadata({ headers: { 'x-session-owner': 'forged', 'x-client-address': 'forged' }, sessionOwner: 'trusted', clientAddress: 'local' });
   assert.deepEqual(metadata.get('x-session-owner'), ['trusted']);
   assert.deepEqual(metadata.get('x-client-address'), ['local']);
+});
+
+test('POST /agents forwards creation to Python and returns the persisted agent', async t => {
+  const calls = [];
+  const context = { context: {}, dataSources: { grpc: { call: async (...args) => {
+    calls.push(args);
+    if (args[4].name === 'Denied') throw { code: 7, details: 'Administrator access required.' };
+    return { id: 'saved-id', name: args[4].name, domain_name: 'payroll', template_id: 'general-query',
+      template_version: 1, config: args[4].config, model_config: encodeStruct({ provider: 'demo' }), created_at: 'now', updated_at: 'now' };
+  } } } };
+  assert.equal(isHttpRequest('/agents'), true);
+  assert.equal(isHttpRequest('/agents/'), true);
+  const server = http.createServer((req, res) => handleHttp(req, res, new URL(req.url, 'http://localhost'), context));
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const url = `http://127.0.0.1:${server.address().port}/agents`;
+  const body = { domainName: 'payroll', templateId: 'general-query', name: 'Query', config: { pipelines: { query: { candidateLimit: 2 } } } };
+  const response = await fetch(url, { method: 'POST', body: JSON.stringify(body) });
+  assert.equal(response.status, 201);
+  assert.equal(calls[0][3], 'CreateAgent');
+  assert.deepEqual(calls[0][4], { domain_name: 'payroll', template_id: 'general-query', name: 'Query', config: encodeStruct(body.config) });
+  const agent = await response.json();
+  assert.equal(agent.id, 'saved-id');
+  assert.equal(agent.domainName, 'payroll');
+  assert.deepEqual(agent.config, body.config);
+  assert.deepEqual(agent.modelConfig, { provider: 'demo' });
+  assert.equal((await fetch(url)).status, 405);
+  const invalid = await fetch(url, { method: 'POST', body: JSON.stringify({ ...body, config: [] }) });
+  assert.equal(invalid.status, 400);
+  const denied = await fetch(url, { method: 'POST', body: JSON.stringify({ ...body, name: 'Denied' }) });
+  assert.equal(denied.status, 403);
 });

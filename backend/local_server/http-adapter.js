@@ -5,7 +5,7 @@ const { encodeStruct, decodeStruct, getGrpcMetadata } = require('../graphql/clie
 const webhookPath = /^\/webhook\/([^/]+)\/([^/]+)\/?$/;
 const agentPath = /^\/agents\/([^/]+)\/([^/]+)\/?$/;
 const isHttpRequest = path => webhookPath.test(path) || agentPath.test(path)
-  || ['/auth/admin', '/auth/logout', '/events/payroll', '/events/preview', '/events/stream'].includes(path);
+  || ['/agents', '/agents/', '/auth/admin', '/auth/logout', '/events/payroll', '/events/preview', '/events/stream'].includes(path);
 
 async function readJson(req) {
   const chunks = [];
@@ -59,6 +59,16 @@ async function handleHttp(req, res, url, context) {
       return send(204, null);
     }
     const body = await readJson(req);
+    if (['/agents', '/agents/'].includes(url.pathname)) {
+      const agent = await call('CreateAgent', {
+        domain_name: body.domainName, template_id: body.templateId, name: body.name, config: encodeStruct(body.config),
+      }, false);
+      return send(201, {
+        id: agent.id, name: agent.name, domainName: agent.domain_name, templateId: agent.template_id,
+        templateVersion: agent.template_version, config: decodeStruct(agent.config), modelConfig: decodeStruct(agent.model_config),
+        createdAt: agent.created_at, updatedAt: agent.updated_at,
+      });
+    }
     if (url.pathname.startsWith('/auth/')) {
       const result = await call('Authenticate', { ...body, action: url.pathname === '/auth/logout' ? 'logout' : 'login' });
       if (result.cookie) addCookie(res, result.cookie);
@@ -70,8 +80,8 @@ async function handleHttp(req, res, url, context) {
     return send(200, await call('ExecuteAgent', { ...body, domainName: decodeURIComponent(webhook[1]), agentId: decodeURIComponent(webhook[2]), channel: 'payroll' }));
   } catch (error) {
     const mapped = { 3: 400, 4: 504, 5: 404, 7: 403, 8: 429, 9: 400, 10: 409, 11: 410, 14: 503, 16: 401 }[error.code];
-    const status = error.status || mapped || 502;
-    return send(status, { message: error.status ? error.message : mapped ? error.details : 'Backend service unavailable.' });
+    const status = error.status || mapped || (error.extensions?.code === 'BAD_USER_INPUT' ? 400 : 502);
+    return send(status, { message: error.status || error.extensions?.code === 'BAD_USER_INPUT' ? error.message : mapped ? error.details : 'Backend service unavailable.' });
   }
 }
 
