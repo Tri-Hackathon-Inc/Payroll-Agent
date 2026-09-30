@@ -33,7 +33,7 @@ class ConversationStore {
     this.ttl = Math.max(60, Math.min(ttl, 86400));
   }
 
-  async run({ sessionId, requestId, scope, context = {}, question, history = [] }, execute) {
+  async run({ sessionId, requestId, scope, context = {}, question, history = [], confirmation }, execute) {
     if (typeof question !== 'string' || !question.trim() || question.length > 10000) throw failure('A question of at most 10,000 characters is required.', 400);
     if (sessionId && !/^[a-f0-9]{64}$/.test(sessionId)) throw failure('Invalid conversation session.', 400);
     if (requestId && (typeof requestId !== 'string' || !/^[a-zA-Z0-9-]{1,80}$/.test(requestId))) throw failure('Invalid request ID.', 400);
@@ -45,7 +45,7 @@ class ConversationStore {
     const id = sessionId || randomBytes(32).toString('hex');
     const key = `payroll:session:${id}`, lock = `${key}:lock`, token = randomUUID();
     const client = this.client || await getRedis();
-    const scopeHash = digest(scope), requestHash = digest({ question, context });
+    const scopeHash = digest(scope), requestHash = digest({ question, context, confirmation });
     try {
       if (!await client.set(lock, token, { NX: true, PX: 300000 })) throw failure('A response is already being prepared in this conversation. Retry shortly.', 409);
       try {
@@ -61,12 +61,13 @@ class ConversationStore {
           await client.expire(key, this.ttl);
           return { ...state.lastRequest.answer, session: { id, status: 'active', expiresInSeconds: this.ttl } };
         }
-        const { answer, focus = state.focus } = await execute(state);
+        const { answer, focus = state.focus, pendingQuestion = null, recordTurn = true } = await execute(state);
         const content = answer.reply ?? answer.output;
         if (typeof content !== 'string') throw failure('The model did not return a conversation response.');
-        const turns = [...state.history, { role: 'user', content: question.trim() }, { role: 'assistant', content }].slice(-40);
+        // A question proposal is pending UI state, not a completed user/assistant turn.
+        const turns = recordTurn ? [...state.history, { role: 'user', content: question.trim() }, { role: 'assistant', content }].slice(-40) : [...state.history];
         while (turns.length > 2 && JSON.stringify(turns).length > 60000) turns.splice(0, 2);
-        const updated = { ...state, history: turns, focus, updatedAt: new Date().toISOString(),
+        const updated = { ...state, history: turns, focus, pendingQuestion, updatedAt: new Date().toISOString(),
           lastRequest: { id: requestId || null, hash: requestHash, answer } };
         const saved = await client.eval(SAVE, { keys: [lock, key], arguments: [token, JSON.stringify(updated), String(this.ttl)] });
         if (!saved) throw failure('The conversation took too long to save. Retry your question.', 409);

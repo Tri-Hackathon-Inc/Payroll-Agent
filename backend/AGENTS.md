@@ -51,16 +51,16 @@ There are two flows:
 
 | Flow | Trigger | Result |
 | --- | --- | --- |
-| Query flow | A user submits a question to a saved agent in the UI | The backend restores the Redis session, retrieves relevant historical documents from PostgreSQL/pgvector, and returns a grounded model answer plus calculated evidence. |
+| Query flow | A user submits a question to a saved agent in the UI | For payrun queries, the backend semantically matches existing questions, waits for selection, retrieves historical payments, calls the answer model, and postprocesses the result. |
 | Agent creation and service attachment flow | A user chooses a template, model, primary service, attached services and host page | `AgentFactory` saves the validated agent and service associations in `agent_info`; the host UI discovers the saved agent through the registry. No model call occurs during creation. |
 
 ### 1. Query flow end to end: UI -> backend -> models -> UI
 
-The payrun webhook and GraphQL `chatAgent` with payrun context use this flow when
-RAG is enabled and Redis is configured. Agent Studio chat without a payrun uses
-the standalone gRPC model runtime described below. The two model calls in the
-payrun flow have separate jobs: resolve the question's intention, then write an
-answer from retrieved history and calculated evidence.
+The payrun webhook and GraphQL `chatAgent` with payrun context require Redis and
+use this two-stage semantic search flow. The first search returns existing
+questions for user selection. Only after selection does historical retrieval run,
+followed by one answer-model call with the enriched context. Agent Studio chat
+without a payrun uses the standalone gRPC model runtime described below.
 
 ```mermaid
 flowchart TD
@@ -68,19 +68,23 @@ flowchart TD
     API --> Setup["Validate request, load agent/model and restore session"]
     Setup -->|gRPC registry and template lookup| MySQL[("MySQL: saved agent and model catalog")]
     Setup <-->|ConversationStore| Redis[("Redis: recent turns, context and focus")]
-    Setup --> Load["TRINET_API_URL: fetch current payrun and historical payments"]
+    Setup --> Match["Embed query and rank configured/shared questions"]
+    Match <--> Questions[("PostgreSQL + pgvector: question embeddings")]
+    Match --> Propose["Store pending candidates in Redis; return question list"]
+    Propose --> Select["User selects a question"]
+    Select --> Confirm["Validate mapping, expiry, configuration and session scope"]
+    Confirm --> Load["TRINET_API_URL: fetch current payrun and historical payments"]
     Load --> Evidence["Preprocess: validate data and calculate employee comparisons"]
-    Evidence --> Intent["Model 1: question + recent turns -> intent, employees, topics, search query"]
-    Intent --> Filters["Validate filters against visible employees; apply selected employee"]
+    Evidence --> Filters["Resolve confirmed question, employee scope and topics without an intent LLM"]
     Filters --> Docs["Build eligible historical documents by employee, payrun and topic"]
     Docs --> Embed["Local MiniLM embeddings: 384 dimensions"]
     Embed --> Index["Reuse existing vectors; insert new documents and embeddings"]
     Index --> PG[("PostgreSQL + pgvector: historical semantic memory")]
     Index --> KNN["Embed search query; filter and rank eligible documents with cosine KNN"]
     PG --> KNN
-    KNN --> Answer["Model 2: selected agent model -> structured answer and finding comments"]
+    KNN --> Answer["Selected agent model: enriched context -> structured answer and finding comments"]
     Evidence --> Answer
-    Answer --> Validate["Postprocess: validate JSON, citations and finding references"]
+    Answer --> Validate["Postprocess: validate JSON, citations and finding coverage; format answer, sources and calculated review"]
     Validate --> Save["Save completed turn and updated focus in Redis"]
     Save --> Redis
     Save --> Reply["Return API response; UI renders answer, findings and historical sources"]
@@ -106,22 +110,30 @@ For example, the Payroll Assistant sends this first-turn body to
 }
 ```
 
+The first response has `status: "confirmation_required"`, a `questionMapping`
+with up to three candidates, and a `session.id`. Submit the original question,
+same context, returned session ID, a new request ID, and
+`confirmation: { mappingId: questionMapping.id, questionId: selectedCandidate.id }`.
+Mappings expire after ten minutes and are bound to the browser, domain, agent,
+payrun, employee, original query and current agent configuration. A proposal does
+not call the payroll API or an LLM and is not saved as a completed conversation turn.
+
 For a follow-up such as "What about their deductions?", send `sessionId` with
-the returned ID, the same context and a new `requestId`. Recent turns and saved
-employee/topic focus let the intent step resolve the reference. An explicit UI
-employee selection takes precedence over model-selected employees. Agent Studio
+the returned ID, the same context and a new `requestId`; each new query goes through
+question selection again. Recent turns and saved employee/topic focus resolve
+references. An explicit UI employee selection takes precedence. Agent Studio
 uses GraphQL `chatAgent(input)` with `agentId`, `domainName` and `message` in place
 of the webhook URL parameters and `question`.
 
 | Step | Implementation and behavior |
 | --- | --- |
 | 1. Resolve request and session | `graphql/webhook.js` or `graphql/aistudio.js` resolves the saved agent within its domain and the selected model from current template options through gRPC. `graphql/redisStore.js` restores scoped messages and focus. The webhook loads the agent before opening the session; GraphQL loads it inside the session callback. |
-| 2. Load and preprocess payroll | `graphql/payrunContext.js` fetches source data; `AnomalyPreprocessor` validates the employee selection, chooses compatible history and computes baselines and findings before inference. |
-| 3. Resolve intention | `graphql/rag/intent.js` calls `RAG_INTENT_MODEL_ID` (default `Qwen/Qwen2.5-72B-Instruct`) with the question, recent conversation and visible employees. Validate the returned intent, employee IDs, topics and search query. |
+| 2. Match and select a question | `graphql/rag/questionFlow.js` combines configured and shared questions. `QuestionVectorStore` indexes their embeddings in `payroll_question_embeddings` and ranks them by cosine distance. Return candidates and wait for a valid selection before retrieval or inference. |
+| 3. Load and preprocess payroll | After selection, `graphql/payrunContext.js` fetches source data. `AnomalyPreprocessor` computes baselines and findings. The pipeline resolves employees and topics from the confirmed question and conversation without an intent-model call. |
 | 4. Index historical context | `graphql/rag/documents.js` builds earnings, overtime and deduction documents. `graphql/rag/embeddings.js` uses local `Xenova/all-MiniLM-L6-v2` with normalized mean pooling, quantized weights and 384 dimensions. Stable content IDs avoid re-embedding unchanged documents. First use downloads public weights to `embedding_cache`; no embedding API key is needed. |
 | 5. Retrieve with filters and KNN | `graphql/rag/vectorStore.js` embeds the search query and uses parameterized SQL with pgvector cosine distance. Filter by domain/service/company scope, eligible historical IDs, embedding version, employee selection and topic. Default `RAG_TOP_K=6`, maximum 20; this is exact KNN. |
-| 6. Generate the answer | `graphql/rag/pipeline.js` creates `ChatModel` for the selected agent model. The prompt includes instructions, current employee details, recent turns, retrieved documents and calculated evidence. New AD agents default to `meta-llama/Llama-3.3-70B-Instruct`; this is a separate inference call from intent classification. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
-| 7. Postprocess | `PayrollAnswerPostprocessor` in `graphql/rag/postprocessor.js` validates the structured answer, supplied source IDs and exactly one valid comment per calculated finding. Invalid model output is discarded; calculated evidence remains available. |
+| 6. Generate the answer | `graphql/rag/pipeline.js` creates `ChatModel` for the selected agent model. The prompt includes the confirmed question, original query, instructions, current employee details, recent turns, retrieved documents and calculated evidence. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
+| 7. Postprocess | `PayrollAnswerPostprocessor` in `graphql/rag/postprocessor.js` validates JSON, supplied source IDs and exactly one valid comment per calculated finding. It deduplicates citations, resolves their metadata from retrieved history, and formats the summary, historical sources and calculated review. Invalid model output is discarded as a whole; calculated evidence remains available. |
 | 8. Save and display | `ConversationStore` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `ui-payroll-agent/src/ui-templates/payrun-assistant/payrun-assistant.component.ts` or `agent-chat.component.ts` renders it and retains the session ID for follow-ups. |
 
 Historical retrieval considers up to `RAG_HISTORY_LIMIT=100` runs (maximum 500);
@@ -182,11 +194,13 @@ still govern which stored documents may enter a model prompt.
 | Agent Studio without payrun context | GraphQL `chatAgent(input)` -> Redis -> gRPC `ChatAgent` with restored history -> saved model runtime | `output`, `demo`, `session` |
 | Agent Studio webhook chat window | `POST /webhook/<domainName>/<agentId>` -> Redis -> generic prompt with restored recent turns (anomaly agents require payrun context) | `reply`, `session` |
 
-Missing intent credentials or invalid intent output select a labeled rule-based
-fallback (`rules` or `rules_fallback`). Missing answer credentials, failed
-retrieval, or invalid model output return calculated comparisons with explicit
-status. Set `RAG_ENABLED=false` to use the earlier webhook processing path.
-Direct gRPC callers retain the stateless history-in/history-out contract.
+Failed question matching returns an error before payroll retrieval or inference.
+Missing answer credentials, failed historical retrieval, or invalid model output
+return calculated comparisons with explicit status. The public payrun adapters
+always require question selection, including when `RAG_ENABLED=false`; that flag
+only controls the older direct `answerQuestion` path. The direct RAG path without
+a mapped question retains its intent-model/rules fallback. Direct gRPC callers
+retain the stateless history-in/history-out contract.
 
 ### Components and startup
 
@@ -206,7 +220,7 @@ flowchart LR
     Payroll <--> PayrollDB[("TriNet payroll SQLite")]
     Pipeline <--> PG[("PostgreSQL + pgvector: historical semantic memory")]
     Pipeline --> Embed["Local MiniLM embedding model"]
-    Pipeline -->|Intent and answer calls| Model["Hosted model provider API"]
+    Pipeline -->|Answer call after question selection| Model["Hosted model provider API"]
     GRPC -->|Standalone chat| Model
 ```
 
@@ -376,12 +390,14 @@ assistant; closing and reopening the panel retains the selection. Changing the
 payrun clears it. Keep the scope visible and send `context.employeeId` for a
 selected employee, including when using a suggested question such as "Which
 payments need review?". Choosing **All employees** explicitly clears this filter.
-All payrun questions use
-the RAG flow when enabled, including those sent through Agent Studio's optional
-payrun context. The preprocessor flags payment, overtime, bonus and deduction
+All public payrun questions use question selection followed by the RAG flow,
+including those sent through Agent Studio's optional payrun context.
+The preprocessor flags payment, overtime, bonus and deduction
 changes, duplicate lines, negative net pay and post-termination payments.
 
-Both payrun adapters return `analysis` (employees, findings, thresholds and model
+Both payrun adapters first return `status: "confirmation_required"` and
+`questionMapping`; after selection they return `status: "answered"`, the
+`mappedQuestion`, `analysis` (employees, findings, thresholds and model
 status), `retrieval` (intent, source IDs, payrun/employee/topic metadata and
 distances), and `session`. The webhook returns final text as `reply` alongside
 `agent`, `model`, `metrics` and `context`. GraphQL returns `output`, `agentId`,
@@ -389,9 +405,10 @@ distances), and `session`. The webhook returns final text as `reply` alongside
 `metrics` or `context` fields.
 
 The answer model returns JSON with `answer`, `sourceIds` and `findings` before
-postprocessing. Only an accepted narrative is combined with the separately
-labeled calculated review in the final text. `analysis.modelAnswer` contains
-the validated summary, source IDs and finding comments for custom rendering,
+postprocessing. Only an accepted narrative is combined with cited historical
+source labels and the separately labeled calculated review in the final text.
+`analysis.modelAnswer` contains the validated summary, deduplicated source IDs,
+retrieved source metadata (`sources`) and finding comments for custom rendering,
 or null if inference did not produce an accepted answer. The TriNet panel
 displays expandable historical sources. Raw provider output is not sent directly
 to the chat window.

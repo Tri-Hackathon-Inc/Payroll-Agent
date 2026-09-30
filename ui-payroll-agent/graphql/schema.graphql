@@ -67,9 +67,10 @@ scalar JSON
   history: [ChatMessageInput!]
     sessionId: String
     requestId: String
+    confirmation: JSON
     context: JSON
   }
-  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
+  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON, status: String, questionMapping: JSON, mappedQuestion: JSON }
   type Viewer {
     role: String!
     features: [String!]!

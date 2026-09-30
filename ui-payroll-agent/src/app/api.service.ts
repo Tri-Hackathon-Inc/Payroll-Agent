@@ -1,8 +1,8 @@
 import { Injectable } from '@angular/core';
-import { Agent, Domain, WebhookReply } from './models';
+import { Agent, Domain, WebhookReply, QuestionConfirmation } from './models';
 
 export class ApiError extends Error { constructor(message: string, public code?: string) { super(message); } }
-export const requestId = () => globalThis.crypto.randomUUID?.()
+export const requestId = (): string => globalThis.crypto.randomUUID?.()
   ?? Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
 
 @Injectable({ providedIn: 'root' })
@@ -26,11 +26,11 @@ export class ApiService {
   }
   stored(key: string): string | undefined { try { return sessionStorage.getItem(key) || undefined; } catch { return undefined; } }
   store(key: string, id?: string): void { try { if (id) sessionStorage.setItem(key, id); else sessionStorage.removeItem(key); } catch { /* Storage is optional. */ } }
-  async webhook(domain: Domain, agent: Agent, question: string, context?: Record<string, unknown>, conversation = false, source = 'agent-studio-chat'): Promise<WebhookReply> {
+  async webhook(domain: Domain, agent: Agent, question: string, context?: Record<string, unknown>, conversation = false, source = 'agent-studio-chat', confirmation?: QuestionConfirmation, submissionId = requestId()): Promise<WebhookReply> {
     const key = this.sessionKey(domain, agent, context);
     const response = await fetch(this.url(`webhook/${encodeURIComponent(domain.name)}/${encodeURIComponent(agent.id)}`), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, context, source,
-        ...(conversation ? { sessionId: this.stored(key), requestId: requestId() } : {}) }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, context, source, confirmation,
+        ...(conversation ? { sessionId: this.stored(key), requestId: submissionId } : {}) }),
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new ApiError(body.message || `Webhook request failed (${response.status}).`);

@@ -1,7 +1,8 @@
 import { AfterViewChecked, Component, ElementRef, HostListener, OnInit, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService, requestId } from '../../app/api.service';
-import { Agent, errorMessage } from '../../app/models';
+import { Agent, QuestionMapping, errorMessage } from '../../app/models';
+import { QuestionConfirmationComponent } from '../../app/question-confirmation.component';
 import { RATE_ANSWER_MUTATION, SERVICE_AGENT_REGISTRY_QUERY } from '../../graphql/operations.js';
 import { QUESTION_BANK } from '../../questionBank.js';
 import { IncidentComponent } from './incident.component';
@@ -13,7 +14,7 @@ const QUESTIONS = ['Which payments need review?', 'How does this payrun compare 
   'Is anyone paid after their termination date?', 'What should I check before approving this payrun?'];
 const LIBRARY = QUESTION_BANK.map(group => ({ category: group.category, prompts: group.questions.map(item => item.prompt) }));
 
-@Component({ selector: 'payrun-assistant', standalone: true, imports: [FormsModule, IncidentComponent],
+@Component({ selector: 'payrun-assistant', standalone: true, imports: [FormsModule, IncidentComponent, QuestionConfirmationComponent],
   providers: [{ provide: ApiService, useClass: PayrunApiService }], templateUrl: './payrun-assistant.component.html' })
 export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
   @ViewChild('thread') thread?: ElementRef<HTMLElement>;
@@ -22,6 +23,7 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
   host: PayrunHostContext | null = null;
   agents: Agent[] = []; incidentAgent?: Agent; agentId = ''; loading = true; loadError = '';
   messages: ConversationMessage[] = []; question = ''; error = ''; sending = false; handingOff = false;
+  pending: { mapping: QuestionMapping; scope: string; messageId: string; requestId: string } | null = null;
   libraryOpen = false; librarySearch = ''; private scrollPending = false; private loadGeneration = 0;
   readonly questionCount = LIBRARY.reduce((count, group) => count + group.prompts.length, 0);
   readonly instance = new URLSearchParams(location.search).get('instance') || '';
@@ -45,6 +47,7 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
     this.host = { ...next, employeeId: next.payrun.employees.some(item => item.employeeId === next.employeeId) ? next.employeeId : '' };
     if (changed) { this.messages = []; this.error = ''; this.question = ''; this.closeLibrary(); }
     if (domainChanged) { this.agents = []; this.agentId = ''; this.incidentAgent = undefined; }
+    if (this.pending?.scope !== this.scope) this.pending = null;
     if (domainChanged || reopened) void this.loadAgents();
     this.scrollPending = true;
   }
@@ -84,10 +87,29 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
   }
   selectEmployee(employeeId: string): void {
     if (!this.host || this.busy) return;
-    this.host = { ...this.host, employeeId }; this.error = ''; this.scrollPending = true;
+    this.host = { ...this.host, employeeId }; this.pending = null; this.error = ''; this.scrollPending = true;
     this.emit('employee-change', { employeeId });
   }
-  newChat(): void { this.api.store(this.scope); this.messages = this.messages.filter(item => item.scope !== this.scope); this.error = ''; }
+  newChat(): void { this.api.store(this.scope); this.pending = null; this.messages = this.messages.filter(item => item.scope !== this.scope); this.error = ''; }
+  agentChanged(): void { this.pending = null; this.error = ''; }
+  revise(): void {
+    if (!this.pending || this.busy) return;
+    this.question = this.pending.mapping.originalQuery;
+    this.messages = this.messages.filter(item => item.id !== this.pending?.messageId);
+    this.pending = null; this.error = '';
+  }
+  async confirm(questionId: string): Promise<void> {
+    const pending = this.pending, agent = this.agent, host = this.host;
+    if (!pending || !agent || !host || this.busy || pending.scope !== this.scope) return;
+    this.sending = true; this.error = '';
+    try {
+      const reply = await this.api.webhook(host.domain, agent, pending.mapping.originalQuery, this.context, true, 'trinet-payrun-mock',
+        { mappingId: pending.mapping.id, questionId }, pending.requestId) as PayrunReply;
+      if (this.pending === pending) this.pending = null;
+      this.renderReply(reply, agent, pending.scope);
+    } catch (error) { if (pending.scope === this.scope) this.error = errorMessage(error); }
+    finally { this.sending = false; this.scrollPending = true; }
+  }
   closeLibrary(): void { this.libraryOpen = false; this.librarySearch = ''; }
   @HostListener('document:mousedown', ['$event']) outside(event: MouseEvent): void {
     if (this.libraryOpen && !this.libraryElement?.nativeElement.contains(event.target as Node)
@@ -100,12 +122,20 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
   private append(...items: ConversationMessage[]): void { this.messages.push(...items); this.scrollPending = true; }
   async ask(text: string): Promise<void> {
     const question = text.trim(), agent = this.agent, host = this.host, scope = this.scope;
-    if (!question || !agent || !host || this.busy) return;
+    if (!question || !agent || !host || this.busy || this.pending) return;
     this.closeLibrary(); this.error = ''; this.sending = true; this.question = '';
-    this.append({ id: requestId(), role: 'user', text: question, scope });
+    const messageId = requestId();
+    this.append({ id: messageId, role: 'user', text: question, scope });
     try {
       const reply = await this.api.webhook(host.domain, agent, question, this.context, true, 'trinet-payrun-mock') as PayrunReply;
-      this.append({ id: requestId(), role: 'agent', text: reply.reply, scope, agent: agent.name,
+      if (reply.status === 'confirmation_required' && reply.questionMapping) {
+        if (scope === this.scope) this.pending = { mapping: reply.questionMapping, scope, messageId, requestId: requestId() };
+      } else this.renderReply(reply, agent, scope);
+    } catch (error) { if (scope === this.scope) { this.error = errorMessage(error); this.question = question; } }
+    finally { this.sending = false; this.scrollPending = true; }
+  }
+  private renderReply(reply: PayrunReply, agent: Agent, scope: string): void {
+      this.append({ id: requestId(), role: 'agent', text: reply.reply, scope, agent: agent.name, mappedQuestion: reply.mappedQuestion?.text,
         modelStatus: reply.analysis?.modelStatus, sources: reply.retrieval?.sources, source: answerSource(reply),
         interactionId: reply.interactionId, rating: '', suggested: reply.incidentAlert?.review ? reply.incidentAlert.suggested : [],
         alreadyRaised: reply.incidentAlert?.review && !reply.incidentAlert.raised ? reply.incidentAlert.alreadyRaised : 0,
@@ -114,12 +144,10 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
       if (raised) this.append(
         { id: requestId(), role: 'handoff', scope, text: `${raised.findings.length} critical findings: ${agent.name} raised an incident automatically with ${raised.agent.name}.` },
         { id: requestId(), role: 'incident', scope, text: raised.reply, agent: raised.agent.name, incident: raised.incident });
-    } catch (error) { if (scope === this.scope) { this.error = errorMessage(error); this.question = question; } }
-    finally { this.sending = false; this.scrollPending = true; }
   }
   async handOff(): Promise<void> {
     const agent = this.agent, incidentAgent = this.incidentAgent, host = this.host, scope = this.scope;
-    if (!agent || !incidentAgent || !host || this.busy) return;
+    if (!agent || !incidentAgent || !host || this.busy || this.pending) return;
     this.error = ''; this.handingOff = true;
     const conversation = this.visibleMessages.filter(item => item.role === 'user' || item.role === 'agent')
       .map(item => ({ role: item.role, agent: item.agent, text: item.text }));

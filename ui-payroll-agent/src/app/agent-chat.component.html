@@ -12,7 +12,8 @@
     @for (message of messages; track $index) { <div class="border rounded p-3 mb-3"><strong>{{message.role === 'user' ? 'You' : agent.name}}</strong><p class="mb-0 mt-2" style="white-space: pre-wrap; overflow-wrap: anywhere">{{message.content}}</p></div> }
   </div>
   @if (error) { <div role="alert" class="alert alert-danger">{{error}}</div> }
-  @if (sending) { <p role="status">Waiting for a response…</p> }
-  <form (ngSubmit)="send()"><label class="form-label" for="chat-message">Message</label><textarea id="chat-message" name="message" class="form-control mb-3" rows="3" maxlength="10000" required [disabled]="sending" [(ngModel)]="input"></textarea><button class="btn btn-dark" [disabled]="sending || !input.trim()" type="submit">{{sending ? 'Sending…' : 'Send message'}}</button></form>
+  @if (pending) { <app-question-confirmation [mapping]="pending" [busy]="sending" (confirm)="confirm($event)" (revise)="revise()" /> }
+  @if (sending && !pending) { <p role="status">{{payrunId.trim() ? 'Finding the closest predefined question…' : 'Waiting for a response…'}}</p> }
+  <form (ngSubmit)="send()"><label class="form-label" for="chat-message">Message</label><textarea id="chat-message" name="message" class="form-control mb-3" rows="3" maxlength="10000" required [disabled]="sending || !!pending" [(ngModel)]="input"></textarea><button class="btn btn-dark" [disabled]="sending || !!pending || !input.trim()" type="submit">{{sending ? 'Sending…' : 'Send message'}}</button></form>
   <p class="small text-muted mt-3">Conversation context is kept temporarily for follow-ups. New chat starts a fresh session.</p>
 </div></div>

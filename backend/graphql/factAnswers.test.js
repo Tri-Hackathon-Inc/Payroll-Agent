@@ -32,6 +32,7 @@ after(() => servers.forEach(server => server.close()));
 
 // Questions whose answer needs reasoning or general knowledge, so the model answers them.
 const MODEL_QUESTIONS = [
+  'Is anyone paid after their termination date?',
   "Why are Daniel Brooks's taxes so high this run?", 'What is FICA?', 'How is overtime pay usually calculated?',
   'What is the difference between gross pay and net pay?', 'What does a semi-monthly pay frequency mean?',
   'What will the weather be tomorrow?',
@@ -41,7 +42,7 @@ const BANK = require('node:path').join(__dirname, '../../ui-payroll-agent/src/qu
 const hasBank = require('node:fs').existsSync(BANK); // The UI is not inside the backend image.
 
 test('every question-bank answer computed from the data passes its checks; the rest go to the model', { skip: !hasBank && 'question bank not present' }, async () => {
-  const { QUESTION_BANK } = await import(BANK);
+  const { QUESTION_BANK } = await import(require('node:url').pathToFileURL(BANK).href);
   const toModel = [];
   for (const item of QUESTION_BANK.flatMap(group => group.questions)) {
     const answer = answerFromData(item.prompt, context());

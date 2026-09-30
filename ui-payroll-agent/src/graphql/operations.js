@@ -35,7 +35,7 @@ const AGENT_FIELDS = 'id name domainName templateId templateVersion config model
 
 export const CHAT_AGENT_MUTATION = `
   mutation ChatAgent($input: ChatAgentInput!) {
-    chatAgent(input: $input) { agentId modelId output demo session retrieval analysis }
+    chatAgent(input: $input) { agentId modelId output demo session retrieval analysis status questionMapping mappedQuestion }
   }
 `
 

@@ -95,9 +95,10 @@ const typeDefs = `
     history: [ChatMessageInput!]
     sessionId: String
     requestId: String
+    confirmation: JSON
     context: JSON
   }
-  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON }
+  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON, status: String, questionMapping: JSON, mappedQuestion: JSON }
   type Viewer {
     role: String!
     features: [String!]!
@@ -156,7 +157,7 @@ const resolvers = {
   },
   Mutation: {
     chatAgent: requireFeature('testAgents', async (root, { input }, context) => withConversation({
-      sessionId: input.sessionId, requestId: input.requestId, question: input.message, history: input.history || [],
+      sessionId: input.sessionId, requestId: input.requestId, confirmation: input.confirmation, question: input.message, history: input.history || [],
       scope: { domainName: input.domainName, agentId: input.agentId, channel: 'studio', owner: context.context?.sessionOwner },
       context: input.context || {},
     }, async conversation => {
@@ -164,12 +165,15 @@ const resolvers = {
         const agents = await resolvers.Query.getServiceAgentRegistry(null, { domainName: input.domainName }, context);
         const agent = agents.find(item => item.id === input.agentId);
         if (!agent) throw failure('Agent not found in this domain.', 400);
-        const { answerQuestion, agentModel } = require('./webhook');
+        const { agentModel } = require('./webhook');
+        const { runQuestionFlow } = require('./rag/questionFlow');
         const config = resolvers.Agent.config(agent), model = await agentModel(agent, config, context);
-        const { focus, ...result } = await answerQuestion({ agent, config, model, question: input.message,
-          invocation: { ...conversation.context, page: 'payrun' }, domainName: input.domainName, conversation });
-        return { focus, answer: { agent_id: agent.id, model_id: model?.modelId || config.model,
-          output: result.reply, demo: false, retrieval: result.retrieval, analysis: result.analysis } };
+        const result = await runQuestionFlow({ agent, config, model, question: input.message, confirmation: input.confirmation,
+          invocation: { ...conversation.context, page: 'payrun' }, domainName: input.domainName }, conversation);
+        const answer = result.answer;
+        return { ...result, answer: { agent_id: agent.id, model_id: model?.modelId || config.model,
+          output: answer.reply, demo: false, retrieval: answer.retrieval, analysis: answer.analysis,
+          status: answer.status, questionMapping: answer.questionMapping, mappedQuestion: answer.mappedQuestion } };
       }
       const invoke = rpcResolver('ChatAgent', () => ({ agent_id: input.agentId, domain_name: input.domainName,
         message: input.message, history: conversation.history }));

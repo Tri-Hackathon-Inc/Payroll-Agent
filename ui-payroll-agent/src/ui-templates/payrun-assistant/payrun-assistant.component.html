@@ -11,7 +11,7 @@
   @else {
     <div class="tn-copilot-agent">
       <label class="visually-hidden" for="tn-agent">Agent</label><i class="bi bi-robot" aria-hidden="true"></i>
-      <select id="tn-agent" class="form-select form-select-sm" [disabled]="busy" [(ngModel)]="agentId" (ngModelChange)="error = ''">
+      <select id="tn-agent" class="form-select form-select-sm" [disabled]="busy" [(ngModel)]="agentId" (ngModelChange)="agentChanged()">
         @for (item of agents; track item.id) { <option [value]="item.id">{{item.name}}</option> }
       </select>
     </div>
@@ -31,6 +31,7 @@
         @else {
           <div class="tn-copilot-message" [class.user]="item.role === 'user'" [class.agent]="item.role !== 'user'">
             @if (item.agent) { <div class="tn-copilot-author"><i class="bi bi-stars me-1" aria-hidden="true"></i>{{item.agent}}</div> }
+            @if (item.mappedQuestion) { <div class="small text-muted mb-1">Confirmed question: {{item.mappedQuestion}}</div> }
             @if (item.modelStatus) { <div class="small text-muted mb-1">{{item.modelStatus === 'completed' ? 'Calculated evidence with model explanations' : 'Calculated evidence only'}}</div> }
             <div class="tn-copilot-bubble">{{item.text}}</div>
             @if (item.sources?.length) { <details class="small mt-2"><summary>Historical sources ({{item.sources!.length}})</summary><ul>@for (source of item.sources; track source.id) { <li>{{source.employeeId}} · {{source.payrunId}} · {{source.topic}}{{source.cited ? ' (cited)' : ''}}</li> }</ul></details> }
@@ -44,14 +45,15 @@
             @if (item.alreadyRaised) { <div class="tn-copilot-alert info">{{item.alreadyRaised}} critical findings were already raised as an incident for this payrun.</div> }
             @if (item.suggested?.length) { <div class="tn-copilot-alert warning">Suggested for an incident ({{item.suggested!.length}} warnings): @for (finding of item.suggested; track $index) { {{finding.name}} ({{finding.kind}}){{$last ? '' : ', '}} }</div> }
             @if (item === lastAgentMessage && item.role === 'agent') { <div class="tn-copilot-actions">
-              @if (incidentAgent) { <button type="button" class="tn-copilot-action" [disabled]="busy" (click)="handOff()"><i class="bi bi-file-earmark-medical" aria-hidden="true"></i>Create incident report with {{incidentAgent.name}}</button> }
+              @if (incidentAgent) { <button type="button" class="tn-copilot-action" [disabled]="busy || !!pending" (click)="handOff()"><i class="bi bi-file-earmark-medical" aria-hidden="true"></i>Create incident report with {{incidentAgent.name}}</button> }
               @else { <span class="small text-muted">To file an incident, create an Incident Report agent in <a [href]="studioUrl" target="_blank" rel="noreferrer">Agent Studio</a>.</span> }
             </div> }
           </div>
         }
       }
       @if (handingOff) { <div class="tn-copilot-message agent"><div class="tn-copilot-bubble text-muted">{{incidentAgent?.name}} is collecting evidence and writing the report…</div></div> }
-      @if (sending) { <div class="tn-copilot-message agent"><div class="tn-copilot-bubble text-muted">Analyzing {{host.payrun.id}}…</div></div> }
+      @if (pending) { <app-question-confirmation [mapping]="pending.mapping" [busy]="sending" (confirm)="confirm($event)" (revise)="revise()" /> }
+      @if (sending && !pending) { <div class="tn-copilot-message agent"><div class="tn-copilot-bubble text-muted">Finding the closest predefined question…</div></div> }
     </div>
     @if (error) { <p class="tn-copilot-error" role="alert">{{error}}</p> }
     <form class="tn-copilot-compose" (ngSubmit)="ask(question)">
@@ -59,11 +61,11 @@
         <div class="tn-copilot-library-head"><input type="search" [(ngModel)]="librarySearch" name="librarySearch" placeholder="Search questions…" aria-label="Search questions"><button type="button" class="tn-icon-btn" (click)="closeLibrary()" aria-label="Close question list"><i class="bi bi-x-lg" aria-hidden="true"></i></button></div>
         <div class="tn-copilot-library-body">@for (group of library; track group.category) { <section [attr.aria-label]="group.category"><h3>{{group.category}}</h3>@for (prompt of group.prompts; track prompt) { <button type="button" [disabled]="busy" (click)="ask(prompt)">{{prompt}}</button> }</section> } @empty { <p class="text-muted small m-0">No questions match. You can still type your own below.</p> }</div>
       </div> }
-      <div class="tn-copilot-suggestions" role="group" aria-label="Suggested questions">
+      <fieldset [disabled]="busy || !!pending"><div class="tn-copilot-suggestions" role="group" aria-label="Suggested questions">
         @for (prompt of suggestions; track prompt) { <button type="button" class="tn-copilot-chip" [disabled]="busy" (click)="ask(prompt)"><i class="bi bi-stars" aria-hidden="true"></i>{{prompt}}</button> }
         <button #browseButton type="button" class="tn-copilot-chip tn-copilot-browse" [attr.aria-expanded]="libraryOpen" (click)="libraryOpen ? closeLibrary() : libraryOpen = true"><i class="bi bi-list-ul" aria-hidden="true"></i>All questions ({{questionCount}})</button>
       </div>
-      <div class="tn-copilot-input"><input [(ngModel)]="question" name="question" [placeholder]="'Ask ' + agent.name + '…'" [attr.aria-label]="'Ask ' + agent.name"><button type="submit" [disabled]="!question.trim() || busy" aria-label="Send"><i class="bi bi-send" aria-hidden="true"></i></button></div>
+      <div class="tn-copilot-input"><input [(ngModel)]="question" name="question" [placeholder]="'Ask ' + agent.name + '…'" [attr.aria-label]="'Ask ' + agent.name"><button type="submit" [disabled]="!question.trim() || busy || !!pending" aria-label="Send"><i class="bi bi-send" aria-hidden="true"></i></button></div></fieldset>
       <p class="tn-copilot-disclaimer">AI-generated answers can be wrong. Verify before approving payroll.</p>
     </form>
   }

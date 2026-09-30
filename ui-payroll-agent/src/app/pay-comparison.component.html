@@ -1,0 +1,36 @@
+<section class="pay-comparison" aria-label="Paycheck comparison">
+  <div class="comparison-person">{{comparison.employeeName}} <span>{{comparison.employeeId}} · {{comparison.currency}}</span></div>
+  <div class="periods">
+    @for (side of periods; track side) {
+      <section class="period" [class.current]="side === 'current'" [attr.aria-label]="side === 'current' ? 'Current paycheck' : 'Previous paycheck'">
+        <header><span>{{side === 'current' ? 'Current period' : 'Previous period'}}</span><strong>{{dates(comparison[side])}}</strong></header>
+        @if (comparison[side]; as period) {
+          <div class="period-body">
+            @for (row of comparison.rows; track row.key) {
+              <div class="pay-row" [class.net]="row.kind === 'net'" [class.gross]="row.key === 'gross'">
+                <div class="row-values"><span>{{row.label}}</span><strong>{{amount(row, side)}}</strong></div>
+                @if (side === 'current' && row.delta !== null && row.delta !== 0) {
+                  <div class="change" [class.favorable]="favorable(row)" [class.unfavorable]="!favorable(row)">
+                    {{delta(row)}} <span>{{row.kind === 'withholding' ? (row.delta < 0 ? 'less withheld' : 'more withheld') : (row.delta < 0 ? 'decrease' : 'increase')}}</span>
+                  </div>
+                }
+                @if (row.key === 'gross' && comparison.overtime[side] !== null) {
+                  <div class="overtime">Includes {{money(comparison.overtime[side])}} overtime</div>
+                }
+              </div>
+            }
+            <footer>{{period.payrunId}}<br>Paid {{period.payDate}}</footer>
+          </div>
+        } @else { <p class="missing-period">No earlier completed payrun is available for this employee and pay schedule.</p> }
+      </section>
+    }
+  </div>
+  <div class="comparison-summary">
+    <div class="summary-heading"><span aria-hidden="true">▥</span><strong>{{headline}}</strong></div>
+    @if (explanation) { <p>{{explanation}}</p> }
+    @else { <p>Amounts come from the available payroll records.{{comparison.previous ? ' Changes compare the current period with the previous period shown above.' : ' A historical comparison is unavailable.'}}</p> }
+    @if (comparison.previous && !comparison.reconciled) { <p class="comparison-note">The available line items do not fully reconcile to net pay. Review the complete pay statement for missing details.</p> }
+    @if (modelMessage) { <p class="comparison-note">{{modelMessage}}</p> }
+  </div>
+  @if (fullReply) { <details class="comparison-details"><summary>Full answer and calculated review</summary><p>{{fullReply}}</p></details> }
+</section>

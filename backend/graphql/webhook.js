@@ -72,8 +72,13 @@ async function agentModel(agent, config, context) {
 // Without a connected model, step 3 acknowledges the question. context.answerMode "model" skips
 // step 1 and the cache (used to benchmark models). deps allows tests to replace the environment,
 // fetch, the payroll context loader, and the cache.
-async function answerQuestion({ agent, config, model, question, invocation, domainName, conversation }, deps = {}) {
+async function answerQuestion({ agent, config, model, question, invocation, domainName, conversation, mappedQuestion }, deps = {}) {
   const env = deps.env || process.env;
+  if (mappedQuestion) {
+    const { PayrollRagPipeline } = require('./rag/pipeline');
+    return { answeredBy: 'rag', ...await new PayrollRagPipeline(deps).run({ config, model, question: mappedQuestion.text,
+      invocation, domainName, conversation, mappedQuestion }), cached: false };
+  }
   const started = performance.now();
   const modelOnly = invocation?.answerMode === 'model';
   const templateId = agent.template_id || agent.templateId;
@@ -243,7 +248,7 @@ async function handleWebhook(req, res, pathname, context) {
   const elapsed = () => performance.now() - started;
   let request = {}, found = null;
   try {
-    const { question, context: invocation, sessionId, requestId, source } = request = await readJson(req);
+    const { question, context: invocation, sessionId, requestId, source, confirmation } = request = await readJson(req);
     if (typeof question !== 'string' || !question.trim()) return send(res, 400, { message: 'A question is required.' });
     if (question.length > 10000) return send(res, 400, { message: 'Questions must be at most 10,000 characters.' });
 
@@ -271,16 +276,22 @@ async function handleWebhook(req, res, pathname, context) {
       return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...report, interactionId });
     }
     let effective = invocation || {};
-    const answer = await withConversation({ sessionId, requestId, question: question.trim(),
+    const answer = await withConversation({ sessionId, requestId, confirmation, question: question.trim(),
       scope: { domainName, agentId, channel: 'payroll', owner: context.context?.sessionOwner },
       context: invocation || {} }, async conversation => {
       // The session keeps page, payrun, and employee; answerMode is per request.
       effective = { ...conversation.context, ...(invocation?.answerMode ? { answerMode: invocation.answerMode } : {}) };
+      if (effective.payrunId) {
+        const { runQuestionFlow } = require('./rag/questionFlow');
+        return runQuestionFlow({ agent, config, model, question: question.trim(), confirmation,
+          invocation: { ...effective, page: 'payrun' }, domainName }, conversation, { loadContext });
+      }
       const { focus, ...result } = await answerQuestion({ agent, config, model, question: question.trim(),
         invocation: effective, domainName, conversation }, { loadContext });
       return { answer: result, focus };
     });
-    const incidentAlert = answer.answeredBy === 'clarification' ? null : await raiseIncidents({ agent, config, invocation: effective, domainName, question: question.trim() },
+    if (answer.status === 'confirmation_required') return send(res, 200, { agent: { id: agent.id, name: agent.name }, ...answer });
+    const incidentAlert = answer.answeredBy === 'clarification' ? null : await raiseIncidents({ agent, config, invocation: effective, domainName, question: answer.mappedQuestion?.text || question.trim() },
       incidentHandoff({ agents, context, loadContext }));
     const payrunContext = effective?.page === 'payrun' ? await loadContext(effective).catch(() => null) : null;
     const interactionId = await logInteraction({ domainName, agentId, context, question: question.trim(), invocation: effective,

@@ -3,15 +3,34 @@ const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const { ConversationStore, getRedis, closeRedis, digest } = require('./redisStore');
 const { PayrollVectorStore, getVectorPool, closeVectorPool } = require('./rag/vectorStore');
+const { QuestionVectorStore } = require('./rag/questionVectorStore');
 const enabled = process.env.RUN_STORAGE_TESTS === '1';
 const ids = [];
 let testScope;
+let questionScope;
 after(async () => {
   if (!enabled) return;
   const redis = await getRedis();
   for (const id of ids) await redis.del(`payroll:session:${id}`);
   if (testScope) await getVectorPool().query('DELETE FROM payroll_history_documents WHERE scope = $1', [testScope]);
+  if (questionScope) await getVectorPool().query('DELETE FROM payroll_question_embeddings WHERE scope = $1', [questionScope]);
   await closeRedis(); await closeVectorPool();
+});
+
+test('Postgres question KNN uses current catalogue IDs and keeps question embeddings separate from payroll history', { skip: !enabled }, async () => {
+  questionScope = digest(randomUUID());
+  let embedded = 0;
+  const embeddings = { dimensions: 384, version: 'question-integration-384', embed: async texts => texts.map(text => {
+    embedded++; const vector = Array(384).fill(0); vector[text.includes('overtime') ? 0 : 1] = 1; return vector;
+  }) };
+  const store = new QuestionVectorStore(getVectorPool(), embeddings);
+  const questions = ['Explain overtime changes', 'Summarize deductions'].map(text => ({ id: digest([questionScope, text]), text, scope: questionScope }));
+  await store.indexQuestions(questions); await store.indexQuestions(questions);
+  assert.equal(embedded, 2);
+  const matches = await store.search({ questions, query: 'overtime', k: 1 });
+  assert.equal(matches.length, 1); assert.equal(matches[0].text, questions[0].text); assert.ok(matches[0].distance < .001);
+  assert.deepEqual(await store.search({ questions: [{ ...questions[0], scope: digest('other-agent') }], query: 'overtime' }), []);
+  assert.deepEqual(await store.search({ questions: [{ ...questions[0], id: digest('new-revision') }], query: 'overtime' }), []);
 });
 
 test('Redis resumes context, enforces browser/agent scope, caches retries, and expires sessions', { skip: !enabled }, async () => {

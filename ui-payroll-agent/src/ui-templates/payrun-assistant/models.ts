@@ -34,4 +34,5 @@ export interface ConversationMessage {
   modelStatus?: string; sources?: NonNullable<PayrunReply['retrieval']>['sources'];
   source?: ReplySource; interactionId?: string; rating?: string; ratingBusy?: boolean;
   incident?: Incident; suggested?: { name: string; kind: string }[]; alreadyRaised?: number; alertNote?: string;
+  mappedQuestion?: string;
 }
