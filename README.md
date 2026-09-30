@@ -24,9 +24,8 @@ chat, with `anomaly_detection/` for detector logic and the investigation agent,
 `question/` for question matching, and `response/` for citation/finding validation
 and answer formatting. Shared runtime helpers remain in `runtime/`, catalog
 operations live in `template/`, and Python tests and fixtures live in `tests/`.
-Each service, including the `agents/` subservices and `runtime/`, contains a
-`models/` Python package for service-local data models. Shared Django persistence
-lives in `storage/`, and gRPC definitions and handlers live in `api/`.
+Shared Django persistence lives in `storage/models.py`, and gRPC definitions
+and handlers live in `api/`.
 Django retains the `registry` app label to preserve existing tables and migration
 history; this folder reorganization changes neither the schema nor deployment.
 `POST /agents` accepts `domainName`, `templateId`,

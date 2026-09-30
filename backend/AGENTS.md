@@ -16,27 +16,18 @@ contracts in its own `interface.py`, alongside the implementation. There are no
 ```text
 backend/
 |-- agents/         # interface.py, agent.py, chat.py, metrics.py
-|   |-- models/
 |   |-- anomaly_detection/
 |   |   |-- interface.py
 |   |   |-- agent.py # investigation agent
 |   |   |-- logic.py # historical detection
-|   |   |-- rules.py # finding policy
-|   |   `-- models/
+|   |   `-- rules.py # finding policy
 |   |-- question/   # logic.py, payroll_questions.json
-|   |   `-- models/
 |   `-- response/   # logic.py: citation and finding validation
-|       `-- models/
 |-- agent_factory/  # interface.py, factory.py
-|   `-- models/
 |-- template/       # interface.py, config.py, services.py, catalog.py, configuration.py
-|   `-- models/
 |-- model/          # interface.py, model.py, runtime.py
-|   `-- models/
 |-- pipelines/      # interface.py, config.py, payroll.py
-|   `-- models/
 |-- runtime/        # execution, events, sessions and payroll helpers
-|   `-- models/
 |-- storage/
 |   |-- apps.py
 |   |-- models.py
@@ -52,9 +43,8 @@ backend/
 Contract modules use only standard-library imports and never import Django,
 persistence models, transport adapters or provider SDKs. Implementations depend
 on these contracts. Each service and the test directory is a Python package with
-`__init__.py`. Each service, including the `agents/` subservices and `runtime/`,
-has a `models/` Python package for service-local data models. Shared Django
-definitions live in `storage/models.py`; shared catalog operations live in
+`__init__.py`. Shared Django definitions live in `storage/models.py`; shared
+catalog operations live in
 `template/services.py`, `template/catalog.py` and `template/configuration.py`.
 The Django app's Python package is `storage`, while its app label remains
 `registry` for database compatibility. Keep that label, historical migration
