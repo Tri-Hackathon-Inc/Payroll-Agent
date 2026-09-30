@@ -4,6 +4,12 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
 service ai_studio {
+  rpc ExecuteAgent(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc GetViewer(google.protobuf.Empty) returns (google.protobuf.Struct);
+  rpc Authenticate(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc PublishPayrollEvent(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc PreviewPayrollChange(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc WatchPayrollEvents(google.protobuf.Struct) returns (stream google.protobuf.Struct);
   rpc ListTemplates(ServiceName) returns (TemplateList);
   rpc GetTemplate(TemplateId) returns (Template);
   rpc ListDomains(google.protobuf.Empty) returns (DomainList);

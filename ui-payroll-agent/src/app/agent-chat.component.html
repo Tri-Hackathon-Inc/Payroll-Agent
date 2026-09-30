@@ -9,7 +9,14 @@
   </div></details>
   <div role="log" aria-label="Conversation" aria-live="polite" class="my-4">
     @if (!messages.length) { <p class="text-muted">Send a message to start a conversation.</p> }
-    @for (message of messages; track $index) { <div class="border rounded p-3 mb-3"><strong>{{message.role === 'user' ? 'You' : agent.name}}</strong><p class="mb-0 mt-2" style="white-space: pre-wrap; overflow-wrap: anywhere">{{message.content}}</p></div> }
+    @for (message of messages; track $index) { <div class="border rounded p-3 mb-3"><strong>{{message.role === 'user' ? 'You' : agent.name}}</strong>
+      @if (message.analysis?.payComparison; as comparison) {
+        <app-pay-comparison class="mt-3" [comparison]="comparison" [explanation]="message.analysis?.modelAnswer?.summary || ''" [modelMessage]="message.analysis?.modelMessage || ''" [fullReply]="message.analysis?.details || message.content" />
+      } @else {
+        <p class="mb-0 mt-2" style="white-space: pre-wrap; overflow-wrap: anywhere">{{message.content}}</p>
+        @if (message.analysis?.details; as details) { <details class="small mt-2"><summary>View details</summary><p style="white-space: pre-wrap; overflow-wrap: anywhere">{{details}}</p></details> }
+      }
+    </div> }
   </div>
   @if (error) { <div role="alert" class="alert alert-danger">{{error}}</div> }
   @if (pending) { <app-question-confirmation [mapping]="pending" [busy]="sending" (confirm)="confirm($event)" (revise)="revise()" /> }

@@ -33,7 +33,7 @@ export const UPDATE_PAY_LINE_MUTATION = `
   }
 `
 
-// Agent Studio API (backend/graphql/schema.js).
+// Agent Studio API (backend/graphql/aistudio.js).
 export const DOMAINS_QUERY = `
   query ListDomains {
     listDomains { name label domain }

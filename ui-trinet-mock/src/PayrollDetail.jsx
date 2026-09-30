@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CHANGE_NOTE, STATUS, employerTaxes, exemption, hours, hoursFmt, initials, longDay, money, rateLabel, shortDay, sum, usDate } from './format'
 
-export default function PayrollDetail({ run, notice, onDismissNotice, onBack, onSelectLine }) {
+export default function PayrollDetail({ run, notice, onDismissNotice, onBack, onSelectLine, analysis }) {
   const [search, setSearch] = useState('')
   const [bannerOpen, setBannerOpen] = useState(true)
   const query = search.trim().toLowerCase()
@@ -17,6 +17,10 @@ export default function PayrollDetail({ run, notice, onDismissNotice, onBack, on
     ['Employer Contributions', money.format(0)],
   ]
   return <div className="tn-page tn-page-wide">
+    {analysis?.payrunFindings?.length > 0 && <div className="tn-warning" role="status">
+      <i className="bi bi-exclamation-circle" />
+      <span>{analysis.payrunFindings.map(finding => finding.label).join('. ')}. Review against historical payroll.</span>
+    </div>}
     {notice && <div className="tn-success" role="status">
       <i className="bi bi-check-circle" /><span>{notice}</span>
       <button type="button" className="tn-icon-btn ms-auto" onClick={onDismissNotice} aria-label="Dismiss"><i className="bi bi-x-lg" /></button>
@@ -50,6 +54,7 @@ export default function PayrollDetail({ run, notice, onDismissNotice, onBack, on
                     <div>
                       <button type="button" className="tn-link fw-semibold" onClick={() => onSelectLine(line.lineId)}>{line.name}</button>
                       {change && <i className="bi bi-exclamation-circle tn-change-icon" title={change(line)} aria-label={change(line)} />}
+                      {analysis?.findings?.some(finding => finding.employeeId === line.employeeId) && <div className="small text-warning-emphasis">Payroll review needed</div>}
                       <div className="tn-meta">ID: {line.employeeId} • Full-Time<br />{exemption(line)}</div>
                     </div>
                   </div>

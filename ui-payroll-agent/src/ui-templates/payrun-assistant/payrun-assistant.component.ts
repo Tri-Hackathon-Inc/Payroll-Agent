@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, requestId } from '../../app/api.service';
 import { Agent, QuestionMapping, errorMessage } from '../../app/models';
 import { QuestionConfirmationComponent } from '../../app/question-confirmation.component';
+import { PayComparisonComponent } from '../../app/pay-comparison.component';
 import { RATE_ANSWER_MUTATION, SERVICE_AGENT_REGISTRY_QUERY } from '../../graphql/operations.js';
 import { QUESTION_BANK } from '../../questionBank.js';
 import { IncidentComponent } from './incident.component';
@@ -14,7 +15,7 @@ const QUESTIONS = ['Which payments need review?', 'How does this payrun compare 
   'Is anyone paid after their termination date?', 'What should I check before approving this payrun?'];
 const LIBRARY = QUESTION_BANK.map(group => ({ category: group.category, prompts: group.questions.map(item => item.prompt) }));
 
-@Component({ selector: 'payrun-assistant', standalone: true, imports: [FormsModule, IncidentComponent, QuestionConfirmationComponent],
+@Component({ selector: 'payrun-assistant', standalone: true, imports: [FormsModule, IncidentComponent, QuestionConfirmationComponent, PayComparisonComponent],
   providers: [{ provide: ApiService, useClass: PayrunApiService }], templateUrl: './payrun-assistant.component.html' })
 export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
   @ViewChild('thread') thread?: ElementRef<HTMLElement>;
@@ -136,7 +137,7 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
   }
   private renderReply(reply: PayrunReply, agent: Agent, scope: string): void {
       this.append({ id: requestId(), role: 'agent', text: reply.reply, scope, agent: agent.name, mappedQuestion: reply.mappedQuestion?.text,
-        modelStatus: reply.analysis?.modelStatus, sources: reply.retrieval?.sources, source: answerSource(reply),
+        modelStatus: reply.analysis?.modelStatus, analysis: reply.analysis, sources: reply.retrieval?.sources, source: answerSource(reply),
         interactionId: reply.interactionId, rating: '', suggested: reply.incidentAlert?.review ? reply.incidentAlert.suggested : [],
         alreadyRaised: reply.incidentAlert?.review && !reply.incidentAlert.raised ? reply.incidentAlert.alreadyRaised : 0,
         alertNote: reply.incidentAlert?.note });
@@ -150,7 +151,7 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
     if (!agent || !incidentAgent || !host || this.busy || this.pending) return;
     this.error = ''; this.handingOff = true;
     const conversation = this.visibleMessages.filter(item => item.role === 'user' || item.role === 'agent')
-      .map(item => ({ role: item.role, agent: item.agent, text: item.text }));
+      .map(item => ({ role: item.role, agent: item.agent, text: item.analysis?.details || item.text }));
     this.append({ id: requestId(), role: 'handoff', scope, text: `${agent.name} handed this conversation to ${incidentAgent.name}.` });
     try {
       const reply = await this.api.webhook(host.domain, incidentAgent, 'Create an incident report from this conversation.',

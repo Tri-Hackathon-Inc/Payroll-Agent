@@ -1,3 +1,6 @@
 Django>=5.2,<5.3
 grpcio>=1.78,<1.79
 grpcio-tools>=1.78,<1.79
+redis==8.1.0
+psycopg[binary]==3.3.6
+fastembed==0.8.1

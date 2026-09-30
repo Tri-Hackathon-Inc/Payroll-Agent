@@ -3,6 +3,7 @@
 import json
 import os
 import socket
+import time
 from abc import ABC, abstractmethod
 from copy import deepcopy
 from urllib.error import HTTPError, URLError
@@ -80,14 +81,19 @@ class CompatibleChatModel(ModelRuntime):
         for key in ("tools", "tool_choice", "functions", "function_call"):
             payload.pop(key, None)
         request = Request(self.url, data=json.dumps(payload).encode(), headers=self.headers, method="POST")
+        started = time.monotonic()
         try:
             with self.opener.open(request, timeout=45) as response:
                 raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
                 raise ModelExecutionError("The model response exceeded the size limit.")
-            text = json.loads(raw)["choices"][0]["message"]["content"]
+            body = json.loads(raw)
+            text = body["choices"][0]["message"]["content"]
             if not isinstance(text, str) or not text.strip():
                 raise ModelExecutionError("The model returned no text response.")
+            usage = body.get("usage") or {}
+            self.metrics = {"latencyMs": round((time.monotonic()-started)*1000),
+                            "promptTokens": usage.get("prompt_tokens"), "completionTokens": usage.get("completion_tokens")}
             return text
         except (TimeoutError, socket.timeout) as error:
             raise ModelTimeout("The model timed out. Please try again.") from error

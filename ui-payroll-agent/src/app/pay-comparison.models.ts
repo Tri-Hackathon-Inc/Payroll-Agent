@@ -10,6 +10,6 @@ export interface PayComparison {
   netChange: number | null; reconciled: boolean;
 }
 export interface PayrollAnalysis {
-  modelStatus?: string; modelMessage?: string | null; payComparison?: PayComparison | null;
+  modelStatus?: string; modelMessage?: string | null; details?: string; payComparison?: PayComparison | null;
   modelAnswer?: { summary: string } | null;
 }

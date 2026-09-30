@@ -22,7 +22,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        server = grpc.server(ThreadPoolExecutor(max_workers=4))
+        server = grpc.server(ThreadPoolExecutor(max_workers=32))
         add_ai_studioServicer_to_server(AIStudioServicer(), server)
         cert, key, address = options["tls_cert"], options["tls_key"], options["address"]
         if bool(cert) != bool(key):
@@ -42,8 +42,11 @@ class Command(BaseCommand):
         if not port:
             raise CommandError(f"Cannot bind {address}.")
         server.start()
+        from registry.runtime.events import start_monitor
+        monitor = start_monitor()
         self.stdout.write(f"Template catalog listening on {address}")
         try:
             server.wait_for_termination()
         except KeyboardInterrupt:
+            monitor.set()
             server.stop(5).wait()

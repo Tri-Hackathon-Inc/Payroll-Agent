@@ -1,7 +1,7 @@
 // Local-only Apollo host. Reusable bindings remain in ../graphql/.
 const path = require('node:path');
 const { createRequire } = require('node:module');
-const graphqlRequire = createRequire(path.join(__dirname, '../graphql/package.json'));
+const graphqlRequire = createRequire(path.join(__dirname, '../package.json'));
 const settings = require('./apollo-settings.json');
 const http = require('node:http');
 const { randomBytes } = require('node:crypto');
@@ -9,10 +9,7 @@ const { ApolloServer, HeaderMap } = graphqlRequire('@apollo/server');
 const { ApolloServerPluginLandingPageLocalDefault } = graphqlRequire('@apollo/server/plugin/landingPage/default');
 const { createGrpcDataSource } = require('./grpc-client');
 const { typeDefs, resolvers, catalogRpc } = require('../graphql/aistudio');
-const { isWebhookRequest, handleWebhook } = require('../graphql/webhook');
-const { isEventsRequest, handleEvents, startPayrollMonitor } = require('../graphql/payrollEvents');
-const { viewerFor, createAuthHandler, isAuthRequest } = require('../graphql/access');
-const { isAgentRequest, handleAgent } = require('../graphql/agents');
+const { isHttpRequest, handleHttp } = require('./http-adapter');
 
 async function readBody(req) {
   let body = '';
@@ -59,27 +56,15 @@ async function main() {
   try {
     await grpc.waitForReady(catalogRpc.protoPath, catalogRpc.packageName, catalogRpc.serviceName);
     await server.start();
-    // Real-time anomaly detection: checks each payroll change reported to /events/payroll.
-    const monitor = startPayrollMonitor({ context: { dataSources: { grpc }, context: { headers: {} } } });
-    console.log(`Real-time payroll monitor started (${monitor.kind} queue)`);
-    const handleAuth = createAuthHandler();
-    console.log(`Agent Studio access: ${process.env.STUDIO_ADMIN_KEY ? 'admin key required for admin features' : 'open (STUDIO_ADMIN_KEY not set)'}`);
-    // Names only, never values: an empty list means every model answer will fail.
-    const modelKeys = ['HF_TOKEN', 'GROQ_API_KEY', 'GEMINI_API_KEY', 'OPENROUTER_API_KEY', 'OLLAMA_BASE_URL'].filter(name => process.env[name]);
-    if (modelKeys.length) console.log(`Model providers configured: ${modelKeys.join(', ')}`);
-    else console.warn('WARNING: no model keys are set (HF_TOKEN, GROQ_API_KEY, ...); model answers will fail. Start the stack with docker/compose.sh so .env is loaded.');
     const httpServer = http.createServer(async (req, res) => {
       const url = new URL(req.url, 'http://localhost');
       // Bind session IDs to an opaque browser cookie as well as the domain and agent.
       const cookieOwner = req.headers.cookie?.match(/(?:^|;\s*)payroll_client=([a-f0-9]{64})(?:;|$)/)?.[1];
       const sessionOwner = cookieOwner || randomBytes(32).toString('hex');
       if (!cookieOwner) res.setHeader('Set-Cookie', `payroll_client=${sessionOwner}; HttpOnly; SameSite=Lax; Path=/`);
-      const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner, viewer: viewerFor(req.headers) } };
+      const context = { dataSources: { grpc }, context: { headers: req.headers, sessionOwner, clientAddress: req.socket.remoteAddress } };
       try {
-        if (isAuthRequest(url.pathname)) await handleAuth(req, res, url.pathname);
-        else if (isAgentRequest(url.pathname)) await handleAgent(req, res, url.pathname, context);
-        else if (isWebhookRequest(url.pathname)) await handleWebhook(req, res, url.pathname, context);
-        else if (isEventsRequest(url.pathname)) await handleEvents(req, res, url, context);
+        if (isHttpRequest(url.pathname)) await handleHttp(req, res, url, context);
         else await handleGraphQL(server, req, res, url, context);
       } catch (error) {
         console.error(error);

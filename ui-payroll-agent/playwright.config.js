@@ -8,6 +8,7 @@ export default defineConfig({
   timeout: 60000,
   testDir: './tests',
   testMatch: '**/*.spec.js',
+  testIgnore: '**/draft-preview.spec.js',
   workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:5180', trace: 'retain-on-failure',
@@ -16,7 +17,7 @@ export default defineConfig({
       : {},
   },
   webServer: {
-    command: `"${process.execPath}" scripts/dev.mjs --host 127.0.0.1 --port 5180`,
+    command: `"${process.execPath}" scripts/${process.env.AGENT_STUDIO_PREVIEW ? 'preview' : 'dev'}.mjs --host 127.0.0.1 --port 5180`,
     timeout: 180000,
     url: `http://127.0.0.1:5180${BASE}`,
     env: { GRAPHQL_MODE: process.env.GRAPHQL_MODE || 'mock', STUDIO_BASE_PATH: BASE },

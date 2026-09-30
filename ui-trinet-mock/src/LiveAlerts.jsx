@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import IncidentCard from './IncidentCard'
 
 // Real-time anomaly detection on the payrun page: Agent Studio checks every saved change
-// (backend/graphql/payrollEvents.js) and pushes the result here over server-sent events.
+// (backend/registry/runtime/events.py) and pushes the result here over server-sent events.
 const STREAM = `${import.meta.env.BASE_URL}agent-studio/events/stream`
 const CHECK_TOAST_MS = 10000
 const MAX_ALERTS = 4
@@ -10,6 +10,7 @@ const MAX_ALERTS = 4
 export function useLiveAlerts(domainName, payrunId) {
   const [alerts, setAlerts] = useState([])
   const [connected, setConnected] = useState(false)
+  const [snapshot, setSnapshot] = useState(null)
   useEffect(() => {
     if (!domainName || !payrunId || typeof EventSource === 'undefined') return undefined
     const source = new EventSource(`${STREAM}?${new URLSearchParams({ domain: domainName, payrunId })}`)
@@ -18,13 +19,14 @@ export function useLiveAlerts(domainName, payrunId) {
     source.addEventListener('payroll', (message) => {
       try {
         const alert = { ...JSON.parse(message.data), key: `${Date.now()}-${Math.random()}` }
+        if (alert.analysis) setSnapshot(current => !current || alert.version >= current.version ? alert : current)
         setAlerts((current) => [alert, ...current].slice(0, MAX_ALERTS))
       } catch { /* A malformed event is ignored. */ }
     })
-    return () => { source.close(); setConnected(false); setAlerts([]) }
+    return () => { source.close(); setConnected(false); setAlerts([]); setSnapshot(null) }
   }, [domainName, payrunId])
   const dismiss = (key) => setAlerts((current) => current.filter((item) => item.key !== key))
-  return { alerts, connected, dismiss }
+  return { alerts, connected, dismiss, snapshot }
 }
 
 function findingSummary(alert) {

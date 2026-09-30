@@ -1,6 +1,6 @@
 """Agent interaction metrics for the admin view: recording, feedback, and aggregation.
 
-Every answered question is recorded (see graphql/webhook.js). Metrics are measured values only:
+Every answered question is recorded (see registry/runtime/execution.py). Metrics are measured values only:
 counts, latency, tokens, reply checks, findings, incidents, and user feedback; nothing is
 estimated. Benchmark runs are recorded but excluded from the metrics.
 """
@@ -191,7 +191,7 @@ def agent_metrics(domain_name, agent_id="", since_hours=0):
             raise InvalidInput("since_hours must not be negative.")
         rows = rows.filter(created_at__gte=timezone.now() - timedelta(hours=since_hours))
     rows = list(rows.order_by("-created_at")[:MAX_ROWS])
-    # Automatic checks after payroll changes (payrollEvents.js) are not questions: they count
+    # Automatic checks after payroll changes (runtime/events.py) are not questions: they count
     # toward incidents and findings, and are reported separately.
     checks = [row for row in rows if row.source == REALTIME]
     all_rows, rows = rows, [row for row in rows if row.source != REALTIME]

@@ -33,6 +33,7 @@ payrun-assistant { display: block; height: 100%; }
 .tn-copilot-message { display: flex; flex-direction: column; max-width: 92%; }
 .tn-copilot-message.user { align-self: flex-end; }
 .tn-copilot-message.agent { align-self: flex-start; }
+.tn-copilot-message.comparison { max-width: 100%; width: 100%; }
 .tn-copilot-author { margin-bottom: 4px; color: var(--tn-orange); font-size: 12px; font-weight: 600; }
 .tn-copilot-bubble { padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.55; white-space: pre-wrap; }
 .tn-copilot-message.user .tn-copilot-bubble { background: var(--tn-ink); color: #fff; border-bottom-right-radius: 4px; }

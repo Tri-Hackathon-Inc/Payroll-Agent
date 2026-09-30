@@ -3,10 +3,12 @@ const { valueFromASTUntyped } = require('graphql');
 
 function getGrpcMetadata(context = {}) {
   const metadata = new grpc.Metadata();
-  for (const name of ['authorization', 'x-request-id']) {
+  for (const name of ['authorization', 'x-request-id', 'cookie', 'x-payroll-events-token']) {
     const value = context.headers?.[name];
     if (typeof value === 'string') metadata.set(name, value);
   }
+  if (context.sessionOwner) metadata.set('x-session-owner', context.sessionOwner);
+  if (context.clientAddress) metadata.set('x-client-address', context.clientAddress);
   return metadata;
 }
 
@@ -58,7 +60,7 @@ function createRpcResolver(catalogRpc) {
           method, input, getGrpcMetadata(context),
         ));
       } catch (error) {
-        const code = { 3: 'BAD_USER_INPUT', 4: 'TIMEOUT', 5: 'NOT_FOUND', 9: 'MODEL_NOT_CONFIGURED', 14: 'UNAVAILABLE' }[error.code];
+        const code = { 3: 'BAD_USER_INPUT', 4: 'TIMEOUT', 5: 'NOT_FOUND', 7: 'FORBIDDEN', 8: 'RATE_LIMITED', 9: 'MODEL_NOT_CONFIGURED', 10: 'SESSION_CONFLICT', 11: 'SESSION_EXPIRED', 14: 'UNAVAILABLE', 16: 'UNAUTHENTICATED' }[error.code];
         throw apiError(code ? error.details : 'Backend service unavailable.', code || 'INTERNAL_SERVER_ERROR');
       }
     };

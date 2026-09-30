@@ -1,6 +1,6 @@
 FROM docker.io/library/node:22-bookworm-slim AS graphql-deps
-WORKDIR /app/graphql
-COPY backend/graphql/package.json backend/graphql/package-lock.json ./
+WORKDIR /app
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
 
 FROM docker.io/library/python:3.11-slim-bookworm AS python-deps
@@ -18,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends libmariadb3 && 
 COPY --from=python-deps /wheels /wheels
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.lock && rm -rf /wheels
 COPY backend/ ./
-COPY --from=graphql-deps /app/graphql/node_modules ./graphql/node_modules
+COPY --from=graphql-deps /app/node_modules ./node_modules
 EXPOSE 4000 50051
 CMD ["python", "-m", "local_server.run_backend"]
 

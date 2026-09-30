@@ -8,7 +8,12 @@ Install Docker Desktop with Compose v2, or Podman with `podman-compose`.
 Agent Studio (`ui-payroll-agent`) uses Angular with TypeScript components and
 separate HTML templates in `src/app/`. The TriNet demo remains a separate UI.
 Containers include Node 22; local Angular development requires Node 22.12+ or
-Node 24. The Python and GraphQL backend APIs are unchanged by the UI migration.
+Node 24. `backend/graphql/` contains only the JavaScript GraphQL-to-gRPC adapters.
+Python in `backend/registry/runtime/` owns question matching, historical retrieval,
+model calls, response validation, sessions, access checks and real-time monitoring.
+Node manifests are at `backend/`; the HTTP/SSE transport is in `backend/local_server/`.
+Payrun questions require selection of a matched question before retrieval and inference.
+Unsaved payroll edits receive read-only historical checks; saved edits trigger the monitor.
 
 **Docker:** start Docker Desktop.
 

@@ -3,9 +3,10 @@ import { FormsModule } from '@angular/forms';
 import { ApiService, requestId } from './api.service';
 import { Agent, Domain, Message, ChatReply, QuestionMapping, QuestionConfirmation, errorMessage } from './models';
 import { QuestionConfirmationComponent } from './question-confirmation.component';
+import { PayComparisonComponent } from './pay-comparison.component';
 import { CHAT_AGENT_MUTATION } from '../graphql/operations.js';
 
-@Component({ selector: 'app-agent-chat', standalone: true, imports: [FormsModule, QuestionConfirmationComponent], templateUrl: './agent-chat.component.html' })
+@Component({ selector: 'app-agent-chat', standalone: true, imports: [FormsModule, QuestionConfirmationComponent, PayComparisonComponent], templateUrl: './agent-chat.component.html' })
 export class AgentChatComponent implements OnChanges {
   @Input({ required: true }) agent!: Agent;
   @Input({ required: true }) domain!: Domain;
@@ -28,14 +29,14 @@ export class AgentChatComponent implements OnChanges {
     try {
       const sessionId = this.api.stored(key);
       const { chatAgent } = await this.api.graphql<{ chatAgent: ChatReply }>(CHAT_AGENT_MUTATION, { input: {
-        agentId: this.agent.id, domainName: this.domain.name, message, history: sessionId ? [] : this.messages.slice(-40), sessionId,
+        agentId: this.agent.id, domainName: this.domain.name, message, history: sessionId ? [] : this.messages.slice(-40).map(({ role, content }) => ({ role, content })), sessionId,
         requestId: confirmation ? this.confirmationRequestId : requestId(), confirmation,
         context: this.payrunId.trim() ? { page: 'payrun', payrunId: this.payrunId.trim(), employeeId: this.employeeId.trim() || null } : {},
       } });
       if (chatAgent.session?.id) this.api.store(key, chatAgent.session.id);
       if (chatAgent.status === 'confirmation_required' && chatAgent.questionMapping) {
         this.pending = chatAgent.questionMapping; this.confirmationRequestId = requestId(); this.input = '';
-      } else { this.pending = null; this.messages.push({ role: 'user', content: message }, { role: 'assistant', content: chatAgent.output }); this.input = ''; }
+      } else { this.pending = null; this.messages.push({ role: 'user', content: message }, { role: 'assistant', content: chatAgent.output, analysis: chatAgent.analysis }); this.input = ''; }
     } catch (error) { this.error = errorMessage(error); } finally { this.sending = false; }
   }
 }

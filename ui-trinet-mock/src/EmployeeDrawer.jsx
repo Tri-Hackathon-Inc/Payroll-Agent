@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { payrollRequest } from './api'
 import { CHANGE_NOTE, annualRate, exemption, hoursFmt, money, rateLabel } from './format'
 import { UPDATE_PAY_LINE_MUTATION } from './operations'
@@ -50,6 +50,7 @@ export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload }
   const [form, setForm] = useState(() => initialForm(line))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [preview, setPreview] = useState(null)
   const change = CHANGE_NOTE[line.employmentStatus]
   const hourly = line.payType === 'hourly'
   const editable = run.status === 'PENDING_APPROVAL'
@@ -58,6 +59,28 @@ export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload }
   const { input, errors } = readForm(form, line, fields)
   const dirty = Object.keys(input).length > 0
   const invalid = Object.keys(errors).length > 0
+  const draft = JSON.stringify(input)
+  useEffect(() => {
+    setPreview(null)
+    if (!editable || !dirty || invalid || saving) return undefined
+    const controller = new AbortController()
+    let active = true
+    const timer = setTimeout(async () => {
+      setPreview({ checking: true })
+      try {
+        const response = await fetch(`${import.meta.env.BASE_URL}agent-studio/events/preview`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+          body: JSON.stringify({ payrunId: run.id, lineId: line.lineId, expectedVersion: run.version, changes: JSON.parse(draft) }),
+        })
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Draft checks are unavailable.')
+        if (active) setPreview(result)
+      } catch (requestError) {
+        if (active && requestError.name !== 'AbortError') setPreview({ error: requestError.message })
+      }
+    }, 400)
+    return () => { active = false; clearTimeout(timer); controller.abort() }
+  }, [draft, dirty, invalid, editable, saving, run.id, run.version, line.lineId])
   const fieldError = (group, field) => errors[key(group, field)]
   const set = (name) => (value) => setForm((current) => ({ ...current, [name]: value }))
   const inputFor = (group, field, label, props = {}) => <AmountInput id={`tn-${group}-${field}`} label={label}
@@ -106,6 +129,15 @@ export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload }
         </dl>
         {!editable && <div className="tn-info"><i className="bi bi-lock" />This payroll is completed and locked. Only draft payrolls can be edited.</div>}
         {editable && change && <div className="tn-info"><i className="bi bi-info-circle" />Mid pay period changes have occurred. Please review for accuracy and update as needed.</div>}
+        {preview && <div className="tn-info" role="status" aria-live="polite">
+          <div><strong>Unsaved change check</strong></div>
+          {preview.checking ? <span>Checking against historical payroll…</span> : preview.error ? <span>{preview.error}</span> : <>
+            {preview.analysis.findings.length ? <ul className="mb-1">{preview.analysis.findings.map(finding => <li key={finding.id}>{finding.label}</li>)}</ul>
+              : <span>No configured thresholds exceeded for the available draft values.</span>}
+            {preview.analysis.employees.some(employee => employee.historyStatus !== 'available') && <div>Historical comparisons are limited by the available payroll history.</div>}
+            {preview.derivedAmountsPending && <div className="small">Gross pay, taxes, retirement, and net pay will be checked after payroll recalculates them on save.</div>}
+          </>}
+        </div>}
 
         <div className="tn-section-head"><h4>Earnings</h4><span>Hours / Rate</span><span>Amount</span></div>
         <div className="tn-row">

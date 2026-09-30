@@ -129,6 +129,7 @@ export default function App() {
         : !payrunId ? (payruns ? <PayrollList payruns={payruns} onOpen={go} /> : <Loading>Loading payrolls…</Loading>)
         : !run ? <Loading>Loading payroll…</Loading>
         : <PayrollDetail run={run} notice={notice} onDismissNotice={() => setNotice('')} onBack={() => go(null)}
+            analysis={live.snapshot?.version === run.version ? live.snapshot.analysis : null}
           onSelectLine={(id) => {
             setAssistantSelection({ payrunId: run.id, employeeId: run.lines.find((line) => line.lineId === id).employeeId })
             setAssistantOpen(false)

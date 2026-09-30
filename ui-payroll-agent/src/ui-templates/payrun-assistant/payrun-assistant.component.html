@@ -29,11 +29,16 @@
         @if (item.role === 'handoff') { <div class="tn-copilot-handoff"><i class="bi bi-arrow-left-right" aria-hidden="true"></i>{{item.text}}</div> }
         @else if (item.incident) { <agent-incident [agentName]="item.agent || ''" [incident]="item.incident" /> }
         @else {
-          <div class="tn-copilot-message" [class.user]="item.role === 'user'" [class.agent]="item.role !== 'user'">
+          <div class="tn-copilot-message" [class.user]="item.role === 'user'" [class.agent]="item.role !== 'user'" [class.comparison]="!!item.analysis?.payComparison">
             @if (item.agent) { <div class="tn-copilot-author"><i class="bi bi-stars me-1" aria-hidden="true"></i>{{item.agent}}</div> }
             @if (item.mappedQuestion) { <div class="small text-muted mb-1">Confirmed question: {{item.mappedQuestion}}</div> }
             @if (item.modelStatus) { <div class="small text-muted mb-1">{{item.modelStatus === 'completed' ? 'Calculated evidence with model explanations' : 'Calculated evidence only'}}</div> }
-            <div class="tn-copilot-bubble">{{item.text}}</div>
+            @if (item.analysis?.payComparison; as comparison) {
+              <app-pay-comparison [comparison]="comparison" [explanation]="item.analysis?.modelAnswer?.summary || ''" [modelMessage]="item.analysis?.modelMessage || ''" [fullReply]="item.analysis?.details || item.text" />
+            } @else {
+              <div class="tn-copilot-bubble">{{item.text}}</div>
+              @if (item.analysis?.details; as details) { <details class="small mt-2"><summary>View details</summary><div class="tn-copilot-bubble">{{details}}</div></details> }
+            }
             @if (item.sources?.length) { <details class="small mt-2"><summary>Historical sources ({{item.sources!.length}})</summary><ul>@for (source of item.sources; track source.id) { <li>{{source.employeeId}} · {{source.payrunId}} · {{source.topic}}{{source.cited ? ' (cited)' : ''}}</li> }</ul></details> }
             @if (item.source || item.interactionId) {
               <div class="tn-copilot-meta">

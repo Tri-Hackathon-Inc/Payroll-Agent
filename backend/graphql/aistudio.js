@@ -1,24 +1,5 @@
 const path = require('node:path');
 const { createRpcResolver, encodeStruct, decodeStruct, jsonResolver } = require('./client');
-const { withConversation, failure } = require('./redisStore');
-const { requireFeature, viewerFor, viewerOf, checkCustomerChoices } = require('./access');
-
-// Customers see their usage (questions asked, most asked, helpful rate), not the admin's
-// business and technical metrics.
-function usageOnly(metrics) {
-  const { summary = {}, business = {}, recent = [], window } = metrics;
-  return { window, summary: { questions: summary.questions, conversations: summary.conversations, activeAgents: summary.activeAgents,
-    up: summary.up, down: summary.down, helpfulRate: summary.helpfulRate },
-  business: { topQuestions: business.topQuestions || [] },
-  recent: recent.map(({ id, createdAt, agentName, question, feedback }) => ({ id, createdAt, agentName, question, feedback })) };
-}
-
-// Admins or customers may save agents; customers only with the models and tools they are allowed.
-const savingAgent = resolver => requireFeature(['manageAgents', 'createAgents'], (root, args, context, info) => {
-  checkCustomerChoices(viewerOf(context), args.input?.config);
-  return resolver(root, args, context, info);
-});
-
 const catalogRpc = {
   protoPath: path.join(__dirname, '../registry/proto/templates.proto'),
   packageName: 'ai_studio_agents',
@@ -26,7 +7,7 @@ const catalogRpc = {
 };
 
 const typeDefs = `
-  scalar JSON
+scalar JSON
 
   type ModelConfig {
     id: ID!
@@ -92,7 +73,7 @@ const typeDefs = `
     agentId: ID!
     domainName: String!
     message: String!
-    history: [ChatMessageInput!]
+  history: [ChatMessageInput!]
     sessionId: String
     requestId: String
     confirmation: JSON
@@ -127,72 +108,39 @@ const typeDefs = `
     agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
     viewer: Viewer!
   }
+
 `;
 
 const rpcResolver = createRpcResolver(catalogRpc);
-
-// Records one answered question for the admin metrics (called by the webhook, not exposed in
-// GraphQL): recordInteraction(null, { domainName, agentId, data }, context) resolves to its ID.
-const recordInteraction = rpcResolver('RecordInteraction', ({ domainName, agentId, data }) => ({
-  domain_name: domainName, agent_id: agentId, data: encodeStruct(data),
-}), value => value.id);
-
+const recordInteraction = rpcResolver('RecordInteraction', ({ domainName, agentId, data }) => ({ domain_name: domainName, agent_id: agentId, data: encodeStruct(data) }), value => value.id);
 const resolvers = {
   JSON: jsonResolver,
   Query: {
     listTemplates: rpcResolver('ListTemplates', ({ serviceName }) => ({ service_name: serviceName }), value => value.templates || []),
     getTemplate: rpcResolver('GetTemplate', ({ id }) => ({ id })),
     listDomains: rpcResolver('ListDomains', () => ({}), value => value.domains || []),
-    getDomainAgentsTemplates: rpcResolver('GetDomainAgentsTemplates', ({ domainName }) => ({ domain_name: domainName }),
-      value => value.templates || []),
-    getServiceAgentRegistry: rpcResolver('GetServiceAgentRegistry', ({ serviceName, domainName }) => ({ service_name: serviceName || '', domain_name: domainName || '' }),
-      value => value.agents || []),
-    viewer: (root, args, { context }) => context?.viewer || viewerFor(context?.headers),
-    agentMetrics: requireFeature(['metrics', 'usage'], async (root, args, context, info) => {
-      const metrics = await rpcResolver('GetAgentMetrics', ({ domainName, agentId, sinceHours }) => ({
-        domain_name: domainName, agent_id: agentId || '', since_hours: Math.max(0, sinceHours || 0),
-      }), value => decodeStruct(value.metrics || { fields: {} }))(root, args, context, info);
-      return viewerOf(context).features.includes('metrics') ? metrics : usageOnly(metrics);
-    }),
+    getDomainAgentsTemplates: rpcResolver('GetDomainAgentsTemplates', ({ domainName }) => ({ domain_name: domainName }), value => value.templates || []),
+    getServiceAgentRegistry: rpcResolver('GetServiceAgentRegistry', ({ serviceName, domainName }) => ({ service_name: serviceName || '', domain_name: domainName || '' }), value => value.agents || []),
+    viewer: rpcResolver('GetViewer', () => ({}), decodeStruct),
+    agentMetrics: rpcResolver('GetAgentMetrics', ({ domainName, agentId, sinceHours }) => ({
+      domain_name: domainName, agent_id: agentId || '', since_hours: Math.max(0, sinceHours || 0),
+    }), value => decodeStruct(value.metrics || { fields: {} })),
   },
   Mutation: {
-    chatAgent: requireFeature('testAgents', async (root, { input }, context) => withConversation({
-      sessionId: input.sessionId, requestId: input.requestId, confirmation: input.confirmation, question: input.message, history: input.history || [],
-      scope: { domainName: input.domainName, agentId: input.agentId, channel: 'studio', owner: context.context?.sessionOwner },
-      context: input.context || {},
-    }, async conversation => {
-      if (conversation.context?.payrunId) {
-        const agents = await resolvers.Query.getServiceAgentRegistry(null, { domainName: input.domainName }, context);
-        const agent = agents.find(item => item.id === input.agentId);
-        if (!agent) throw failure('Agent not found in this domain.', 400);
-        const { agentModel } = require('./webhook');
-        const { runQuestionFlow } = require('./rag/questionFlow');
-        const config = resolvers.Agent.config(agent), model = await agentModel(agent, config, context);
-        const result = await runQuestionFlow({ agent, config, model, question: input.message, confirmation: input.confirmation,
-          invocation: { ...conversation.context, page: 'payrun' }, domainName: input.domainName }, conversation);
-        const answer = result.answer;
-        return { ...result, answer: { agent_id: agent.id, model_id: model?.modelId || config.model,
-          output: answer.reply, demo: false, retrieval: answer.retrieval, analysis: answer.analysis,
-          status: answer.status, questionMapping: answer.questionMapping, mappedQuestion: answer.mappedQuestion } };
-      }
-      const invoke = rpcResolver('ChatAgent', () => ({ agent_id: input.agentId, domain_name: input.domainName,
-        message: input.message, history: conversation.history }));
-      return { answer: await invoke(root, {}, context) };
+    chatAgent: rpcResolver('ExecuteAgent', ({ input }) => encodeStruct({ ...input, channel: 'studio' }), decodeStruct),
+    createAgent: rpcResolver('CreateAgent', ({ input }) => ({
+      domain_name: input.domainName, template_id: input.templateId, name: input.name, config: encodeStruct(input.config),
     })),
-    createAgent: savingAgent(rpcResolver('CreateAgent', ({ input }) => ({
-      domain_name: input.domainName, template_id: input.templateId,
-      name: input.name, config: encodeStruct(input.config),
-    }))),
     rateAnswer: rpcResolver('RateInteraction', ({ input }) => ({
       domain_name: input.domainName, interaction_id: input.interactionId, rating: input.rating,
     }), value => value.id),
-    updateAgent: savingAgent(rpcResolver('UpdateAgent', ({ input }) => ({
+    updateAgent: rpcResolver('UpdateAgent', ({ input }) => ({
       id: input.id, domain_name: input.domainName,
       name: input.name, config: encodeStruct(input.config),
-    }))),
-    deleteAgent: requireFeature('manageAgents', rpcResolver('DeleteAgent', ({ id, domainName }) => ({
+    })),
+    deleteAgent: rpcResolver('DeleteAgent', ({ id, domainName }) => ({
       id, domain_name: domainName,
-    }), () => true)),
+    }), () => true),
   },
   Agent: {
     domainName: agent => agent.domain_name,

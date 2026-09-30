@@ -126,7 +126,7 @@ export function createMockExecutor() {
 
 const AGENTS_QUERY = 'query ($domainName: String!) { getServiceAgentRegistry(domainName: $domainName) { id name config } }'
 
-// Mirrors describeContext in backend/graphql/webhook.js.
+// Mirrors describeContext in backend/registry/runtime/execution.py.
 const describeContext = context => context?.page
   ? `Invoked from the ${context.page} page${context.payrunId ? ` for payrun ${context.payrunId}` : ''}. ` : ''
 

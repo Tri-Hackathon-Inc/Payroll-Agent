@@ -8,6 +8,7 @@ import { createMockExecutor } from '../mock/graphqlMock.js'
 
 const require = createRequire(import.meta.url)
 const { typeDefs, resolvers } = require('../../backend/graphql/aistudio.js')
+const { encodeStruct, decodeStruct } = require('../../backend/graphql/client.js')
 
 test('mock deletion removes only the selected domain agent and prevents subsequent chat', async () => {
   const execute = createMockExecutor()
@@ -29,9 +30,9 @@ test('chat forwards agent, domain, message and history to gRPC', async () => {
   const history = [{ role: 'user', content: 'Hello' }, { role: 'assistant', content: 'Hi' }]
   const reply = await resolvers.Mutation.chatAgent(null, { input: { agentId: 'agent', domainName: 'payroll-services', message: 'Next', history } }, {
     context: {}, dataSources: { grpc: { call: async (...args) => {
-      assert.equal(args[3], 'ChatAgent')
-      assert.deepEqual(args[4], { agent_id: 'agent', domain_name: 'payroll-services', message: 'Next', history })
-      return { agent_id: 'agent', output: 'Answer' }
+      assert.equal(args[3], 'ExecuteAgent')
+      assert.deepEqual(decodeStruct(args[4]), { agentId: 'agent', domainName: 'payroll-services', message: 'Next', history, channel: 'studio' })
+      return encodeStruct({ agent_id: 'agent', output: 'Answer' })
     } } },
   })
   assert.equal(reply.output, 'Answer')

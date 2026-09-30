@@ -10,7 +10,9 @@
 .period header span { display: block; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; font-weight: 700; }
 .period header strong { display: block; font-size: 13px; margin-top: 2px; }
 .period-body { padding: 14px 18px 12px; }
-.pay-row { padding: 8px 0; }
+.pay-row { padding: 8px 0; min-height: 60px; box-sizing: border-box; }
+.pay-row.gross { min-height: 72px; }
+.pay-row.net { min-height: 72px; }
 .row-values { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .row-values > span { color: #526f92; font-size: 12px; }
 .row-values > strong { font-weight: 500; white-space: nowrap; font-variant-numeric: tabular-nums; }

@@ -1,4 +1,5 @@
 import { Domain, WebhookReply } from '../../app/models';
+import { PayrollAnalysis } from '../../app/pay-comparison.models';
 
 export interface Employee { employeeId: string; name: string; }
 export interface PayrunHostContext {
@@ -18,7 +19,6 @@ export interface Incident {
   modelError?: string;
 }
 export interface PayrunReply extends WebhookReply {
-  analysis?: { modelStatus?: string };
   retrieval?: { sources?: { id: string; employeeId: string; payrunId: string; topic: string; cited?: boolean }[] };
   answeredBy?: string; model?: { name: string }; metrics?: { latencyMs?: number };
   cached?: boolean; check?: { checked?: boolean; ok?: boolean };
@@ -35,4 +35,5 @@ export interface ConversationMessage {
   source?: ReplySource; interactionId?: string; rating?: string; ratingBusy?: boolean;
   incident?: Incident; suggested?: { name: string; kind: string }[]; alreadyRaised?: number; alertNote?: string;
   mappedQuestion?: string;
+  analysis?: PayrollAnalysis;
 }

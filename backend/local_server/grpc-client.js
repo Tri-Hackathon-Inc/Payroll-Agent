@@ -1,6 +1,6 @@
 const path = require('node:path');
 const { createRequire } = require('node:module');
-const graphqlRequire = createRequire(path.join(__dirname, '../graphql/package.json'));
+const graphqlRequire = createRequire(path.join(__dirname, '../package.json'));
 const grpc = graphqlRequire('@grpc/grpc-js');
 const protoLoader = graphqlRequire('@grpc/proto-loader');
 
@@ -22,9 +22,12 @@ function createGrpcDataSource(address = '127.0.0.1:50051') {
     call(protoPath, packageName, serviceName, method, request, metadata) {
       return new Promise((resolve, reject) => {
         getClient(protoPath, packageName, serviceName)[method](request, metadata,
-          { deadline: new Date(Date.now() + (method === 'ChatAgent' ? 60000 : 5000)) },
+          { deadline: new Date(Date.now() + (['ChatAgent', 'ExecuteAgent'].includes(method) ? 180000 : method === 'PreviewPayrollChange' ? 20000 : 5000)) },
           (error, response) => error ? reject(error) : resolve(response));
       });
+    },
+    stream(protoPath, packageName, serviceName, method, request, metadata) {
+      return getClient(protoPath, packageName, serviceName)[method](request, metadata);
     },
     waitForReady(protoPath, packageName, serviceName) {
       return new Promise((resolve, reject) => {

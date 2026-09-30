@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import grpc
 from django.test import TransactionTestCase
 from google.protobuf.empty_pb2 import Empty
-from google.protobuf.json_format import ParseDict
+from google.protobuf.json_format import ParseDict, MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
 from . import services
@@ -45,6 +45,11 @@ class DomainGrpcTests(TransactionTestCase):
                 reply = client.ChatAgent(pb.ChatAgentRequest(agent_id=agent.id, domain_name="payroll-services", message="Hello"), timeout=5)
                 self.assertTrue(reply.demo)
                 self.assertEqual(reply.output, "Demo response (no model inference): Hello")
+                # The public transports execute the Python-owned workflow over gRPC.
+                execution = client.ExecuteAgent(ParseDict({"agentId": agent.id, "domainName": "payroll-services",
+                    "message": "Hello", "channel": "studio"}, Struct()), metadata=(("x-session-owner", "b"*64),), timeout=5)
+                self.assertEqual(MessageToDict(execution)["output"], reply.output)
+                self.assertEqual(MessageToDict(client.GetViewer(Empty(), timeout=5))["role"], "admin")
                 with self.assertRaises(grpc.RpcError) as error:
                     client.ChatAgent(pb.ChatAgentRequest(agent_id=agent.id, domain_name="hr", message="Hello"), timeout=5)
                 self.assertEqual(error.exception.code(), grpc.StatusCode.NOT_FOUND)
