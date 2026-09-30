@@ -42,6 +42,9 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "allowedHosts": ["ui"]
+          },
           "configurations": {
             "development": {
               "buildTarget": "studio:build:development"

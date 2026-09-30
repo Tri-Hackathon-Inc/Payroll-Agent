@@ -1,8 +1,7 @@
 // Payrun question bank: the questions a payroll admin might ask the Payroll Assistant, grouped by
 // category, each with checks against the known answers in the sample payrun PR-2026-09-B
 // (values computed from backend/trinet_mock/seed). Used by scripts/benchmark-models.mjs --bank;
-// the TriNet mock's question library (ui-trinet-mock/src/questionLibrary.js) must list the same
-// prompts. A check passes when the reply contains any `anyOf` term, or none of the `noneOf` terms.
+// the runtime payrun UI template derives its question library from this same bank. A check passes when the reply contains any `anyOf` term, or none of the `noneOf` terms.
 
 const has = (label, ...anyOf) => ({ label, anyOf })
 const lacks = (label, ...noneOf) => ({ label, noneOf })

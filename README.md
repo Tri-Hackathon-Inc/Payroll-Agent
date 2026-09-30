@@ -135,6 +135,60 @@ Production output is in `ui-payroll-agent/dist/browser/`. Serve it under the
 configured base path with the same API proxy routes. `npm run lint` runs the
 Angular compiler's strict TypeScript and HTML template checks.
 
+### Agent UI templates at runtime
+
+The Payroll Assistant is an Angular UI template owned by Agent Studio. Its
+TypeScript components and HTML templates live in
+`ui-payroll-agent/src/ui-templates/payrun-assistant/`. The payrun page discovers
+and loads it when the assistant opens; chat rendering is no longer bundled into
+the TriNet React application.
+
+| Runtime resource | Default Studio URL |
+| --- | --- |
+| UI template registry | `http://localhost:5173/ai_studio/ui-templates/manifest.json` |
+| Payrun assistant entry | `http://localhost:5173/ai_studio/ui-templates/payrun-assistant/index.html` |
+
+`npm run dev` and `npm run build` compile the runtime template before starting or
+building Studio. Restart the development command after editing a runtime template.
+Production output includes `dist/browser/ui-templates/`; publish that directory
+alongside Studio's assets. Rebuild the `ui` and `trinet-ui` containers to apply this
+change. Future template changes require rebuilding only the Studio UI.
+
+The TriNet host uses `/trinet/agent-studio/ui-templates/manifest.json` through the
+existing `AGENT_STUDIO_TARGET` proxy. The iframe and its GraphQL/webhook requests
+share that proxy, so the browser needs no backend hostname or CORS configuration.
+Angular's `studio.architect.serve.options.allowedHosts` in `angular.json` includes
+the internal `ui` hostname, since the TriNet proxy sends `Host: ui:5173`. Add other
+trusted proxy hostnames to that array when needed. Angular's CLI treats
+`--allowed-hosts` as a boolean, so hostname lists must be configured in that file.
+Relative asset URLs also support a custom `STUDIO_BASE_PATH`. If deploying behind
+another host, proxy the entire Studio mount, including `ui-templates/`, on the
+host's origin.
+
+The manifest selects the `payrun-assistant` template for the `payrun` page. Its
+versioned `agent-ui-v1` message contract is:
+
+- The host adds a unique `instance` query parameter to the entry URL.
+- The iframe sends `{ protocol: "agent-ui-v1", instance, type: "ready" }`.
+- The host replies with `type: "context"` and `context: { domain, payrun: { id,
+  employees: [{ employeeId, name }] }, employeeId, open, studioUrl }`, and resends
+  it when the selection or panel visibility changes.
+- The iframe emits `type: "employee-change"` with `employeeId`, or `type: "close"`.
+
+Both sides check the message origin, source window, and instance ID. The host
+sends identifiers and employee labels; the backend fetches payroll evidence.
+The runtime lists saved agents attached to `config.page === "payrun"` and keeps
+chat sessions separate by domain, agent, payrun, and employee. Loading failures
+show a retry action without blocking the payrun page.
+
+Run the host/runtime browser checks after `npm ci` in both UI directories:
+
+```sh
+cd ui-payroll-agent
+npm run build
+npx playwright test --config playwright.runtime.config.js
+```
+
 ### Stop and remove containers
 
 Stop and remove this project's containers and network. Keep database volumes and images.

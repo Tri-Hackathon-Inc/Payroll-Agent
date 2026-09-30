@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 // Temporary mock of the TriNet payroll UI, served separately from Agent Studio. It calls two
 // backends, as the real TriNet UI would once the agent is embedded:
 //   <BASE>graphql         -> mock TriNet payroll GraphQL API (backend/trinet_mock)
-//   <BASE>agent-studio/*  -> Agent Studio's public API (GraphQL + chat webhook)
+//   <BASE>agent-studio/*  -> Agent Studio's API and runtime Angular UI templates
 const BASE = '/trinet/'
 
 export default defineConfig(({ mode }) => {

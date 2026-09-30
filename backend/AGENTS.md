@@ -122,7 +122,7 @@ of the webhook URL parameters and `question`.
 | 5. Retrieve with filters and KNN | `graphql/rag/vectorStore.js` embeds the search query and uses parameterized SQL with pgvector cosine distance. Filter by domain/service/company scope, eligible historical IDs, embedding version, employee selection and topic. Default `RAG_TOP_K=6`, maximum 20; this is exact KNN. |
 | 6. Generate the answer | `graphql/rag/pipeline.js` creates `ChatModel` for the selected agent model. The prompt includes instructions, current employee details, recent turns, retrieved documents and calculated evidence. New AD agents default to `meta-llama/Llama-3.3-70B-Instruct`; this is a separate inference call from intent classification. Hosted calls use backend-only credentials such as `HF_TOKEN`. |
 | 7. Postprocess | `PayrollAnswerPostprocessor` in `graphql/rag/postprocessor.js` validates the structured answer, supplied source IDs and exactly one valid comment per calculated finding. Invalid model output is discarded; calculated evidence remains available. |
-| 8. Save and display | `ConversationStore` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `AssistantPanel.jsx` or `agent-chat.component.ts` renders it and retains the session ID for follow-ups. |
+| 8. Save and display | `ConversationStore` appends the question and final reply, saves resolved focus and refreshes session expiry. The API returns the response contract below; `ui-payroll-agent/src/ui-templates/payrun-assistant/payrun-assistant.component.ts` or `agent-chat.component.ts` renders it and retains the session ID for follow-ups. |
 
 Historical retrieval considers up to `RAG_HISTORY_LIMIT=100` runs (maximum 500);
 `retrieval.historyLimitReached` signals that the fetch limit was reached. Only
@@ -218,7 +218,11 @@ Hosted model credentials enter only the backend through environment variables.
 
 Agent Studio proxies `/ai_studio/graphql` and `/ai_studio/webhook/...` to Apollo.
 TriNet proxies `/trinet/graphql` to the payroll API and
-`/trinet/agent-studio/...` through Agent Studio. `STUDIO_BASE_PATH` controls the
+`/trinet/agent-studio/...` through Agent Studio, including the runtime UI template
+registry at `ui-templates/manifest.json`. The payrun page embeds the Angular
+`payrun-assistant` template from that registry and passes payrun/employee selection
+through the versioned `agent-ui-v1` message contract (see the root README). The
+host no longer bundles the assistant implementation. `STUDIO_BASE_PATH` controls the
 Agent Studio mount.
 
 ### 2. Agent creation and service attachment flow end to end
@@ -351,7 +355,7 @@ query {
 ```
 
 The current TriNet UI requests the domain's agents without `serviceName`, then
-filters `config.page === "payrun"` in `AssistantPanel.jsx`. A host that needs
+filters `config.page === "payrun"` in `ui-payroll-agent/src/ui-templates/payrun-assistant/payrun-assistant.component.ts`. A host that needs
 service-specific discovery should supply `serviceName` as shown above. Attaching
 `payrun-history` as an additional API does not make the agent a primary
 `payrun-history` registry match.

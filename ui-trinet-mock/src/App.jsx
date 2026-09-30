@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import AssistantPanel from './AssistantPanel'
+import AgentUiTemplate from './AgentUiTemplate'
 import EmployeeDrawer from './EmployeeDrawer'
 import LiveAlerts, { useLiveAlerts } from './LiveAlerts'
 import PayrollDetail from './PayrollDetail'
@@ -139,7 +139,7 @@ export default function App() {
     <LiveAlerts alerts={live.alerts} onDismiss={live.dismiss} />
     {drawerLine && <EmployeeDrawer key={`${drawerLine.lineId}-${run.version}`} line={drawerLine} run={run}
       onClose={() => setLineId(null)} onSaved={saved} onReload={reload} />}
-    {assistantAvailable && <AssistantPanel key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}
+    {assistantAvailable && <AgentUiTemplate key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}
       employeeId={assistantEmployeeId}
       onEmployeeChange={(employeeId) => setAssistantSelection({ payrunId: run.id, employeeId })}
       onClose={() => setAssistantOpen(false)} />}

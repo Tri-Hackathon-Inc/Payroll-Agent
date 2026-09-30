@@ -18,7 +18,8 @@ const proxy = `.angular/proxy-${process.pid}.json`;
 writeFileSync(proxy, JSON.stringify(rewrite));
 const args = process.argv.slice(2).filter(arg => arg !== '--strictPort');
 const defaults = [...(args.includes('--host') ? [] : ['--host', '0.0.0.0']), ...(args.includes('--port') ? [] : ['--port', '5173'])];
-if (process.env.ALLOWED_HOSTS) defaults.push('--allowed-hosts', ...process.env.ALLOWED_HOSTS.split(',').map(host => host.trim()).filter(Boolean));
+// Angular's CLI exposes --allowed-hosts as a boolean. Hostname arrays belong in
+// angular.json (studio.architect.serve.options.allowedHosts), not CLI arguments.
 const child = spawn(process.execPath, ['node_modules/@angular/cli/bin/ng.js', 'serve', 'studio', ...defaults,
   '--serve-path', BASE, '--proxy-config', proxy, ...args], { stdio: 'inherit' });
 function cleanup() { mock?.close(); rmSync(proxy, { force: true }); }

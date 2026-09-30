@@ -146,7 +146,7 @@ services:
     restart: unless-stopped
 
   # --- Temporary TriNet mock: stands in for the real TriNet UI and payroll API until the
-  # agent is embedded in TriNet. Not part of Agent Studio; it uses only Agent Studio's API.
+  # agent is embedded in TriNet. Uses Agent Studio's API and runtime UI templates.
   trinet-mock:
     build:
       context: ..
