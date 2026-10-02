@@ -129,7 +129,8 @@ input UpdatePayLineInput {
 type Query {
   "Newest first."
   payruns(status: PayrunStatus): [Payrun!]!
-  payrun(id: ID!): Payrun!
+  "UI reads can request a domain-scoped anomaly check; internal agent reads leave monitor false."
+  payrun(id: ID!, monitor: Boolean = false, domainName: String, checkLineId: ID): Payrun!
   "Completed runs, newest first, optionally only those older than `before`."
   payrunHistory(limit: Int, before: ID): [Payrun!]!
   employeePayHistory(employeeId: ID!): EmployeePayHistory!

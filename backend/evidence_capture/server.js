@@ -21,6 +21,7 @@ const dataUrl = buffer => `data:image/jpeg;base64,${buffer.toString('base64')}`;
 
 async function captureItem(page, item) {
   const screenshots = [];
+  if (!item.employeeId) return { id: item.id, screenshots: [{ label: 'Payrun overview', dataUrl: dataUrl(await page.screenshot(JPEG)) }] };
   // Pay rows are matched by the employee ID shown under the name ("ID: E1001").
   const rows = page.locator('tbody tr').filter({ hasText: `ID: ${item.employeeId}` });
   const count = await rows.count();
@@ -39,20 +40,51 @@ async function captureItem(page, item) {
   return { id: item.id, screenshots };
 }
 
-async function capture({ domain, payrunId, items }) {
+async function capture({ domain, payrunId, items, snapshot }) {
   const context = await (await browser()).newContext({ viewport: { width: 1440, height: 900 } });
   context.setDefaultTimeout(TIMEOUT_MS);
   try {
     const page = await context.newPage();
+    if (snapshot) {
+      if (snapshot.id !== payrunId || !Array.isArray(snapshot.lines)) throw new Error('Snapshot does not match the payrun.');
+      // Reconstruct the investigated version. No payroll API reads, writes, or
+      // monitor events escape this isolated headless context.
+      await context.addInitScript(() => { window.EventSource = class { addEventListener() {} close() {} }; });
+      await page.route('**/*', async route => {
+        const request = route.request();
+        const url = new URL(request.url());
+        if (url.pathname.endsWith('/graphql')) {
+          const input = request.postDataJSON() || {};
+          if (!/^\s*query\b/.test(input.query || '')) return route.abort();
+          return route.fulfill({ json: { data: url.pathname.includes('agent-studio')
+            ? { listDomains: [{ name: domain, label: domain, domain: 'Payroll' }] }
+            : { payrun: snapshot } } });
+        }
+        if (url.pathname.includes('/agent-studio/')) return route.fulfill({ json: { items: [] } });
+        if (request.method() !== 'GET' || url.origin !== new URL(TRINET_UI_URL).origin) return route.abort();
+        return route.continue();
+      });
+    }
     const url = new URL(TRINET_UI_URL);
     if (domain) url.searchParams.set('domain', domain);
     url.searchParams.set('payrun', payrunId);
     await page.goto(url.href);
     await page.locator('tbody tr').first().waitFor();
+    if (snapshot) await page.evaluate(version => {
+      const label = document.createElement('div');
+      label.textContent = `Incident evidence reconstruction — payroll version ${version}`;
+      label.style.cssText = 'position:fixed;bottom:0;left:0;z-index:99999;background:#152844;color:white;padding:8px;font:14px sans-serif';
+      document.body.append(label);
+    }, snapshot.version);
     const captures = [];
-    for (const item of items.slice(0, MAX_ITEMS)) {
+    const employees = new Map();
+    for (const item of items) {
       try {
-        captures.push(await captureItem(page, item));
+        const key = item.employeeId || 'payrun';
+        if (employees.has(key)) { captures.push({ id: item.id, sameAs: employees.get(key).id }); continue; }
+        if (employees.size >= MAX_ITEMS) { captures.push({ id: item.id, screenshots: [], error: 'Snapshot capture limit reached.' }); continue; }
+        if (!employees.has(key)) employees.set(key, await captureItem(page, item));
+        captures.push({ ...employees.get(key), id: item.id });
       } catch (error) {
         captures.push({ id: item.id, screenshots: [], error: `Capture failed: ${error.message.split('\n')[0]}` });
       }
@@ -72,7 +104,7 @@ async function readJson(req) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 64 * 1024) throw Object.assign(new Error('Request body is too large.'), { status: 413 });
+    if (body.length > 2 * 1024 * 1024) throw Object.assign(new Error('Request body is too large.'), { status: 413 });
   }
   try { return JSON.parse(body || '{}'); } catch { throw Object.assign(new Error('Request body must be JSON.'), { status: 400 }); }
 }

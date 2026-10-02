@@ -63,6 +63,12 @@ export const UPDATE_AGENT_MUTATION = `
   }
 `
 
+export const AGENT_PIPELINE_QUERY = `
+  query AgentPipeline($domainName: String!, $agentId: ID!, $anomalyId: ID) {
+    agentPipeline(domainName: $domainName, agentId: $agentId, anomalyId: $anomalyId)
+  }
+`
+
 // Admin metrics (Agent Metrics view) and answer feedback.
 export const AGENT_METRICS_QUERY = `
   query AgentMetrics($domainName: String!, $agentId: ID, $sinceHours: Int) {

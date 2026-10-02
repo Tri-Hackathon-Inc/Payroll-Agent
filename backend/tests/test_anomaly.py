@@ -98,13 +98,46 @@ class AnomalyReviewTests(TestCase):
         self.assertEqual(result["version"], self.context["current"]["version"])
         self.assertEqual(record.call_args.args[6], "realtime-monitor")
 
+    def test_admin_summary_uses_saved_evidence_and_separates_model_setup(self):
+        from agents.anomaly_detection.agent import case_data
+        _, case = self.check()
+        result = case_data(case)["adminSummary"]
+        self.assertTrue(result["priorities"])
+        self.assertNotIn("TYPESAFE_API_KEY", result["summary"])
+        self.assertTrue(any("histor" in text.lower() or "scoring" in text for text in result["limitations"]))
+        self.assertIn("not confirmed errors", result["nextStep"])
+
+    def test_pending_case_can_be_dismissed_without_model_inference(self):
+        from uuid import uuid4
+        from agents.anomaly_detection.feedback import record_feedback
+        _, case = self.check()
+        with patch("model.model.Model.generate") as model:
+            result = record_feedback(self.agent, self.body(case, action="DISMISSED", note="Approved bonus", requestId=str(uuid4())), self.headers)
+        model.assert_not_called()
+        self.assertEqual(result["feedback"]["action"], "DISMISSED")
+        self.assertEqual(result["feedback"]["note"], "Approved bonus")
+        self.assertEqual(result["reviewStatus"], "pending")
+
+    def test_paycheck_open_is_scoped_and_separate_from_payrun_check(self):
+        employee = self.context["current"]["lines"][0]["employeeId"]
+        with patch("model.model.Model.generate") as model:
+            scoped = self.agent.on_change({"type": "paycheck.opened", "employeeId": employee}, self.context)
+            full = self.agent.on_change({"type": "payrun.loaded"}, self.context)
+        model.assert_not_called()
+        self.assertEqual(scoped["scope"], employee)
+        self.assertEqual(scoped["anomaly"]["scope"], employee)
+        self.assertEqual(scoped["analysis"]["employeeId"], employee)
+        self.assertIsNone(full["scope"])
+        self.assertNotEqual(scoped["anomaly"]["id"], full["anomaly"]["id"])
+
     def test_human_review_invokes_investigation_once_and_caches_completed_result(self):
         detection, case = self.check()
         with patch("agents.anomaly_detection.investigation.investigate", return_value=self.success) as investigate, \
                 patch("runtime.incidents.raise_incidents") as delivery:
             first = self.review(case)
             repeated = self.review(case)
-        investigate.assert_called_once_with(self.agent.definition, self.context, detection, model=self.agent.model)
+        investigate.assert_called_once_with(self.agent.definition, self.context, detection, model=self.agent.model,
+                                            tools=self.agent.components.tools)
         delivery.assert_not_called()
         self.assertEqual(first, repeated)
         self.assertEqual(first["reviewStatus"], "completed")

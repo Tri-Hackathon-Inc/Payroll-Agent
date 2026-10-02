@@ -10,7 +10,7 @@ prepare();
 
 const mock = process.env.GRAPHQL_MODE === 'mock' ? await startMockServer() : null;
 const target = mock ? `http://127.0.0.1:${mock.address().port}` : process.env.API_PROXY_TARGET || 'http://127.0.0.1:4000';
-const rewrite = Object.fromEntries([['graphql', '/'], ['webhook', '/webhook'], ['auth', '/auth'], ['agents', '/agents'], ['events/stream', '/events/stream']]
+const rewrite = Object.fromEntries([['graphql', '/'], ['webhook', '/webhook'], ['auth', '/auth'], ['agents', '/agents'], ['events', '/events'], ['anomalies', '/anomalies'], ['agent-messages', '/agent-messages']]
   .map(([part, dest]) => [`${BASE}${part}`, { target, secure: false, changeOrigin: true,
     pathRewrite: { [`^${BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${part}`]: dest } }]));
 mkdirSync('.angular', { recursive: true });

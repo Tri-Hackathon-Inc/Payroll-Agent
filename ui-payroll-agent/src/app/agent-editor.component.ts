@@ -46,6 +46,12 @@ export class AgentEditorComponent implements OnChanges, OnDestroy {
     }
   }
   get services(): Service[] { return this.template?.serviceOptions || []; }
+  get isAnomaly(): boolean { return this.templateId === 'anomaly-detection' || !!this.config?.['anomaly']; }
+  get decisionModel(): string {
+    const settings = this.config?.['anomaly'] as Record<string, string> | undefined;
+    return settings?.['decisionModel'] || (!settings?.['profile'] || ['payroll', 'records'].includes(settings['profile']) ? 'jev' : 'none');
+  }
+  setDecisionModel(value: string): void { if (this.config) this.config['anomaly'] = { ...(this.config['anomaly'] as object || {}), decisionModel: value }; }
   get savedService(): boolean { return !this.services.some(s => s.id === this.config?.service); }
   get attachments(): { id: string; name: string }[] {
     return [...this.services, ...(this.config?.attached_services || []).filter(id => !this.services.some(s => s.id === id)).map(id => ({ id, name: `${id} (saved selection)` }))];

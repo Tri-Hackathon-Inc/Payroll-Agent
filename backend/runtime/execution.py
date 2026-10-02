@@ -10,6 +10,7 @@ from runtime import access
 from runtime.common import RuntimeFailure
 from runtime.incidents import create_report, raise_incidents
 from agents.anomaly_detection.rules import detect_signals
+from agents.anomaly_detection.components import is_anomaly_agent
 from runtime.payroll import load_context, preprocess
 from runtime.sessions import with_conversation
 
@@ -59,9 +60,12 @@ def execute(payload, headers):
     loaded = {}
 
     def load(options):
-        payrun_id = options.get("payrunId")
+        payrun_id = options.get("payrunId", options.get("entityId"))
         if payrun_id not in loaded:
-            loaded[payrun_id] = load_context(options, history_limit=runtime_agent.settings["query"]["historyLimit"])
+            if is_anomaly_agent(agent):
+                loaded[payrun_id] = runtime_agent.components.domain.load(options)
+            else:
+                loaded[payrun_id] = load_context(options, history_limit=runtime_agent.settings["query"]["historyLimit"])
         return loaded[payrun_id]
 
     if invocation.get("task") == "incident-report":
@@ -80,12 +84,15 @@ def execute(payload, headers):
             raise RuntimeFailure("A browser session owner is required.", 400)
         answer = with_conversation({**payload, "question": question, "context": invocation, "scope": {"domainName": domain, "agentId": agent_id, "channel": channel, "owner": owner}}, run)
         invocation = effective
-        if agent["template_id"] != "anomaly-detection" and answer.get("status") != "confirmation_required" and answer.get("answeredBy") != "clarification" and effective.get("payrunId") and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
+        if not is_anomaly_agent(agent) and answer.get("status") != "confirmation_required" and answer.get("answeredBy") != "clarification" and effective.get("payrunId") and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
             context = load(effective)
             try:
                 answer["incidentAlert"] = raise_incidents(agent, services.get_service_agent_registry("", domain), domain, context, preprocess(context["current"], context["history"]))
             except Exception:
                 answer["incidentAlert"] = {"raised": None, "suggested": [], "alreadyRaised": 0, "note": "Incident processing is unavailable; calculated findings remain available."}
     if answer.get("status") != "confirmation_required":
-        answer["interactionId"] = record(domain, agent, question, invocation, answer, (time.monotonic()-started)*1000, str(payload.get("source") or channel), loaded.get(invocation.get("payrunId")))
+        metrics_context = loaded.get(invocation.get("payrunId"))
+        if is_anomaly_agent(agent) and runtime_agent.components.settings["profile"] != "payroll":
+            metrics_context = None
+        answer["interactionId"] = record(domain, agent, question, invocation, answer, (time.monotonic()-started)*1000, str(payload.get("source") or channel), metrics_context)
     return {"agent": {"id": agent_id, "name": agent["name"]}, "agent_id": agent_id, "model_id": agent["model_config"].get("model_id", ""), "output": answer["reply"], "demo": answer.get("demo", False), **answer}

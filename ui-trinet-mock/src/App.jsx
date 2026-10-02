@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AgentUiTemplate from './AgentUiTemplate'
 import EmployeeDrawer from './EmployeeDrawer'
 import LiveAlerts, { useLiveAlerts } from './LiveAlerts'
@@ -6,7 +6,7 @@ import PayrollDetail from './PayrollDetail'
 import PayrollList from './PayrollList'
 import { agentStudioRequest, payrollRequest } from './api'
 import { money } from './format'
-import { DOMAINS_QUERY, PAYRUNS_QUERY, PAYRUN_QUERY } from './operations'
+import { DOMAINS_QUERY, PAYRUNS_QUERY, PAYRUN_QUERY, PAYCHECK_QUERY } from './operations'
 
 // Temporary mock of the TriNet payroll screens (rfcs/payroll-ui-reference), standing in for the
 // real TriNet UI until the agent is embedded there. URL: /trinet/?domain=<name>[&payrun=<id>].
@@ -26,11 +26,15 @@ export default function App() {
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
   const [lineId, setLineId] = useState(null)
+  const [adEmployee, setAdEmployee] = useState(null)
+  useEffect(() => { setAdEmployee(null); setLineId(null) }, [query.payrun, query.domain])
   const [assistantOpen, setAssistantOpen] = useState(false)
   const [assistantSelection, setAssistantSelection] = useState(null)
   const [notice, setNotice] = useState('')
   const [reloadDetail, setReloadDetail] = useState(0)
+  const paycheckRequest = useRef(0)
   const payrunId = query.payrun || null
+  useEffect(() => () => { paycheckRequest.current++ }, [payrunId, domain?.name])
 
   // The docked assistant closes from its header button, its close button, or Esc.
   useEffect(() => {
@@ -65,14 +69,37 @@ export default function App() {
   }, [payrunId])
 
   useEffect(() => {
-    if (!payrunId) return undefined
+    if (!payrunId || !domain?.name) return undefined
     let active = true
-    payrollRequest(PAYRUN_QUERY, { id: payrunId }).then((data) => { if (active) setDetail(data.payrun) })
+    payrollRequest(PAYRUN_QUERY, { id: payrunId, domainName: domain.name }).then((data) => {
+      if (active) setDetail(current => current?.id === data.payrun.id && current.version > data.payrun.version ? current : data.payrun)
+    })
       .catch((requestError) => { if (active) setError(requestError.message) })
     return () => { active = false }
-  }, [payrunId, reloadDetail])
+  }, [payrunId, reloadDetail, domain?.name])
+
+  async function openPaycheck(id) {
+    if (!domain || !payrunId) return
+    const request = ++paycheckRequest.current
+    setAdEmployee(detail?.lines.find(line => line.lineId === id)?.employeeId || null)
+    setLineId(null)
+    setAssistantOpen(false)
+    setNotice('Loading latest paycheck…')
+    try {
+      const data = await payrollRequest(PAYCHECK_QUERY, { id: payrunId, domainName: domain.name, lineId: id })
+      if (request !== paycheckRequest.current) return
+      const line = data.payrun.lines.find(item => item.lineId === id)
+      if (!line) throw new Error('The paycheck is no longer in this payrun.')
+      setDetail(current => current?.id === data.payrun.id && current.version > data.payrun.version ? current : data.payrun)
+      setAssistantSelection({ payrunId: data.payrun.id, employeeId: line.employeeId })
+      setNotice('')
+      setLineId(id)
+    } catch (requestError) { if (request === paycheckRequest.current) { setNotice(requestError.message); setAdEmployee(null) } }
+  }
 
   function go(nextPayrun) {
+    setAdEmployee(null)
+    paycheckRequest.current++
     const params = new URLSearchParams(window.location.search)
     if (nextPayrun) params.set('payrun', nextPayrun)
     else params.delete('payrun')
@@ -87,6 +114,8 @@ export default function App() {
 
   // updatePayLine returns the whole recalculated payrun, so it replaces the page's data.
   function saved(updatedRun, savedLineId) {
+    setAdEmployee(null)
+    paycheckRequest.current++
     const line = updatedRun.lines.find((item) => item.lineId === savedLineId)
     setDetail(updatedRun)
     setAssistantSelection({ payrunId: updatedRun.id, employeeId: line.employeeId })
@@ -95,6 +124,8 @@ export default function App() {
   }
 
   function reload() {
+    setAdEmployee(null)
+    paycheckRequest.current++
     setLineId(null)
     setNotice('')
     setReloadDetail((value) => value + 1)
@@ -107,7 +138,10 @@ export default function App() {
 
   const assistantAvailable = Boolean(run && domain)
   // Agent Studio's real-time checks for this payrun (see LiveAlerts.jsx).
-  const live = useLiveAlerts(run ? domain?.name : null, run?.id)
+  const live = useLiveAlerts(run ? domain?.name : null, run?.id, run?.version)
+  const scopedCases = live.cases.filter(item => (item.scope || null) === adEmployee && item.version === run?.version)
+  const employeeChecked = live.checks.some(item => item.domainName === domain?.name && item.payrunId === run?.id && item.scope === adEmployee && item.version === run?.version)
+  const adPanel = <LiveAlerts key={`${run?.id}:${adEmployee || 'payrun'}`} alerts={live.alerts.filter(item => item.type === 'error')} cases={scopedCases} onDismiss={live.dismiss} onReview={live.review} onFeedback={live.feedback} />
   // A change saved elsewhere (another reviewer, an integration) shows up here with its alert.
   const latestVersion = [...live.alerts, ...live.cases].reduce((highest, alert) => Math.max(highest, alert.version || 0), live.snapshot?.version || 0)
   useEffect(() => {
@@ -120,26 +154,27 @@ export default function App() {
         <span className="tn-live-dot" aria-hidden="true" />Live monitoring
       </span>}
       {assistantAvailable && <button type="button" className={`tn-assistant-toggle${assistantOpen ? ' active' : ''}`}
-        aria-pressed={assistantOpen} aria-controls="tn-assistant" onClick={() => { setLineId(null); setAssistantOpen((value) => !value) }}>
+        aria-pressed={assistantOpen} aria-controls="tn-assistant" onClick={() => { setLineId(null); setAdEmployee(null); setAssistantOpen((value) => !value) }}>
         <i className="bi bi-stars" aria-hidden="true" /><span>Payroll Assistant{assistantEmployee && ` · ${assistantEmployee.name}`}</span>
       </button>}
     </header>
     <main className="tn-main">
+      {payrunId && !adEmployee && <div className="tn-page py-2" role="status">
+        {live.scan === 'scanning' ? 'Jev is actively scanning for payroll issues…' : live.scan === 'waiting' ? 'Preparing payroll scan…' : live.scan === 'delayed' ? 'Scan results are delayed. Check that an anomaly agent is enabled.' : 'Payroll scan complete.'}
+      </div>}
+      {!adEmployee && adPanel}
       {error ? <div className="tn-page"><div className="alert alert-danger">{error}</div><button type="button" className="tn-link" onClick={() => go(null)}>Back to payrolls</button></div>
         : !payrunId ? (payruns ? <PayrollList payruns={payruns} onOpen={go} /> : <Loading>Loading payrolls…</Loading>)
         : !run ? <Loading>Loading payroll…</Loading>
         : <PayrollDetail run={run} notice={notice} onDismissNotice={() => setNotice('')} onBack={() => go(null)}
-            analysis={live.snapshot?.version === run.version ? live.snapshot.analysis : null}
-          onSelectLine={(id) => {
-            setAssistantSelection({ payrunId: run.id, employeeId: run.lines.find((line) => line.lineId === id).employeeId })
-            setAssistantOpen(false)
-            setNotice('')
-            setLineId(id)
-          }} />}
+            analysis={!adEmployee && live.snapshot?.version === run.version ? live.snapshot.analysis : null}
+          onSelectLine={openPaycheck} />}
     </main>
-    <LiveAlerts alerts={live.alerts} cases={live.cases} onDismiss={live.dismiss} onReview={live.review} />
     {drawerLine && <EmployeeDrawer key={`${drawerLine.lineId}-${run.version}`} line={drawerLine} run={run}
-      onClose={() => setLineId(null)} onSaved={saved} onReload={reload} />}
+      onClose={() => { setLineId(null); setAdEmployee(null) }} onSaved={saved} onReload={reload}>
+      {adPanel}
+      {!scopedCases.length && <p className="small text-muted" role="status">{employeeChecked ? 'No review findings for this employee.' : 'Checking this employee’s latest paycheck…'}</p>}
+    </EmployeeDrawer>}
     {assistantAvailable && <AgentUiTemplate key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}
       employeeId={assistantEmployeeId}
       onEmployeeChange={(employeeId) => setAssistantSelection({ payrunId: run.id, employeeId })}

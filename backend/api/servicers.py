@@ -53,6 +53,16 @@ def rpc_handler(handler):
 
 class AIStudioServicer(rpc.ai_studioServicer):
     @rpc_handler
+    def CommunicateAgents(self, request, context):
+        from agents.communication.service import communicate
+        return ParseDict(communicate(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
+    @rpc_handler
+    def GetAgentPipeline(self, request, context):
+        from agents.pipeline import agent_pipeline
+        return ParseDict(agent_pipeline(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
+    @rpc_handler
     def ExecuteAgent(self, request, context):
         from runtime.execution import execute
         return ParseDict(execute(MessageToDict(request), dict(context.invocation_metadata())), Struct())
@@ -84,6 +94,11 @@ class AIStudioServicer(rpc.ai_studioServicer):
     def ReviewAnomaly(self, request, context):
         from agents.anomaly_detection.agent import review_anomaly
         return ParseDict(review_anomaly(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
+    @rpc_handler
+    def RecordAnomalyFeedback(self, request, context):
+        from agents.anomaly_detection.agent import feedback_anomaly
+        return ParseDict(feedback_anomaly(MessageToDict(request), dict(context.invocation_metadata())), Struct())
 
     def WatchPayrollEvents(self, request, context):
         from runtime.events import watch

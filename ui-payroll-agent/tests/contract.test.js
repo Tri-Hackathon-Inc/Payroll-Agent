@@ -10,6 +10,32 @@ const require = createRequire(import.meta.url)
 const { typeDefs, resolvers } = require('../../backend/graphql/aistudio.js')
 const { encodeStruct, decodeStruct } = require('../../backend/graphql/client.js')
 
+test('pipeline query forwards scope and check identity to Python without inference', async () => {
+  const args = { domainName: 'leaves', agentId: 'agent', anomalyId: 'a'.repeat(64) }
+  const result = await resolvers.Query.agentPipeline(null, args, { context: {}, dataSources: { grpc: { call: async (...call) => {
+    assert.equal(call[3], 'GetAgentPipeline')
+    assert.deepEqual(decodeStruct(call[4]), args)
+    return encodeStruct({ kind: 'anomaly', check: { id: args.anomalyId }, stages: [] })
+  } } } })
+  assert.equal(result.check.id, args.anomalyId)
+})
+
+test('mock pipeline is scoped to the saved agent and does not fabricate executions', async () => {
+  const execute = createMockExecutor()
+  const created = await execute({ query: operations.CREATE_AGENT_MUTATION, variables: { input: {
+    domainName: 'payroll-services', templateId: 'anomaly-detection', name: 'Pipeline', config: {},
+  } } })
+  const variables = { domainName: 'payroll-services', agentId: created.data.createAgent.id }
+  const result = await execute({ query: operations.AGENT_PIPELINE_QUERY, variables })
+  assert.equal(result.errors, undefined)
+  assert.equal(result.data.agentPipeline.check, null)
+  assert.deepEqual(result.data.agentPipeline.features.rows, [])
+  assert.equal(result.data.agentPipeline.canReview, false)
+  assert.equal(result.data.agentPipeline.stages.find(item => item.id === 'decision').status, 'not_configured')
+  const wrong = await execute({ query: operations.AGENT_PIPELINE_QUERY, variables: { ...variables, domainName: 'payroll-demo' } })
+  assert.equal(wrong.errors[0].extensions.code, 'NOT_FOUND')
+})
+
 test('mock deletion removes only the selected domain agent and prevents subsequent chat', async () => {
   const execute = createMockExecutor()
   const created = await execute({ query: operations.CREATE_AGENT_MUTATION, variables: { input: {

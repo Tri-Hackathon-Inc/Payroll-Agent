@@ -1,0 +1,9 @@
+{
+  "id": "leave-records",
+  "name": "Leave records",
+  "domain": "Leaves",
+  "enabled": true,
+  "base_url_env": "LEAVE_API_BASE_URL",
+  "method": "GET",
+  "path": "/leave-requests"
+}

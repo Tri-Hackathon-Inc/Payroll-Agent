@@ -11,7 +11,7 @@ const payrollSchema = buildSchema(readFileSync(new URL('../../backend/trinet_moc
 const agentStudioSchema = buildSchema(agentStudioTypeDefs)
 
 // Each operation must match the backend it is sent to (see src/api.js).
-const PAYROLL = ['PAYRUNS_QUERY', 'PAYRUN_QUERY', 'UPDATE_PAY_LINE_MUTATION']
+const PAYROLL = ['PAYRUNS_QUERY', 'PAYRUN_QUERY', 'PAYCHECK_QUERY', 'UPDATE_PAY_LINE_MUTATION']
 const AGENT_STUDIO = ['DOMAINS_QUERY']
 
 test('every operation validates against its backend schema', () => {

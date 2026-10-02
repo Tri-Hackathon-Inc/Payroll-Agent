@@ -1,0 +1,96 @@
+<section aria-label="Agent model pipeline" class="pipeline-view">
+  <button class="btn btn-link px-0 mb-2" (click)="back.emit()">← Back to My Agents</button>
+  <div class="pipeline-hero d-flex justify-content-between align-items-start gap-3 mb-4">
+    <div class="d-flex gap-3"><span class="pipeline-domain-icon"><i [class]="'bi bi-' + domainIcon" aria-hidden="true"></i></span><div><p class="pipeline-eyebrow">{{domain.label}} / {{agent.name}}</p><h2 class="h4 fw-bold">Model pipeline</h2>
+      <p class="text-muted mb-0">From source data to a decision you can act on.</p></div></div>
+    <button class="btn btn-outline-secondary btn-sm" (click)="load()" [disabled]="loading || reviewing">{{loading ? 'Refreshing…' : 'Refresh'}}</button>
+  </div>
+  @if (error) { <div class="alert alert-danger" role="alert">{{error}} @if (pipeline) { <span>Showing the last loaded check.</span> }</div> }
+  @if (loading && !pipeline) { <p role="status">Loading model pipeline…</p> }
+  @if (pipeline; as flow) {
+    <div class="pipeline-toolbar">
+      <div><span class="pipeline-profile">{{flow.profile}}</span><span class="small text-muted ms-2">Updated {{flow.updatedAt | date:'mediumTime'}} · refreshes every 10 seconds</span></div>
+      @if (flow.kind === 'anomaly') {
+        <div class="pipeline-check-selector"><label for="pipeline-check">Saved check</label>
+          <select id="pipeline-check" class="form-select form-select-sm" [(ngModel)]="selectedCheck" (ngModelChange)="selectCheck()" [disabled]="reviewing">
+            <option value="">Latest check</option>
+            @for (check of flow.checks; track check.id) { <option [value]="check.id">{{check.tenant ? check.tenant + ' / ' : ''}}{{check.entityId}} · v{{check.version}} · {{check.createdAt | date:'short'}} · {{check.decision}}</option> }
+          </select>
+        </div>
+      }
+    </div>
+    @if (flow.kind === 'anomaly' && !flow.check) {
+      <div class="pipeline-empty" role="status"><strong>No saved checks yet</strong><p class="mb-0">Run a check on a source record to see generated feature values and stage results here.</p></div>
+    }
+    @if (flow.kind === 'conversation') { <p class="small text-muted">This agent uses a conversation pipeline. The stages below reflect its saved configuration.</p> }
+    @if (flow.configurationChanged) { <div class="alert alert-warning">The agent configuration changed after this check. These stages show the saved configuration. Run a new check before Review.</div> }
+    @if (flow.decisionModelSetup && flow.decisionModelSetup.status !== 'ready') { <div class="alert alert-warning" role="status">{{flow.decisionModelSetup.reason}}</div> }
+    <section class="workflow-canvas" aria-label="Connected model workflow">
+    <div class="workflow-heading"><div><span class="pipeline-eyebrow">WORKFLOW</span><h3>How this agent works</h3></div><span class="small text-muted">Select a step to explore</span></div>
+    <ol class="pipeline-stages" aria-label="Pipeline stages" [style.--stage-count]="flow.stages.length">
+      @for (stage of flow.stages; track stage.id; let index = $index) {
+        <li class="pipeline-stage" [attr.data-stage]="stage.id" [attr.data-status]="reviewing && stage.id === 'llm' ? 'running' : stage.status">
+          <button type="button" class="workflow-step" [attr.aria-pressed]="activeStage?.id === stage.id" [attr.aria-label]="'Explore ' + stage.label" aria-controls="pipeline-stage-detail" (click)="selectedStage = stage.id">
+          <span class="stage-icon"><i [class]="'bi bi-' + stageIcon(stage.id)" aria-hidden="true"></i><span class="stage-number">{{index + 1}}</span></span>
+          <span class="stage-purpose">{{stagePurpose(stage.id)}}</span><span class="stage-label">{{stage.label}}</span>
+          <span class="stage-status">{{reviewing && stage.id === 'llm' ? 'Running' : reviewing && stage.id === 'review' ? 'Requested' : status(stage.status)}}</span>
+          </button>
+        </li>
+      }
+    </ol>
+    @if (activeStage; as selected) {
+      <div id="pipeline-stage-detail" class="workflow-detail" aria-live="polite">
+        <i [class]="'bi bi-' + stageIcon(selected.id)" aria-hidden="true"></i>
+        <div><h4>{{selected.label}}</h4><p>{{selected.detail}}</p></div>
+      </div>
+    }
+    </section>
+    @if (flow.kind === 'anomaly') {
+      @if (flow.decisionModel; as decision) {
+        @if (decision.status === 'completed') {
+          <section class="pipeline-panel" aria-label="Decision model result"><h3 class="h6"><i class="bi bi-signpost-split panel-icon" aria-hidden="true"></i>Decision model result</h3>
+            <p><strong>{{decision.model}}</strong> selected <strong>{{decision.decision}}</strong>. Rule findings remain part of the final decision.</p>
+            <div class="d-flex flex-wrap gap-4"><div><span class="small text-muted">Review probability</span><div>{{format(decision.score)}}</div></div>
+              <div><span class="small text-muted">Confidence</span><div>{{format(decision.confidence)}}</div></div>
+              @for (item of entries(decision.probabilities || {}); track item.key) { <div><span class="small text-muted">{{item.key}}</span><div>{{format(item.value)}}</div></div> }
+            </div>
+          </section>
+        }
+      }
+      <section class="pipeline-panel" aria-label="Generated features">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3"><div><h3 class="h6 mb-1"><i class="bi bi-sliders panel-icon" aria-hidden="true"></i>Generated features <span class="text-muted">({{flow.features.total}})</span></h3>
+          <p class="small text-muted mb-0">Values captured when the selected check ran.</p></div>
+          @if (flow.features.total) { <input class="form-control form-control-sm feature-search" type="search" aria-label="Search generated features" placeholder="Search feature or scope" [(ngModel)]="search"> }
+        </div>
+        @if (flow.features.rows.length) {
+          <div class="table-responsive"><table class="table table-sm feature-table"><caption class="visually-hidden">Generated feature values and historical baselines</caption>
+            <thead><tr><th scope="col">Feature / scope</th><th scope="col">Current value</th><th scope="col">Historical baseline</th><th scope="col">Observations</th><th scope="col">Generated statistics</th></tr></thead>
+            <tbody>@for (feature of features; track $index) { <tr><td><strong>{{feature.name}}</strong>@for (item of entries(feature.scope); track item.key) { <div class="small text-muted">{{item.key}}: {{format(item.value)}}</div> }</td>
+              <td>{{format(feature.current)}} <span class="small text-muted">{{feature.unit}}</span></td><td>{{format(feature.baseline)}} <span class="small text-muted">{{feature.baselineKind}}</span></td><td>{{feature.historyCount}}</td>
+              <td>@for (item of entries(feature.details); track item.key) { <span class="feature-stat">{{item.key}}: {{format(item.value)}}</span> } @empty { <span class="text-muted">No calculated statistics</span> }</td></tr>
+            } @empty { <tr><td colspan="5">No features match your search.</td></tr> }</tbody>
+          </table></div>
+          @if (flow.features.truncated) { <p class="small text-muted">Showing the first {{flow.features.rows.length}} of {{flow.features.total}} features.</p> }
+        } @else { <p class="text-muted mb-0">{{flow.check ? 'No feature rows were recorded for this check.' : 'Feature values will appear after a saved check.'}}</p> }
+      </section>
+      @if (flow.check; as check) {
+        <section class="pipeline-panel" aria-label="Review and investigation">
+          <div class="d-flex justify-content-between align-items-start gap-3"><div><h3 class="h6">{{check.entityId}} · version {{check.version}} <span class="badge text-bg-light ms-2">{{check.decision}}</span></h3><p>{{check.summary}}</p></div>
+            @if (flow.canReview || reviewing) { <button class="btn btn-dark text-nowrap" [disabled]="reviewing" (click)="review()">{{reviewing ? 'Investigating…' : check.reviewStatus === 'failed' ? 'Retry Review' : 'Review'}}</button> }
+          </div>
+          @if (actionError) { <div class="alert alert-danger" role="alert">{{actionError}}</div> }
+          @if (reviewing) { <p role="status">Review requested. Waiting for the investigation result.</p> }
+          @else if (check.reviewStatus === 'pending') { <p class="small text-muted mb-0">The LLM is waiting for a user to select Review.</p> }
+          @if (!flow.model.enabled) { <p class="text-warning">The selected investigation model is disabled.</p> }
+          @if (check.investigation; as investigation) {
+            @if (investigation.reason) { <p class="text-warning">{{investigation.reason}}</p> }
+            <h4 class="h6 mt-3">Investigation</h4><p>{{investigation.summary}}</p>
+            @for (finding of investigation.findings || []; track $index) { <p>{{finding.explanation}} <span class="text-muted">{{finding.reviewAction}}</span></p> }
+          }
+          @if (check.feedback; as feedback) { <p class="mb-0"><strong>User feedback: {{feedback.action}}</strong> {{feedback.note}}</p> }
+          @if (flow.audit.length) { <details class="mt-3"><summary>Review activity</summary><ul class="pipeline-audit mt-2">@for (event of flow.audit; track $index) { <li>{{event.action.replaceAll('_', ' ')}} <time class="text-muted">{{event.createdAt | date:'medium'}}</time></li> }</ul></details> }
+        </section>
+      }
+    }
+  }
+</section>

@@ -1,5 +1,6 @@
 """Calculated detection and explicitly requested explanation, without hosted inference."""
 import json
+import os
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
@@ -113,6 +114,26 @@ class InvestigationEvidenceTests(SimpleTestCase):
         model.assert_called_once_with(saved["model_config"])
         self.assertEqual(result["modelStatus"], "completed")
 
+    def test_full_payrun_retains_findings_and_sources_without_duplicate_comparisons(self):
+        from tests.test_runtime import fixture
+        context = fixture()
+        detection = PayrollAnomalyDetector().detect(context)
+        original = deepcopy(detection)
+        model = response_model()
+        result = investigate(definition(), context, detection, model=model)
+        model.generate.assert_called_once()
+        prompt = model.generate.call_args.args[0][1]["content"]
+        body = json.loads(prompt)
+        self.assertLess(len(prompt), 60000)
+        self.assertEqual(result["modelStatus"], "completed")
+        self.assertEqual({item["id"] for item in body["calculatedEvidence"]["findings"]},
+                         {item["id"] for item in detection["analysis"]["findings"]})
+        self.assertEqual({item["id"] for item in body["sources"]},
+                         {item["id"] for item in evidence_sources(context, detection)})
+        self.assertTrue(all("historyStatus" in item and "comparisons" not in item
+                            for item in body["calculatedEvidence"]["employees"]))
+        self.assertEqual(detection, original)
+
     def test_unknown_citation_or_missing_policy_comment_discards_model_output(self):
         for mutation in ("citation", "finding"):
             with self.subTest(mutation=mutation):
@@ -129,6 +150,12 @@ class InvestigationEvidenceTests(SimpleTestCase):
 
                 model.generate.side_effect = malformed
                 result = investigate(definition(), self.context, self.detection, model=model)
+                if mutation == "finding":
+                    self.assertEqual(result["modelStatus"], "partial_response")
+                    self.assertEqual(result["coverage"]["explained"], result["coverage"]["total"] - 1)
+                    self.assertEqual(len(result["coverage"]["unexplainedFindingIds"]), 1)
+                    self.assertTrue(result["findings"])
+                    continue
                 self.assertEqual(result["modelStatus"], "invalid_response")
                 self.assertEqual(result["findings"], [])
                 self.assertEqual(result["summary"], self.detection["summary"])
@@ -136,6 +163,50 @@ class InvestigationEvidenceTests(SimpleTestCase):
                 self.assertTrue(all(item["modelComment"] is None for item in result["analysis"]["findings"]))
 
     def test_failures_retain_evidence_without_raw_provider_errors(self):
+        for mutation, message in (("citation", "cited evidence"), ("missing", "every supplied finding"), ("json", "complete JSON")):
+            model = response_model()
+            valid = model.generate.side_effect
+            def malformed(messages, response_format=None):
+                payload = json.loads(valid(messages, response_format))
+                if mutation == "citation":
+                    payload["sourceIds"] = ["unknown-source"]
+                elif mutation == "missing":
+                    payload["findings"] = []
+                else:
+                    return '{"answer":'
+                return json.dumps(payload)
+            model.generate.side_effect = malformed
+            result = investigate(definition(), self.context, self.detection, model=model)
+            self.assertEqual(result["modelStatus"], "invalid_response")
+            self.assertIn(message, result["reason"])
+            self.assertEqual(result["findings"], [])
+            self.assertTrue(result["analysis"]["findings"])
+
+    def test_provider_failures_retain_evidence_without_raw_errors(self):
+        model = response_model()
+        valid = model.generate.side_effect
+        calls = []
+        def generate(messages, response_format=None):
+            calls.append(messages)
+            if len(calls) == 1:
+                payload = json.loads(valid(messages, response_format))
+                payload["findings"] = []
+                return json.dumps(payload)
+            self.assertIn("requiredFindingIds", messages[-1]["content"])
+            return valid(messages[:2], response_format)
+        model.generate.side_effect = generate
+        result = investigate(definition(), self.context, self.detection, model=model)
+        self.assertEqual(result["modelStatus"], "completed")
+        self.assertEqual(result["modelAttempts"], 2)
+        self.assertEqual(result["coverage"]["explained"], result["coverage"]["total"])
+        model.generate.side_effect = lambda messages, response_format=None: '{"answer":"Review", "sourceIds":[], "findings":[]}'
+        model.generate.reset_mock()
+        result = investigate(definition(), self.context, self.detection, model=model)
+        self.assertEqual(model.generate.call_count, 2)
+        self.assertEqual(result["modelStatus"], "invalid_response")
+        self.assertTrue(result["analysis"]["findings"])
+
+    def test_provider_failures_do_not_retry_or_expose_raw_errors(self):
         for error, status in ((ModelConfigurationError("secret detail"), "not_configured"), (ModelExecutionError("secret detail"), "unavailable")):
             with self.subTest(status=status):
                 result = investigate(definition(), self.context, self.detection, model=Mock(generate=Mock(side_effect=error)))
@@ -143,7 +214,34 @@ class InvestigationEvidenceTests(SimpleTestCase):
                 self.assertTrue(result["analysis"]["findings"])
                 self.assertNotIn("secret detail", json.dumps(result))
 
-    def test_normal_or_large_context_does_not_call_model(self):
+    def test_known_provider_failures_explain_next_steps_without_raw_errors(self):
+        from model.runtime import ModelTimeout
+        for error, expected in ((ModelExecutionError("secret provider body", reason_code="authentication"), "rejected the configured credential"),
+                                (ModelExecutionError("secret provider body", reason_code="rate_limit"), "limiting requests"),
+                                (ModelTimeout("secret provider body"), "time limit")):
+            with self.subTest(error=expected):
+                result = investigate(definition(), self.context, self.detection, model=Mock(generate=Mock(side_effect=error)))
+                self.assertIn(expected, result["reason"])
+                self.assertNotIn("secret provider body", json.dumps(result))
+                self.assertTrue(result["analysis"]["findings"])
+
+    def test_invalid_primary_then_backup_payment_error_identifies_huggingface(self):
+        from agents.anomaly_detection.fallback import InvestigationModel
+        primary = Mock(generate=Mock(return_value='{}'), metrics=None)
+        backup = Mock(generate=Mock(side_effect=ModelExecutionError('private billing body', reason_code='credits')))
+        routed = InvestigationModel(primary, primary_provider='huggingface', fallback_factory=Mock(return_value=backup))
+        with patch.dict(os.environ, HF_TOKEN='test-only', AD_HF_FALLBACK='true'), patch(
+                'agents.anomaly_detection.investigation.InvestigationModel', return_value=routed):
+            result = investigate(definition(), self.context, self.detection, model=primary)
+        self.assertIn('primary model answered', result['reason'])
+        self.assertIn('Hugging Face backup', result['reason'])
+        self.assertIn('HTTP 402', result['reason'])
+        self.assertNotIn('no inference credits', result['reason'])
+        self.assertNotIn('private billing body', json.dumps(result))
+        self.assertEqual(result['modelRoute']['failureCode'], 'credits')
+        self.assertEqual(result['modelAttempts'], 2)
+
+    def test_normal_or_large_context_skips_inference(self):
         model = response_model()
         normal = context_fixture()
         result = investigate(definition(), normal, PayrollAnomalyDetector().detect(normal), model=model)

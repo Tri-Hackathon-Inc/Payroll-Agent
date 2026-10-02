@@ -10,6 +10,12 @@ function merge(base, override) {
   if (!object(override)) fail('config must be an object.')
   const result = structuredClone(base)
   for (const [key, value] of Object.entries(override)) {
+    if (key === 'anomaly') {
+      if (!object(value) || Object.keys(value).some(name => !['profile', 'featureStore', 'enricher', 'detector', 'investigator', 'tools', 'decisionModel'].includes(name))
+          || Object.values(value).some(item => typeof item !== 'string') || value.decisionModel && !['jev', 'none'].includes(value.decisionModel)) fail('Invalid anomaly configuration.')
+      result[key] = { ...base[key], ...value }
+      continue
+    }
     if (!Object.hasOwn(base, key)) fail(`Unknown configuration property: ${key}`)
     result[key] = object(value) && object(base[key]) ? merge(base[key], value) : value
   }
@@ -60,6 +66,33 @@ export function createMockExecutor() {
   }
 
   const rootValue = {
+    agentPipeline: ({ domainName, agentId, anomalyId }) => {
+      domain(domainName)
+      const agent = agents.find(item => item.id === agentId && item.domainName === domainName)
+      if (!agent) fail('Agent not found in this domain.', 'NOT_FOUND')
+      if (anomalyId) fail('Anomaly not found for this agent and domain.', 'NOT_FOUND')
+      const anomaly = agent.templateId === 'anomaly-detection' || !!agent.config.anomaly
+      const stage = (id, label, status, detail) => ({ id, label, status, detail })
+      const model = agent.modelConfig.name || agent.config.model
+      return { agentId, agentName: agent.name, kind: anomaly ? 'anomaly' : 'conversation',
+        profile: anomaly ? agent.config.anomaly?.profile || 'payroll' : 'conversation', updatedAt: new Date().toISOString(),
+        model: { name: model, provider: agent.modelConfig.provider, enabled: true }, components: agent.config.anomaly || {},
+        checks: [], check: null, features: { rows: [], total: 0, truncated: false }, audit: [], canReview: false, configurationChanged: false,
+        stages: anomaly ? [
+          stage('source', 'Source data', 'awaiting_data', 'Mock mode has no saved source checks.'),
+          stage('features', 'Generated features', 'awaiting_data', 'Feature values appear after a saved check.'),
+          stage('rules', 'Rules & statistics', 'awaiting_data', 'Waiting for generated features.'),
+          stage('decision', 'Jev / decision model', 'not_configured', 'No decision-model adapter is configured.'),
+          stage('review', 'User Review', 'awaiting_data', 'Select Review on a saved finding to authorize investigation.'),
+          stage('llm', 'LLM investigation', 'awaiting_data', `${model} is invoked only after Review.`),
+          stage('result', 'Result & feedback', 'awaiting_data', 'Investigation results are retained with the check.'),
+        ] : [
+          stage('source', 'User question', 'configured', 'A submitted message starts the conversation pipeline.'),
+          stage('query', 'Query & evidence', agent.config.pipelines?.query?.enabled === false ? 'disabled' : 'configured', 'Payrun context enables historical retrieval.'),
+          stage('llm', 'LLM response', 'configured', model),
+          stage('response', 'Response', 'configured', 'Grounded answers validate evidence.'),
+        ] }
+    },
     chatAgent: ({ input }) => {
       domain(input.domainName)
       const agent = agents.find(item => item.id === input.agentId && item.domainName === input.domainName)

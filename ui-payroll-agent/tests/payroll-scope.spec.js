@@ -80,7 +80,7 @@ test('saving an employee keeps that employee selected; changing payruns resets s
   const bonus = page.getByRole('spinbutton', { name: 'Bonus', exact: true })
   await bonus.fill(String(Number(await bonus.inputValue()) + 1))
   await page.getByRole('button', { name: 'Save', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText("Maya Chen's pay was saved")
+  await expect(page.getByRole('status').filter({ hasText: "Maya Chen's pay was saved" })).toBeVisible()
   await page.getByRole('button', { name: /Payroll Assistant/ }).click()
   await askSuggested(page)
   expect(requests[0].context.employeeId).toBe('E1001')

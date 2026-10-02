@@ -4,9 +4,8 @@ The detector has no model, transport or delivery dependencies. Its state is the
 comparable historical payroll snapshot supplied by the event consumer.
 """
 from agents.anomaly_detection.interface import AnomalyDetectorInterface
+from copy import deepcopy
 from runtime.common import digest
-from agents.anomaly_detection.rules import detect_signals
-from runtime.payroll import preprocess
 
 
 def review_finding(item):
@@ -24,11 +23,12 @@ def review_finding(item):
 
 class PayrollAnomalyDetector(AnomalyDetectorInterface):
     def detect(self, context, employee_id=None):
-        current, history = context["current"], context["history"]
-        evidence = preprocess(current, history, employee_id)
-        policies = detect_signals(current, history)
-        if employee_id:
-            policies = [item for item in policies if item["employeeId"] == employee_id]
+        if "featureSchema" not in context:
+            from .features.payroll import PayrollFeatureEnricher
+            context = PayrollFeatureEnricher().enrich(context, employee_id)
+        current = context["current"]
+        evidence = deepcopy(context["analysis"])
+        policies = context["policies"]
         # Preserve calculated IDs and amounts; include payrun-wide findings in
         # the same list that response validation requires the model to cover.
         evidence["findings"].extend({

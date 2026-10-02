@@ -3,30 +3,57 @@ import re
 from copy import deepcopy
 
 
+class AnswerValidationError(ValueError):
+    pass
+
+
+VALIDATION_MESSAGES = {
+    "finding_list": "The model returned findings in the wrong format; findings must be a JSON list.",
+    "extra_findings": "The model returned more explanations than supplied findings. Each supplied finding must appear exactly once.",
+    "format": "The model did not return a complete JSON answer. Retry Review, or open an employee paycheck for a smaller investigation.",
+    "answer": "The model returned an unsupported answer structure. Retry Review with the configured investigation model.",
+    "citations": "The model cited evidence that was not supplied, or omitted its citations. Its explanation was rejected; review the saved evidence or retry Review.",
+    "coverage": "The model did not explain every supplied finding. Open an employee paycheck for a smaller investigation, or retry Review.",
+    "finding": "The model returned an unknown, repeated or malformed finding explanation. Its explanation was rejected; review the saved evidence or retry Review.",
+}
+
+
 def valid_text(value, limit):
     return isinstance(value, str) and 0 < len(value.strip()) <= limit and not re.search(r"[\x00-\x08\x0b-\x1f]", value)
 
 
-def validate_answer(text, sources, findings):
+def validate_answer(text, sources, findings, *, allow_partial=False):
     if not isinstance(text, str) or len(text) > 50000:
-        raise ValueError("Invalid response")
-    parsed = json.loads(text)
+        raise AnswerValidationError("format")
+    # Accept a single JSON code fence, never extract JSON from surrounding prose.
+    text = text.strip()
+    fenced = re.fullmatch(r"```(?:json)?\s*\n(.*?)\n```", text, re.S)
+    if fenced:
+        text = fenced.group(1)
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        raise AnswerValidationError("format") from None
     if not isinstance(parsed, dict) or set(parsed) != {"answer", "sourceIds", "findings"} or not valid_text(parsed["answer"], 3000):
-        raise ValueError("Invalid answer")
+        raise AnswerValidationError("answer")
     allowed = {source["id"] for source in sources}
     ids = parsed["sourceIds"]
     if not isinstance(ids, list) or (sources and not ids) or any(not isinstance(identity, str) or identity not in allowed for identity in ids):
-        raise ValueError("Invalid citations")
+        raise AnswerValidationError("citations")
     expected = {finding["id"] for finding in findings}
     comments = parsed["findings"]
-    if not isinstance(comments, list) or len(comments) != len(findings):
-        raise ValueError("Incomplete findings")
+    if not isinstance(comments, list):
+        raise AnswerValidationError("finding_list")
+    if len(comments) > len(findings):
+        raise AnswerValidationError("extra_findings")
+    if len(comments) != len(findings) and not (allow_partial and 0 < len(comments) < len(findings)):
+        raise AnswerValidationError("coverage")
     seen = set()
     for item in comments:
         if (not isinstance(item, dict) or set(item) != {"findingId", "explanation", "reviewAction"}
                 or not isinstance(item["findingId"], str) or item["findingId"] not in expected or item["findingId"] in seen
                 or not all(valid_text(item[key], 600) for key in ("explanation", "reviewAction"))):
-            raise ValueError("Invalid finding")
+            raise AnswerValidationError("finding")
         seen.add(item["findingId"])
     return {**parsed, "answer": parsed["answer"].strip(), "sourceIds": list(dict.fromkeys(ids))}
 
@@ -38,7 +65,13 @@ def postprocess(evidence, sources, output):
     parsed = None
     if status == "completed":
         try:
-            parsed = validate_answer(output.get("text"), sources, evidence["findings"])
+            parsed = validate_answer(output.get("text"), sources, evidence["findings"], allow_partial=output.get("allowPartialFindings", False))
+            if len(parsed["findings"]) < len(evidence["findings"]):
+                status = "partial_response"
+                reason = (f"The model explained {len(parsed['findings'])} of {len(evidence['findings'])} findings. "
+                          "The remaining findings still need manual review or another Review attempt. This investigation is incomplete.")
+        except AnswerValidationError as error:
+            status, reason = "invalid_response", VALIDATION_MESSAGES[str(error)] + " Calculated findings remain available; no validated AI explanation was produced."
         except (ValueError, TypeError, KeyError):
             status, reason = "invalid_response", "The model answer, citations or findings were invalid. Showing calculated evidence only."
     comments = {item["findingId"]: {key: item[key].strip() for key in ("explanation", "reviewAction")} for item in parsed["findings"]} if parsed else {}

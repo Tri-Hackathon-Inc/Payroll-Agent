@@ -16,7 +16,9 @@ class ModelConfigurationError(Exception):
 
 
 class ModelExecutionError(Exception):
-    pass
+    def __init__(self, message, *, reason_code="unknown"):
+        super().__init__(message)
+        self.reason_code = reason_code
 
 
 class ModelTimeout(ModelExecutionError):
@@ -41,7 +43,7 @@ class NoRedirects(HTTPRedirectHandler):
 
 HTTP_REASONS = {
     401: "the access token was rejected",
-    402: "the account has no inference credits left",
+    402: "the provider requires payment for this request (HTTP 402)",
     403: "the access token lacks permission to call this model",
     404: "the model is not served by the provider",
     429: "the provider rate limit was reached; try again shortly",
@@ -88,6 +90,8 @@ class CompatibleChatModel(ModelRuntime):
             if len(raw) > 1024 * 1024:
                 raise ModelExecutionError("The model response exceeded the size limit.")
             body = json.loads(raw)
+            if body["choices"][0].get("finish_reason") == "length":
+                raise ModelExecutionError("The model response reached its output limit.", reason_code="output_limit")
             text = body["choices"][0]["message"]["content"]
             if not isinstance(text, str) or not text.strip():
                 raise ModelExecutionError("The model returned no text response.")
@@ -101,13 +105,15 @@ class CompatibleChatModel(ModelRuntime):
             error.close()
             # A safe reason per status; the provider's own text is never returned.
             reason = HTTP_REASONS.get(error.code, "the model server rejected the request")
-            raise ModelExecutionError(f"Model call failed: {reason}.") from error
+            code = {401: "authentication", 402: "credits", 403: "permission", 404: "model_not_found",
+                    429: "rate_limit", 503: "overloaded"}.get(error.code, "request_rejected")
+            raise ModelExecutionError(f"Model call failed: {reason}.", reason_code=code) from error
         except URLError as error:
             if isinstance(error.reason, (TimeoutError, socket.timeout)):
                 raise ModelTimeout("The model timed out. Please try again.") from error
-            raise ModelExecutionError("The model server is unavailable.") from error
+            raise ModelExecutionError("The model server is unavailable.", reason_code="connection") from error
         except (OSError, ValueError, KeyError, IndexError, TypeError) as error:
-            raise ModelExecutionError("The model returned an invalid response or disconnected.") from error
+            raise ModelExecutionError("The model returned an invalid response or disconnected.", reason_code="invalid_response") from error
 
 
 class HuggingFaceChatModel(CompatibleChatModel):

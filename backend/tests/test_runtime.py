@@ -269,6 +269,33 @@ class PreviewTests(SimpleTestCase):
             with self.assertRaises(RuntimeFailure):
                 validate_event(event)
 
+    def test_read_events_require_domain_version_and_employee_scope(self):
+        event = {"type": "paycheck.opened", "domainName": "payroll-services", "payrunId": "p", "version": 2, "lineId": "l", "employeeId": "e"}
+        self.assertEqual(validate_event(event)["employeeId"], "e")
+        for key in ("domainName", "version", "lineId", "employeeId"):
+            with self.subTest(key=key), self.assertRaises(RuntimeFailure):
+                validate_event({k: v for k, v in event.items() if k != key})
+
+    def test_read_event_routes_to_its_domain_and_refuses_older_source_data(self):
+        from runtime.events import process
+        monitor = agent() | {"template_id": "anomaly-detection"}
+        monitor["config"]["capabilities"] = {"alerts": {"enabled": True}}
+        self.context["current"]["version"] = 3
+        event = {"type": "payrun.loaded", "domainName": "domain", "payrunId": self.body["payrunId"], "version": 2}
+        with patch("runtime.events.load_context", return_value=self.context), \
+                patch("runtime.events.services.list_domains", return_value=[{"name": "other"}, {"name": "domain"}]), \
+                patch("runtime.events.services.get_service_agent_registry", return_value=[monitor]) as registry, \
+                patch("runtime.events.AnomalyDetectionAgent") as runtime, \
+                patch("runtime.events.broadcast") as broadcast, patch("runtime.events.record"):
+            runtime.return_value.on_change.return_value = {"anomaly": {"summary": "Checked"}}
+            process(event)
+            registry.assert_called_once_with("", "domain")
+            runtime.return_value.on_change.assert_called_once_with(event, self.context)
+            broadcast.reset_mock()
+            with self.assertRaisesRegex(RuntimeFailure, "triggered version"):
+                process({**event, "version": 4})
+            broadcast.assert_not_called()
+
     def test_saved_events_delegate_to_the_anomaly_agent_and_broadcast_its_result(self):
         from runtime.events import process
         monitor = agent() | {"template_id": "anomaly-detection"}

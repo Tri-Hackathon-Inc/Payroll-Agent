@@ -1,0 +1,24 @@
+{
+  "id": "leaves-anomaly-detection",
+  "name": "Leave Anomaly Detection",
+  "version": 1,
+  "description": "Flag unusual leave measurements using the reusable anomaly pipeline.",
+  "models": ["poc-demo"],
+  "config": {
+    "description": "Compare leave measurements with earlier finalized requests.",
+    "instructions": "Explain calculated findings using supplied evidence. Do not infer leave policy or take actions.",
+    "questions": ["Does this leave request need review?"],
+    "domain": "Leaves",
+    "model": "poc-demo",
+    "service": "leave-records",
+    "page": "leaves",
+    "attached_services": [],
+    "created_by": "domain-owner",
+    "roles": [],
+    "anomaly": {"profile": "records"},
+    "capabilities": {
+      "alerts": {"enabled": true, "severity": "warning"},
+      "webhooks": {"enabled": false, "url": ""}
+    }
+  }
+}

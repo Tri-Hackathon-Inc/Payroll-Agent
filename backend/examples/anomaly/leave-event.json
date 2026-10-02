@@ -1,0 +1,18 @@
+{
+  "type": "anomaly.recorded",
+  "domainName": "leaves",
+  "tenant": "company-1",
+  "entityType": "leave-request",
+  "entityId": "leave-104",
+  "version": 1,
+  "occurredAt": "2026-09-30T12:00:00Z",
+  "finalized": false,
+  "measurements": [
+    {
+      "name": "requestedHours",
+      "value": 80,
+      "unit": "hours",
+      "dimensions": { "employeeId": "E123", "leaveType": "vacation" }
+    }
+  ]
+}

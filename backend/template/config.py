@@ -24,4 +24,7 @@ class TemplateConfig:
         services.validate_template_model(template, effective)
         effective["pipelines"] = pipeline_settings(effective)
         effective.setdefault("model_parameters", {})
+        if template_id == "anomaly-detection" or "anomaly" in effective:
+            from agents.anomaly_detection.components import anomaly_settings
+            effective["anomaly"] = anomaly_settings(effective)
         return domain, template, effective

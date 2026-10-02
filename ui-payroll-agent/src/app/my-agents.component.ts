@@ -4,9 +4,10 @@ import { ApiService } from './api.service';
 import { Agent, Domain, Viewer, errorMessage } from './models';
 import { AgentChatComponent } from './agent-chat.component';
 import { AgentEditorComponent } from './agent-editor.component';
+import { AgentPipelineComponent } from './agent-pipeline.component';
 import { SERVICE_AGENT_REGISTRY_QUERY, DELETE_AGENT_MUTATION } from '../graphql/operations.js';
 
-@Component({ selector: 'app-my-agents', standalone: true, imports: [FormsModule, AgentChatComponent, AgentEditorComponent], templateUrl: './my-agents.component.html' })
+@Component({ selector: 'app-my-agents', standalone: true, imports: [FormsModule, AgentChatComponent, AgentEditorComponent, AgentPipelineComponent], templateUrl: './my-agents.component.html' })
 export class MyAgentsComponent implements OnInit, OnDestroy {
   @Input() domains: Domain[] = [];
   @Input({ required: true }) viewer!: Viewer;
@@ -15,12 +16,14 @@ export class MyAgentsComponent implements OnInit, OnDestroy {
   @Output() changed = new EventEmitter<void>();
   agents: Agent[] = []; loading = true; search = ''; error = ''; notice = ''; deleting = '';
   chat: { agent: Agent; domain: Domain } | null = null;
+  agentTab: 'chat' | 'pipeline' = 'chat';
   editing: { agent: Agent; domain: Domain } | null = null;
   private generation = 0;
   constructor(public api: ApiService) {}
   ngOnInit(): void { void this.load(); }
   ngOnDestroy(): void { this.generation++; }
   has(feature: string): boolean { return !this.readOnly && this.viewer.features.includes(feature); }
+  canChat(agent: Agent): boolean { return agent.templateId !== 'anomaly-detection' && !agent.config['anomaly']; }
   get groups(): { domain: Domain; agents: Agent[] }[] {
     const q = this.search.trim().toLowerCase();
     return this.domains.map(domain => ({ domain, agents: this.agents.filter(agent => agent.domainName === domain.name && (!q || [agent.name, agent.templateId, agent.config.description].some(value => value?.toLowerCase().includes(q)))) }));

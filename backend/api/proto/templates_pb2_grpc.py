@@ -36,6 +36,11 @@ class ai_studioStub(object):
         Args:
             channel: A grpc.Channel.
         """
+        self.CommunicateAgents = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/CommunicateAgents',
+                request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                _registered_method=True)
         self.ExecuteAgent = channel.unary_unary(
                 '/ai_studio_agents.ai_studio/ExecuteAgent',
                 request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
@@ -68,6 +73,11 @@ class ai_studioStub(object):
                 _registered_method=True)
         self.ReviewAnomaly = channel.unary_unary(
                 '/ai_studio_agents.ai_studio/ReviewAnomaly',
+                request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                _registered_method=True)
+        self.RecordAnomalyFeedback = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/RecordAnomalyFeedback',
                 request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
                 _registered_method=True)
@@ -136,10 +146,21 @@ class ai_studioStub(object):
                 request_serializer=api_dot_proto_dot_templates__pb2.AgentMetricsRequest.SerializeToString,
                 response_deserializer=api_dot_proto_dot_templates__pb2.AgentMetrics.FromString,
                 _registered_method=True)
+        self.GetAgentPipeline = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/GetAgentPipeline',
+                request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                _registered_method=True)
 
 
 class ai_studioServicer(object):
     """Missing associated documentation comment in .proto file."""
+
+    def CommunicateAgents(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
     def ExecuteAgent(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -178,6 +199,12 @@ class ai_studioServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def ReviewAnomaly(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RecordAnomalyFeedback(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -261,9 +288,20 @@ class ai_studioServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAgentPipeline(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ai_studioServicer_to_server(servicer, server):
     rpc_method_handlers = {
+            'CommunicateAgents': grpc.unary_unary_rpc_method_handler(
+                    servicer.CommunicateAgents,
+                    request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                    response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            ),
             'ExecuteAgent': grpc.unary_unary_rpc_method_handler(
                     servicer.ExecuteAgent,
                     request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
@@ -296,6 +334,11 @@ def add_ai_studioServicer_to_server(servicer, server):
             ),
             'ReviewAnomaly': grpc.unary_unary_rpc_method_handler(
                     servicer.ReviewAnomaly,
+                    request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                    response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            ),
+            'RecordAnomalyFeedback': grpc.unary_unary_rpc_method_handler(
+                    servicer.RecordAnomalyFeedback,
                     request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
                     response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
             ),
@@ -364,6 +407,11 @@ def add_ai_studioServicer_to_server(servicer, server):
                     request_deserializer=api_dot_proto_dot_templates__pb2.AgentMetricsRequest.FromString,
                     response_serializer=api_dot_proto_dot_templates__pb2.AgentMetrics.SerializeToString,
             ),
+            'GetAgentPipeline': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAgentPipeline,
+                    request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                    response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'ai_studio_agents.ai_studio', rpc_method_handlers)
@@ -374,6 +422,33 @@ def add_ai_studioServicer_to_server(servicer, server):
  # This class is part of an EXPERIMENTAL API.
 class ai_studio(object):
     """Missing associated documentation comment in .proto file."""
+
+    @staticmethod
+    def CommunicateAgents(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/CommunicateAgents',
+            google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
 
     @staticmethod
     def ExecuteAgent(request,
@@ -552,6 +627,33 @@ class ai_studio(object):
             request,
             target,
             '/ai_studio_agents.ai_studio/ReviewAnomaly',
+            google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RecordAnomalyFeedback(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/RecordAnomalyFeedback',
             google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
             google_dot_protobuf_dot_struct__pb2.Struct.FromString,
             options,
@@ -905,6 +1007,33 @@ class ai_studio(object):
             '/ai_studio_agents.ai_studio/GetAgentMetrics',
             api_dot_proto_dot_templates__pb2.AgentMetricsRequest.SerializeToString,
             api_dot_proto_dot_templates__pb2.AgentMetrics.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAgentPipeline(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/GetAgentPipeline',
+            google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            google_dot_protobuf_dot_struct__pb2.Struct.FromString,
             options,
             channel_credentials,
             insecure,

@@ -159,3 +159,8 @@ How the Payrun service knows which agents exist for it. Must be config-driven, n
 | Incident Generator UI | 0 | 5 |
 | Agent Discovery / Payrun Integration | 0 | 4 |
 | **Total** | **7** | **57** |
+
+
+SSD bandwidth --> 0.5 - 14 Gb/s
+CPU (DRAM) bandwidth --> 50 - 200 Gb/s
+GPU (HBM) --> 300 Gb/s - 3 Tb/s

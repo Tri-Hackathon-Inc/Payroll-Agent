@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs'
 const fixture = JSON.parse(readFileSync(new URL('../../backend/tests/fixtures/payrun-PR-2026-09-B.json', import.meta.url), 'utf8')).payrun
 export const payrollUrl = process.env.TRINET_UI_URL || 'http://127.0.0.1:5184/trinet/'
 export const agents = [
+  { id: 'scope-query', name: 'General Query', templateId: 'general-query', config: { page: 'payrun', questions: ['Which payments need review?'] } },
+  { id: 'scope-summary', name: 'Another General Query', templateId: 'general-query', config: { page: 'payrun', questions: ['Which payments need review?'] } },
   { id: 'scope-ad', name: 'Scope AD', templateId: 'anomaly-detection', config: { page: 'payrun', questions: ['Which payments need review?'] } },
-  { id: 'scope-summary', name: 'Scope summary', templateId: 'summarizer', config: { page: 'payrun', questions: ['Which payments need review?'] } },
   { id: 'scope-incident', name: 'Scope incident', templateId: 'incident-report', config: { page: 'payrun', questions: [] } },
 ]
 export const assistant = page => page.frameLocator('iframe[title="Payroll Assistant"]')

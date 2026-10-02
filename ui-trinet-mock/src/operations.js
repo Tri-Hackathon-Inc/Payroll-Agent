@@ -21,8 +21,14 @@ const PAYRUN_FIELDS = `
 `
 
 export const PAYRUN_QUERY = `
-  query Payrun($id: ID!) {
-    payrun(id: $id) { ${PAYRUN_FIELDS} }
+  query Payrun($id: ID!, $domainName: String!) {
+    payrun(id: $id, monitor: true, domainName: $domainName) { ${PAYRUN_FIELDS} }
+  }
+`
+
+export const PAYCHECK_QUERY = `
+  query EmployeePaycheck($id: ID!, $domainName: String!, $lineId: ID!) {
+    payrun(id: $id, monitor: true, domainName: $domainName, checkLineId: $lineId) { ${PAYRUN_FIELDS} }
   }
 `
 

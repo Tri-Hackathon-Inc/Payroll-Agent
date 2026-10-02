@@ -16,8 +16,15 @@ contracts in its own `interface.py`, alongside the implementation. There are no
 ```text
 backend/
 |-- agents/         # interface.py, agent.py, chat.py, metrics.py
+|   |-- communication/ # shared discovery, persisted response handoffs and receiver contracts
 |   |-- anomaly_detection/
 |   |   |-- interface.py
+|   |   |-- components.py # registered domain/component factories and config
+|   |   |-- domains/ # domain-specific identity, loading and investigation
+|   |   |-- features/ # enricher and feature-store contracts and implementations
+|   |   |-- tools/ # read-only investigation evidence contracts
+|   |   |-- ingestion/ # domain-neutral event delivery boundary
+|   |   |-- feedback.py # append-only human feedback
 |   |   |-- agent.py # detection, persistence and explicit Review orchestration
 |   |   |-- logic.py # historical detection
 |   |   |-- draft.py # transient unsaved checks
@@ -142,6 +149,7 @@ Model overrides allow only `temperature` (0-2), `top_p` (0-1) and `max_tokens`
 | Record an answered question (webhook only) | `RecordInteraction` | none; `recordInteraction` in `graphql/aistudio.js` |
 | List latest saved anomaly checks | `ListAnomalies` | none; HTTP `GET /anomalies?domain=&payrunId=` |
 | Explicitly investigate an anomaly | `ReviewAnomaly` | none; HTTP `POST /anomalies/review` |
+| Discover recipients or hand off a saved agent response | `CommunicateAgents` | none; HTTP `POST /agent-messages` |
 
 These are the public operations; metrics and interaction operations serve the Agent Metrics view. Model and external API choices are included
 in template details rather than exposed as separate list operations.
@@ -167,13 +175,14 @@ see the [overall application flow](#overall-application-flow) for the domain/age
 
 ## Overall application flow
 
-There are three flows:
+There are four flows:
 
 | Flow | Trigger | Result |
 | --- | --- | --- |
 | Query flow | A user submits a question to a saved agent in the UI | For payrun queries, the backend semantically matches existing questions, waits for selection, retrieves historical payments, calls the answer model, and postprocesses the result. |
 | Agent creation and service attachment flow | A user chooses a template, model, primary service, attached services and host page | `AgentFactory` saves the validated agent and service associations in `agent_info`; the host UI discovers the saved agent through the registry. No model call occurs during creation. |
-| Anomaly check and Review flow | A saved change, unsaved preview, or anomaly-agent chat requests a check | The agent calculates findings without inference. Saved checks persist a decision; an explicit Review action invokes a model explanation with validated citations and findings. |
+| Anomaly check and Review flow | A saved change, unsaved preview, or anomaly-agent chat requests a check | Saved checks combine rules/statistics and the configured decision model. Unsaved previews skip inference. Explicit Review invokes the investigation LLM with validated citations and findings. |
+| AD-to-Incident Report flow | An admin selects Report to Incident Agent after a completed investigation | The shared communication service transfers saved context to an eligible recipient, reconstructs the incident headlessly, captures snapshots and stores the report bundle. |
 
 ### 1. Query flow end to end: UI -> backend -> models -> UI
 
@@ -314,7 +323,7 @@ still govern which stored documents may enter a model prompt.
 | TriNet Payroll Assistant | `POST /webhook/<domainName>/<agentId>` with `question`, `context`, optional `sessionId` and `requestId` -> Redis -> payroll RAG | `agent`, `reply`, `analysis`, `retrieval`, `session`, `model`, `metrics`, `context` |
 | Agent Studio with payrun context | GraphQL `chatAgent(input)` with `context.payrunId` -> Redis -> payroll RAG | `agentId`, `modelId`, `output`, `demo`, `analysis`, `retrieval`, `session` |
 | Agent Studio without payrun context | GraphQL `chatAgent(input)` -> gRPC `ExecuteAgent` -> Redis with restored history in Python -> saved model runtime | `output`, `demo`, `session` |
-| Agent Studio webhook chat window | `POST /webhook/<domainName>/<agentId>` -> Redis -> generic prompt with restored recent turns; anomaly agents calculate checks or ask for payrun selection, without inference | `reply`, `session` |
+| Agent Studio webhook chat window | `POST /webhook/<domainName>/<agentId>` -> Redis -> generic prompt with restored recent turns; anomaly agents run saved checks or ask for payrun selection, without invoking the investigation LLM | `reply`, `session` |
 
 Failed question matching returns an error before payroll retrieval or inference.
 Missing answer credentials, failed historical retrieval, or invalid model output
@@ -502,9 +511,14 @@ reflect the new primary service; reopening the Payroll Assistant reloads agents
 and reapplies its page filter. Changing the selected model refreshes its model
 snapshot; changing only service/page attachments preserves the snapshot.
 
-### Employee anomaly detection and chat response
+### General Query chat and predefined questions
 
-The Payroll Assistant lists the domain's agents attached to the `payrun` page.
+The Payroll Assistant chat lists the domain's General Query agents attached to
+the `payrun` page. It excludes anomaly agents, including agents with configured
+anomaly components. AD retains its scanning, explicit Review, model pipeline and
+incident handoff UI; My Agents does not offer a chat tab for AD. General Query
+owns free-text chat, suggested questions and the searchable predefined question
+library. Its My Agents chat view also offers the saved predefined questions.
 The employee scope selector is available for every payrun agent. Selecting or
 saving an employee's pay on the payroll screen carries that employee into the
 assistant; closing and reopening the panel retains the selection. Changing the
@@ -592,7 +606,7 @@ without answer-model prose for payrun RAG. Supplying `HF_TOKEN` does not change
 an agent's selected model. Direct gRPC requests remain stateless; Python ExecuteAgent owns
 session persistence.
 
-### Incident report handoff
+### Incident report handoff from chat
 
 The docked Payroll Assistant keeps messages while hidden and offers a question
 library. After an answer, the user can explicitly hand the active conversation
@@ -604,6 +618,91 @@ before normal Redis chat processing so the handoff payload is preserved.
 screenshots from `evidence-capture`, and writes a report. It sends email only
 when `EMAIL_API_BASE_URL` is configured; the response reports delivery status.
 Ordinary chat requests continue through the RAG/session flow above.
+
+### 4. AD-to-Incident Report flow through the shared communication service
+
+The current payroll flow is:
+
+```mermaid
+flowchart TD
+    Read["Open payrun or employee paycheck: latest API response"] --> Features["Generate features and calculate findings"]
+    Features --> Jev["Jev decision model; show scanning status"]
+    Jev --> Review["REVIEW: wait for admin to select Review"]
+    Review --> Investigation["Investigation LLM and response validation"]
+    Investigation --> Conclusion["Concise conclusion; employee issues; Download Report"]
+    Conclusion --> Click["Admin selects Report to Incident Agent"]
+    Click --> A2A["Shared agent communication service: validate and claim handoff"]
+    A2A --> Recipient["Incident Report agent receives saved response and evidence"]
+    Recipient --> Capture["Headless browser reconstructs the saved payroll version"]
+    Capture --> Store["Capture snapshots, generate report, persist artifact folder"]
+```
+
+Keep the two human actions separate: **Review** authorizes investigation, and
+**Report to Incident Agent** authorizes the incident pipeline. No page load,
+discovery request, Jev decision or completed investigation automatically creates
+an incident. The latter action becomes enabled when an eligible Incident Report
+agent exists; otherwise the UI explains that one must be attached in My Agents.
+Multiple eligible recipients are presented for selection.
+
+`agents/communication/service.py` owns the shared internal A2A handoff boundary.
+This is the application's versioned envelope, not an implementation of an external
+A2A interoperability specification. Add new agent integrations through
+`register_publisher` and `register_receiver`, with the dependency-free
+`ResponseContext` and `Receiver` contracts in `communication/interface.py`.
+Publishers resolve trusted, saved responses; receivers consume their context as
+data. Keep discovery, access checks and duplicate prevention in the shared service.
+The existing direct chat incident command above remains a separate legacy path.
+
+`POST /agent-messages` delegates to gRPC `CommunicateAgents`. Both `DISCOVER` and
+`SEND` require a browser session and `testAgents` permission. The request names
+`domainName`, sender `agentId`, `capability`, `responseType`, `responseId`, and
+`expectedVersion`; `SEND` also names `targetAgentId`. An optional `service`
+defaults to the sender's primary service. The initial registered publisher is
+`anomaly-investigation`; the receiver capability is `incident-report` for payruns.
+Discovery requires the same domain and an enabled service attached to both agents,
+and enforces the viewer's model/tool restrictions. Attachment can be primary or
+additional; this differs from the primary-only service registry filter.
+
+`anomaly_detection/handoff.py` resolves the sender-owned `AnomalyCase`. Only
+completed, validated, non-dismissed investigations may be handed off. Delivery
+rechecks the source version and anomaly component settings. Clients cannot replace
+saved conclusions or evidence with request text. The envelope includes sender,
+recipient, domain, service, source reference/version, entity identity and the saved
+response (summary, finding explanations, citations and employee scope).
+
+`AgentMessage` in `storage/models.py`, introduced by migration
+`0013_agent_messages`, records requester hash, provenance, status and result.
+Its deterministic identity includes the source version, sender, recipient,
+service, capability and receiver version. Claim the message before invoking the
+receiver. Duplicate requests return its recorded status/result. Failed or
+interrupted handoffs are retained for inspection, never automatically replayed;
+a receiver pipeline change may advance its version to distinguish new work.
+
+`communication/incident.py` passes saved evidence to `runtime/incidents.py` with
+`notify=False`: this flow creates a report without email or Slack delivery.
+The `evidence_capture/server.js` headless browser receives the saved payroll
+snapshot and intercepts API requests to reconstruct that version. It prevents
+capture from making live payroll reads, edits, or triggering further scans.
+Capture affected employee pay rows and paycheck panels, plus payrun-wide evidence;
+reuse employee images across repeated findings. Capture errors must remain visible
+as warnings, and must not be reported as successful screenshots.
+
+`communication/artifacts.py` stores a bundle under
+`.local-data/incidents/<handoff-id>/` on the host. Compose bind-mounts this folder
+at `/incident-artifacts`; `INCIDENT_ARTIFACT_ROOT` selects the backend storage root.
+Each bundle contains `report.md`, `evidence.json`, `handoff.json`,
+`source-snapshot.json`, `manifest.json`, and deduplicated JPEG/PNG files in
+`snapshots/`. The manifest records screenshot hashes and capture status. Stored
+Markdown uses relative image paths, and returned evidence uses file references
+instead of repeated base64 images. Preserve these folders across rebuilds; they
+contain payroll data and remain outside Git under the ignored `.local-data/` tree.
+The UI shows the saved folder, snapshot count, report download and capture warnings.
+Incident documents begin with a short issue title, expected system behavior and
+the impacted service/domain/payrun version, followed by the investigation, evidence
+and an explicit evidence-snapshots section. `runtime/incident_document.py` supplies
+these required fields for both model-written and calculated reports. Expected
+behavior is labeled as a review expectation; do not invent company policies or
+claim that approval records were provided. Missing captures must be stated.
 
 ## Configuration and persistence rules
 
@@ -688,15 +787,22 @@ are excluded from the metrics, and a failed metrics write never breaks a chat.
 
 ### Anomaly detection and explicit Review
 
-The streaming detection and investigation contracts live in `agents/anomaly_detection/interface.py`.
-`PayrollAnomalyDetector` (`agents/anomaly_detection/logic.py`) calculates historical features
-and policy findings without model calls or delivery. Its state is the loaded,
+The common agent uses registered components in `agents/anomaly_detection/components.py`.
+`interface.py` defines generic entity identity and domain/investigation contracts;
+`features/interface.py` and `tools/interface.py` define feature and evidence contracts.
+`PayrollFeatureEnricher` calculates historical comparisons and policy inputs;
+`PayrollAnomalyDetector` (`logic.py`) classifies those features without model calls
+or delivery. For compatibility, direct detector callers can still pass payroll
+context, which delegates enrichment to the payroll component. Its state is the loaded,
 comparable payroll history, not a rolling wall-clock window. It returns a versioned
 `payroll.anomaly` or `payroll.checked` result with evidence and warning/critical
 findings; severity is rule-based, not an invented probability score.
+The common agent normalizes the decision to `NORMAL` or `REVIEW`, with critical
+severity retained separately. Legacy persisted `CRITICAL` cases remain readable.
 `AnomalyDetectionAgent` (`agents/anomaly_detection/agent.py`) owns detection,
-persisted cases, and investigation. Saved checks persist an `AnomalyCase` without
-calling a model. Only a human's `POST /anomalies/review` with `action: "REVIEW"`
+persisted cases, and investigation. Saved checks can invoke the configured decision
+model, then persist an `AnomalyCase` without calling the investigation LLM.
+Only a human's `POST /anomalies/review` with `action: "REVIEW"`
 authorizes investigation of that case. The agent validates its domain, agent,
 browser session, permission, and current payroll version, claims the review,
 then invokes its selected model using the saved evidence. Completed reviews are
@@ -706,11 +812,150 @@ brief explanation. Review never changes payroll or sends incidents. Normal
 checks still reach the UI but cannot invoke investigation. Unsaved previews use
 the agent's `draft.py` and detector without persistence or model calls.
 
+Payroll investigations use their configured primary model and a bounded Hugging
+Face backup in `anomaly_detection/fallback.py`. The default backup is
+`Qwen/Qwen3-235B-A22B-Instruct-2507`, using `HF_TOKEN` and Hugging Face's router.
+`AD_HF_FALLBACK=false` disables it; `AD_HF_BACKUP_MODEL` changes the model.
+Provider failures or invalid responses can switch to this backup within the
+authorized Review. One correction attempt is allowed, with the same finding and
+citation validation. Record actual attempts, active model/provider, fallback cause
+and final failure category. Identify the failing provider in user-facing errors:
+HTTP 402 means payment required for that request, not proof about another provider's
+balance. OpenRouter Codex is no longer the investigation backup.
+
+Component selection is saved as `config.anomaly`: `profile`, `featureStore`,
+`enricher`, `detector`, `tools`, `investigator`, and `decisionModel`. Existing payroll agents resolve
+the defaults shown in the root README. A specialized profile's category must match
+the saved agent's domain category; the reusable `records` profile accepts any
+registered category. JSON selects only registered names, never module paths,
+endpoints or credentials. `config.model` and `model_parameters` remain independent.
+To add a domain, register a `DomainProfile` using `register_profile` in trusted
+startup code, then provide its matching domain/template/service catalog entries.
+The profile supplies factories for a `DomainInterface`, enricher, detector,
+investigator and evidence tools. Register another feature-store factory through
+`register_feature_store`; its implementation supplies `get(namespace, key)` and
+`put(namespace, key, features)`. Registration must finish before workers accept
+requests, consistently in every process. These are code extension points, not
+an API for uploading executable agents.
+
+`features/store.py` implements an immutable MySQL snapshot cache and a no-cache
+option. Cache keys include the source content, entity/version, scope, component
+settings and enricher version; namespaces separate domains and agents. Cache reads
+do not replace current-source validation. Increment the enricher version when
+its calculation changes. Transient checks never access the persistent cache.
+`0011_anomaly_components` adds the cache and audit tables plus entity type without
+renaming existing columns. The old internal `payrun_id`/`payrun_version` columns
+store generic entity identity/version for compatibility; public responses provide
+`entityId`/`entityType`, with `payrunId` retained only for payroll cases. No TTL or
+automatic retention pruning is configured for feature snapshots or audit records.
+
+Changing components requires a new check before reviewing an existing case.
+Domain evidence tools run only within the claimed human Review. The shipped
+payroll tools use saved current/history snapshots; external Employee, Tax, Policy
+RAG and Audit API connectors are extension points, not simulated integrations.
+The current model runtime does not execute model-selected arbitrary tool calls.
+Each new investigator owns its prompt, privacy handling and response validation.
+
+`POST /anomalies/feedback` / `RecordAnomalyFeedback` requires the same permission,
+session, domain and agent checks as Review. Supply `anomalyId`, `expectedVersion`,
+UUID `requestId`, `action: "CONFIRMED" | "DISMISSED"` and optional `note` (2,000
+characters maximum), plus `domainName` and `agentId`. Completed investigations can
+receive feedback. Pending or failed cases can also be dismissed with a required
+reason, without invoking investigation; investigating cases cannot be dismissed.
+Confirmation still requires completed investigation. `presentation.py` derives
+admin summaries from persisted findings, separating model availability from payroll
+risk and preserving raw evidence. Exact request retries are idempotent and conflicting reuse is
+rejected. Review claims/outcomes and human decisions append `AnomalyAudit` rows.
+This records the browser-session hash, not an authenticated individual identity.
+Feedback does not retrain models, change thresholds, invoke inference or update
+source payroll. The Review UI displays the latest human decision.
+
 The current event transport remains Redis Streams. Detection runs in the worker;
-investigation runs only through the human Review request to the same agent. Kafka,
-a separate anomaly topic/consumer, time-window state and independent worker
-replication are not implemented by this refactor. Historical reads are still
-performed per event; no millisecond latency guarantee is made.
+investigation runs only through the human Review request to the same agent.
+`ingestion/events.py` accepts `{domainName, agentId, entityType, entityId, version}`.
+Its `ingest` loads the matching domain source and calls the same agent; `deliver`
+invokes a consumer-supplied acknowledgment only after successful handling.
+Unacknowledged failures must be retried/dead-lettered by the hosting consumer;
+replayed older events check the latest source and deduplicate persisted cases.
+The caller is a trusted backend consumer and owns event authentication and tenant
+routing. The payroll HTTP/Redis adapter processes historical payroll profiles and
+normalizes current payruns for Payroll-category agents using `profile: records`.
+The latter calls `runtime/payroll.load_current`, not historical retrieval. A running
+Kafka broker/client is not installed; no millisecond latency guarantee is made.
+
+The `records` profile is the reusable incremental implementation. Leaves, Benefits,
+Insurance and Payroll can submit `anomaly.recorded` payloads through
+`POST /events/anomaly` (the existing Struct-based `PublishPayrollEvent` RPC handles
+both contracts). `records.py` validates stable IDs, timestamps, versions and 1–30
+numeric measurements. `streaming.py` commits accepted payloads to `AnomalyEvent`
+before returning 202; the SQL inbox remains durable when Redis is unavailable.
+`run_anomaly_worker` supports separate workers, in addition to the embedded drain.
+Use `retry_anomaly_event` to retry a quarantined event after resolving its cause.
+
+`features/rolling.py` owns a bounded window of 128 observations and incremental
+moments. `AnomalyFeatureState` contains compact numeric samples, not source records;
+`AnomalyRecord` tracks the latest processed source version. Keys isolate domain,
+tenant, entity type, metric, unit and dimensions. Baselines are captured before
+updating finalized observations and exclude the same record, future values and
+equal timestamps. Revisions replace old contributions; non-finalized values do
+not train the baseline. Event preparation is transactional, source/feature rows
+are locked, and retries reuse stored baselines. Out-of-order queries use eligible
+retained samples only; absent earlier observations remain explicit limitations.
+`0012_anomaly_streaming` adds these tables without changing prior schema history.
+
+`scoring.RecordDetector` composes rules, statistical scoring and an optional
+`DecisionModelInterface`. Rule/statistical scores are heuristics, not calibrated probabilities.
+`decision.DecisionModelDetector` composes a registered decision adapter after a domain
+detector. Payroll and records default to the official TypeSafe Jev adapter in `jev.py`;
+`decisionModel: "none"` disables it. Other profiles default to none. Jev uses
+`JEV_PROVIDER` to select direct TypeSafe or OpenRouter routing. Direct TypeSafe
+uses `TYPESAFE_API_KEY`; OpenRouter uses `OPENROUTER_API_KEY` and
+`OPENROUTER_BASE_URL`. `JEV_MODEL` and `JEV_TIMEOUT_SECONDS` configure the decision
+call. The local deployment routes Jev through OpenRouter; this is independent
+of the Hugging Face investigation primary/backup.
+Only saved source checks invoke this decision model; draft previews and pipeline
+reads remain free of inference. The separate investigation LLM still requires Review.
+The adapter sends compact generated features, validates the provider's Choice response,
+and records probability, confidence and model version separately from rule scores.
+It never removes calculated findings. Failed decisions retain rule/statistical evidence
+and expose safe error statuses. Successful results are reused for an identical feature
+key, including the adapter/model version; bump the decision pipeline cache version
+when its question or feature mapping changes. Policy APIs, automatic retraining and
+source-system mutations are not supplied. `domains/records.py` reuses the shared
+review/audit workflow with strict citation/finding validation. Do not put names or
+free-form source text in measurement dimensions; producers supply stable IDs.
+Review verifies the latest accepted source version, including pending revisions.
+Generic case listing and SSE must include tenant, entity type and entity ID;
+existing domain/role permissions still apply, and producer identity belongs to
+deployment authentication rather than the tenant string in a payload.
+
+The common runtime recognizes configured anomaly components independently of
+template ID. A new domain needs matching catalog entries and a saved agent with
+`config.anomaly.profile: records`; it does not need a payroll-shaped context.
+Examples are under `backend/examples/anomaly/`, with adoption steps in the root
+README. Specialized code can register alternate component factories at startup.
+Set `DomainProfile.event_type="anomaly.recorded"` when a custom profile uses the
+same measurement contract and should be consumed by the durable record worker.
+`ingest_anomaly_payroll_history` backfills finalized employee and company measures
+without inference or historical review cards. Preserve the historical payroll
+profile for existing payrun UIs; generic domain UIs use the entity APIs.
+
+The payrun UI requires the user's explicit Review action after Jev responds.
+Neither page load nor detection events authorize LLM investigation. Failed attempts
+require explicit retries. `case_data` exposes decisionModel metadata for display.
+Scanning SSE events precede model detection. The UI offers the full saved report
+as a plain-language text download and keeps the visible investigation conclusion concise.
+The AD panel can be minimized without changing its findings or review state.
+Opening an employee paycheck clears the payrun conclusion from view and shows
+only that employee's same-version case; closing it restores the payrun view.
+
+UI reads with `payrun(monitor: true, domainName)` emit `payrun.loaded`; adding
+`checkLineId` emits `paycheck.opened` with the server-resolved employee identity.
+These events require a domain and version and route only to that domain's enabled
+monitors. Paycheck opens fetch fresh source data and check only that employee;
+the UI keeps scoped results separate from full-payrun analysis. Internal agent
+reads omit `monitor`, preventing recursive events. Workers refetch current data
+and retry if it is older than the triggering version.
 
 Real-time anomaly detection (`runtime/events.py`): the payroll platform reports each
 saved change to `POST /events/payroll` (the TriNet mock's `events.js` sends
@@ -718,7 +963,7 @@ saved change to `POST /events/payroll` (the TriNet mock's `events.js` sends
 set, must match the `X-Payroll-Events-Token` header). Events are queued on the Redis stream
 `payroll:events` (consumer group `realtime-monitor`; an in-process queue without `REDIS_URL`)
 and a worker in the Python gRPC process checks the payrun for every domain whose Anomaly Detection
-agent has alerts enabled. These code-only checks persist the decision and findings
+agent has alerts enabled. These checks use rules and the configured decision model and persist the decision and findings
 in MySQL; persistence failures cause event processing to retry. Suspicious results
 wait for human Review, including critical findings. Each check is pushed to open
 payrun pages over `GET /events/stream?domain=&payrunId=` (server-sent events, proxied as
@@ -860,12 +1105,14 @@ Do not add READMEs in subdirectories.
 | `runtime/sessions.py` | Expiring conversations, scope checks and request serialization |
 | `runtime/` | Execution, events, sessions, payroll evidence, local embeddings and pgvector KNN |
 | `agents/anomaly_detection/` | Historical detector logic, investigation agent and finding rules |
+| `agents/communication/`, `agents/anomaly_detection/handoff.py` | Shared internal A2A discovery/delivery, saved-response validation, incident receiver and artifact storage |
 | `agents/question/` | Configured/shared question matching, confirmation and the shared question library |
 | `agents/response/` | Citation and finding validation, fallback and concise response formatting |
 | `storage/management/commands/ingest_payroll_history.py` | Repeatable preload of completed payroll history into PostgreSQL |
 | `runtime/incidents.py`, `evidence_capture/server.js` | Explicit incident handoff, scoped evidence, screenshots and optional email delivery |
 | `pipelines/payroll.py`, `runtime/payroll.py`, `agents/response/logic.py` | Employee history comparisons, model explanations, and response validation |
 | `tests/test_agents.py`, `tests/test_domain_grpc.py`, `tests/test_domain_migration.py` | Persistence, validation, and GraphQL-to-gRPC workflow tests |
+| `tests/test_agent_communication.py`, `tests/test_investigation_fallback.py` | Handoff permissions, scope/version checks, duplicate prevention, report artifacts and investigation backup routing |
 
 From the repository root, after installing `backend/requirements.lock` into a
 Python 3.11+ environment:

@@ -4,6 +4,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
 service ai_studio {
+  rpc CommunicateAgents(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc ExecuteAgent(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetViewer(google.protobuf.Empty) returns (google.protobuf.Struct);
   rpc Authenticate(google.protobuf.Struct) returns (google.protobuf.Struct);
@@ -11,6 +12,7 @@ service ai_studio {
   rpc PreviewPayrollChange(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc ListAnomalies(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc ReviewAnomaly(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc RecordAnomalyFeedback(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc WatchPayrollEvents(google.protobuf.Struct) returns (stream google.protobuf.Struct);
   rpc ListTemplates(ServiceName) returns (TemplateList);
   rpc GetTemplate(TemplateId) returns (Template);
@@ -24,6 +26,7 @@ service ai_studio {
   rpc RecordInteraction(RecordInteractionRequest) returns (InteractionRef);
   rpc RateInteraction(RateInteractionRequest) returns (InteractionRef);
   rpc GetAgentMetrics(AgentMetricsRequest) returns (AgentMetrics);
+  rpc GetAgentPipeline(google.protobuf.Struct) returns (google.protobuf.Struct);
 }
 message TemplateId { string id = 1; }
 message ServiceName { string service_name = 1; }

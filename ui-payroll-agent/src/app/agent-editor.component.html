@@ -10,6 +10,14 @@
         <div class="mb-3"><label for="description" class="form-label">Description</label><textarea id="description" name="description" class="form-control" [(ngModel)]="config.description" rows="3" maxlength="10000" required></textarea></div>
         <div class="mb-3"><label for="instructions" class="form-label">Instructions</label><textarea id="instructions" name="instructions" class="form-control" [(ngModel)]="config.instructions" rows="6" maxlength="10000" required></textarea></div>
         <app-model-picker [models]="template.modelOptions" [(value)]="config.model" />
+        @if (isAnomaly) {
+          <div class="mb-3"><label for="decision-model" class="form-label">Decision model</label>
+            <select id="decision-model" name="decisionModel" class="form-select" [ngModel]="decisionModel" (ngModelChange)="setDecisionModel($event)">
+              <option value="jev">Jev (TypeSafe AI)</option><option value="none">None — rules and statistics only</option>
+              @if (decisionModel !== 'jev' && decisionModel !== 'none') { <option [value]="decisionModel">{{decisionModel}} (saved selection)</option> }
+            </select><p class="form-text">Jev evaluates generated features before Review and requires backend API access. The model above handles the investigation after Review.</p>
+          </div>
+        }
         <div class="mb-3"><label for="service" class="form-label">Primary external API</label><select id="service" name="service" class="form-select" [(ngModel)]="config.service" required>
           @if (savedService) { <option [value]="config.service">{{config.service}} (saved selection)</option> }
           @for (item of services; track item.id) { <option [value]="item.id">{{item.name}}</option> }

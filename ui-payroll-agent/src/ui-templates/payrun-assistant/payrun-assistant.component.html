@@ -7,7 +7,7 @@
   @if (!host) { <p class="tn-copilot-note" role="status">Waiting for payrun context from the host page.</p> }
   @else if (loadError) { <div class="tn-copilot-note"><p class="text-danger" role="alert">Could not load agents from Agent Studio: {{loadError}}</p><button class="btn btn-outline-secondary btn-sm" (click)="loadAgents()">Retry loading agents</button></div> }
   @else if (loading) { <p class="tn-copilot-note" role="status">Loading agents…</p> }
-  @else if (!agent) { <p class="tn-copilot-note">No agents are attached to the payrun page yet. Create one from the Anomaly Detection or Summarizer template in <a [href]="studioUrl" target="_blank" rel="noreferrer">Agent Studio</a>, then reopen this panel.</p> }
+  @else if (!agent) { <p class="tn-copilot-note">No General Query agent is attached to the payrun page yet. Create one from the General Query template in <a [href]="studioUrl" target="_blank" rel="noreferrer">Agent Studio</a>, then reopen this panel.</p> }
   @else {
     <div class="tn-copilot-agent">
       <label class="visually-hidden" for="tn-agent">Agent</label><i class="bi bi-robot" aria-hidden="true"></i>
@@ -21,7 +21,7 @@
         <option value="">All employees</option>
         @for (item of host.payrun.employees; track item.employeeId) { <option [value]="item.employeeId">{{item.name}} ({{item.employeeId}})</option> }
       </select>
-      <p class="small text-muted mb-0" role="status">@if (employee) { Reviewing {{employee.name}} ({{employee.employeeId}}) only. } @else { Reviewing all employees in this payrun. Select an employee for an individual review. } @if (agent.templateId === 'anomaly-detection') { Payments are compared with earlier completed payruns. }</p>
+      <p class="small text-muted mb-0" role="status">@if (employee) { Reviewing {{employee.name}} ({{employee.employeeId}}) only. } @else { Reviewing all employees in this payrun. Select an employee for an individual review. } Ask General Query a question or choose one from the question library.</p>
     </div>
     <div #thread class="tn-copilot-thread" aria-live="polite">
       @if (!visibleMessages.length) { <div class="tn-copilot-empty"><span class="tn-copilot-mark large" aria-hidden="true"><i class="bi bi-stars"></i></span><p class="fw-semibold mb-1">Ask about this payrun</p><p class="small text-muted mb-0">{{agent.name}} reads {{host.payrun.id}} and its recent history. Pick a suggestion below or type your own question.</p></div> }

@@ -66,9 +66,15 @@ services:
       GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      AD_HF_FALLBACK: ${AD_HF_FALLBACK:-true}
+      AD_HF_BACKUP_MODEL: ${AD_HF_BACKUP_MODEL:-Qwen/Qwen3-235B-A22B-Instruct-2507}
       # Local Ollama on the host, e.g. http://host.docker.internal:11434/v1 (no key needed).
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
       MODEL_TIMEOUT_MS: ${MODEL_TIMEOUT_MS:-60000}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_PROVIDER: ${JEV_PROVIDER:-typesafe}
+      JEV_MODEL: ${JEV_MODEL:-}
+      JEV_TIMEOUT_SECONDS: ${JEV_TIMEOUT_SECONDS:-3}
       REDIS_URL: redis://redis:6379
       VECTOR_DB_HOST: vector-db
       VECTOR_DB_NAME: payroll_vectors
@@ -91,6 +97,7 @@ services:
       PII_MASKING: ${PII_MASKING:-true}
       # Headless-browser screenshots of each finding, attached to incident evidence.
       EVIDENCE_CAPTURE_URL: http://evidence-capture:4300
+      INCIDENT_ARTIFACT_ROOT: /incident-artifacts
       # Real-time anomaly detection: shared secret required on POST /events/payroll when set.
       PAYROLL_EVENTS_TOKEN: ${PAYROLL_EVENTS_TOKEN:-}
       # Admin vs user views: admins sign in with this key (unset = open Studio, everyone admin).
@@ -101,6 +108,7 @@ services:
       CUSTOMER_TOOLS: ${CUSTOMER_TOOLS:-}
     volumes:
       - embedding_cache:/models
+      - ../.local-data/incidents:/incident-artifacts
     ports:
       - "127.0.0.1:4000:4000"
       - "127.0.0.1:50051:50051"

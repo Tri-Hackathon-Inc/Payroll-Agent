@@ -60,7 +60,7 @@ export class PayrunAssistantComponent implements OnInit, AfterViewChecked {
       const data = await this.api.graphql<{ getServiceAgentRegistry: Agent[] }>(SERVICE_AGENT_REGISTRY_QUERY, { domainName: this.host.domain.name });
       if (generation !== this.loadGeneration) return;
       const attached = data.getServiceAgentRegistry.filter(item => item.config?.page === 'payrun');
-      this.agents = attached.filter(item => item.templateId !== 'incident-report');
+      this.agents = attached.filter(item => item.templateId === 'general-query' && !item.config['anomaly']);
       this.incidentAgent = attached.find(item => item.templateId === 'incident-report');
       if (!this.agents.some(item => item.id === this.agentId)) this.agentId = this.agents[0]?.id || '';
     } catch (error) { if (generation === this.loadGeneration) this.loadError = errorMessage(error); }

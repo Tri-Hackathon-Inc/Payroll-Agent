@@ -30,13 +30,16 @@ def validate_config(config, catalog):
         "roles",
         "capabilities",
     }
-    if not required <= set(config) or set(config) - required - {"pipelines", "model_parameters"}:
+    if not required <= set(config) or set(config) - required - {"pipelines", "model_parameters", "anomaly"}:
         raise ValueError(
             "config must contain exactly the documented configuration fields."
         )
     from pipelines.config import pipeline_settings, validate_model_parameters
     pipeline_settings(config)
     validate_model_parameters(config.get("model_parameters", {}))
+    if "anomaly" in config:
+        from agents.anomaly_detection.components import anomaly_settings
+        anomaly_settings(config)
     for field in (
         "description",
         "instructions",

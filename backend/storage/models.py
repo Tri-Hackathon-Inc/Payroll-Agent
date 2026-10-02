@@ -76,6 +76,22 @@ class Agent(models.Model):
         ordering = ["created_at", "id"]
 
 
+class AgentMessage(models.Model):
+    id = models.CharField(primary_key=True, max_length=64)
+    domain = models.ForeignKey(Domain, on_delete=models.PROTECT)
+    sender_id = models.UUIDField()
+    recipient_id = models.UUIDField()
+    service = models.CharField(max_length=100)
+    capability = models.CharField(max_length=100)
+    source_reference = models.CharField(max_length=100)
+    source_version = models.PositiveBigIntegerField()
+    requested_by = models.CharField(max_length=64)
+    status = models.CharField(max_length=20)
+    result = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class AgentInteraction(models.Model):
     """One question answered by an agent, recorded for the admin metrics view.
 
@@ -121,4 +137,5 @@ class AgentInteraction(models.Model):
 
 
 # Register agent-owned persistence with the existing Django application.
-from agents.anomaly_detection.models import AnomalyCase
+from agents.anomaly_detection.models import AnomalyCase, AnomalyFeatures, AnomalyAudit
+from agents.anomaly_detection.stream_models import AnomalyEvent, AnomalyRecord, AnomalyFeatureState

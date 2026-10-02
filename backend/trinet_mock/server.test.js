@@ -73,6 +73,29 @@ test('payrun queries', async () => {
   assert.equal(missing.errors[0].extensions.code, 'NOT_FOUND');
 });
 
+test('UI reads emit scoped events with the current version; internal reads remain silent', async () => {
+  const server = createApolloServer();
+  const store = openDatabase();
+  const sent = [];
+  const run = async (query, variables) => (await server.executeOperation({ query, variables },
+    { contextValue: { store, events: { notify: event => sent.push(event) } } })).body.singleResult;
+  await run('{ payrun(id: "PR-2026-09-B") { id } payrunHistory { id } }');
+  assert.equal(sent.length, 0);
+  const query = `query($line: ID) { payrun(id: "PR-2026-09-B", monitor: true, domainName: "payroll-services", checkLineId: $line) { version } }`;
+  assert.equal((await run(query)).errors, undefined);
+  assert.equal(sent[0].type, 'payrun.loaded');
+  assert.equal(sent[0].domainName, 'payroll-services');
+  assert.equal(sent[0].version, 1);
+  await run(UPDATE, { input: { payrunId: 'PR-2026-09-B', lineId: 'PR-2026-09-B-L07', earnings: { bonus: 100 } } });
+  await run(query, { line: 'PR-2026-09-B-L07' });
+  assert.deepEqual([sent[2].type, sent[2].version, sent[2].employeeId], ['paycheck.opened', 2, 'E1006']);
+  assert.ok((await run(query, { line: 'PR-2026-09-A-L07' })).errors);
+  assert.ok((await run('{ payrun(id: "PR-2026-09-B", monitor: true) { id } }')).errors);
+  assert.equal(sent.length, 3, 'invalid requests never trigger checks');
+  store.close();
+  await server.stop();
+});
+
 test('updatePayLine recalculates pay, totals, and version', async () => {
   const { run } = setup();
   const edited = await run(UPDATE, { input: { payrunId: 'PR-2026-09-B', lineId: 'PR-2026-09-B-L02', expectedVersion: 1, hours: { overtime: 4 } } });

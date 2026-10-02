@@ -132,6 +132,14 @@ test('anomaly HTTP routes preserve scoped cases, review payload and caller metad
   const malformed = await fetch(base+'/anomalies/review', { method: 'POST', body: '[]' });
   assert.equal(malformed.status, 400);
   assert.equal(calls.length, 2);
+  const feedback = { ...body, action: 'CONFIRMED', requestId: 'review-feedback-id' };
+  const saved = await fetch(base+'/anomalies/feedback', { method: 'POST', body: JSON.stringify(feedback) });
+  assert.equal(saved.status, 200);
+  assert.equal(calls[2].method, 'RecordAnomalyFeedback');
+  assert.deepEqual(calls[2].input, feedback);
+  const generic = await fetch(base+'/anomalies?domain=equipment&entityType=machine&entityId=pump-1');
+  assert.equal(generic.status, 200);
+  assert.deepEqual(calls[3].input, { domainName: 'equipment', payrunId: '', entityType: 'machine', entityId: 'pump-1' });
 });
 
 test('anomaly HTTP routes preserve Python permission and stale-version errors', async t => {

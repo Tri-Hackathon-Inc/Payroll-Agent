@@ -32,6 +32,17 @@ def load_context(invocation, history_limit=None):
     return {"current": data["payrun"], "history": data.get("payrunHistory") or []}
 
 
+def load_current(invocation):
+    """The incremental anomaly path needs only the current source version."""
+    query = "query AnomalyCurrent($id: ID!) { payrun(id: $id) { " + PAYRUN_FIELDS + " } }"
+    result = request_json(os.getenv("TRINET_API_URL", "http://trinet-api:4001/graphql"),
+                          {"query": query, "variables": {"id": invocation.get("payrunId")}})
+    data = result.get("data") or {}
+    if result.get("errors") or not data.get("payrun"):
+        raise RuntimeFailure("The requested payrun could not be loaded.", 404)
+    return data["payrun"]
+
+
 def groups(lines):
     grouped = defaultdict(list)
     for line in lines:

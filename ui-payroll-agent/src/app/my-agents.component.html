@@ -1,4 +1,13 @@
-@if (chat) { <app-agent-chat [agent]="chat.agent" [domain]="chat.domain" (back)="chat = null" /> }
+@if (chat) {
+  <div class="nav nav-tabs mb-3" role="tablist" aria-label="Agent views">
+    @if (has('testAgents') && canChat(chat.agent)) { <button id="agent-chat-tab" class="nav-link" [class.active]="agentTab === 'chat'" role="tab" [attr.aria-selected]="agentTab === 'chat'" aria-controls="agent-view" (click)="agentTab = 'chat'">Chat with agent</button> }
+    <button id="agent-pipeline-tab" class="nav-link" [class.active]="agentTab === 'pipeline'" role="tab" [attr.aria-selected]="agentTab === 'pipeline'" aria-controls="agent-view" (click)="agentTab = 'pipeline'">Model pipeline</button>
+  </div>
+  <div id="agent-view" role="tabpanel" [attr.aria-labelledby]="agentTab === 'pipeline' ? 'agent-pipeline-tab' : 'agent-chat-tab'">
+    @if (agentTab === 'pipeline') { <app-agent-pipeline [agent]="chat.agent" [domain]="chat.domain" (back)="chat = null" /> }
+    @else { <app-agent-chat [agent]="chat.agent" [domain]="chat.domain" (back)="chat = null" /> }
+  </div>
+}
 @else if (editing) { <app-agent-editor [agent]="editing.agent" [domain]="editing.domain" [templateId]="editing.agent.templateId" [viewer]="viewer" (saved)="saved($event)" (cancel)="editing = null" /> }
 @else {
   <div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="h4 fw-bold">My Agents</h2><p class="text-muted">Agents available to your services.</p></div><div class="d-flex gap-2 align-items-center"><span class="badge text-bg-secondary">{{agents.length}} agents</span>
@@ -17,7 +26,8 @@
           @for (agent of group.agents; track agent.id) {
             <li class="list-group-item d-flex flex-wrap align-items-center gap-3 p-3 my-agent-row"><span class="registry-icon"><i aria-hidden="true" class="bi bi-stars"></i></span>
               <div class="flex-grow-1"><strong>{{agent.name}}</strong> <span class="runtime-badge runtime-interactive">{{runtime(agent)}}</span><div class="small text-muted">{{agent.config.description}}</div><div class="small text-muted">{{agent.templateId}} · {{agent.modelConfig?.name || agent.config.model}} · {{agent.config.page || 'No page'}}</div></div>
-              @if (has('testAgents')) { <button class="btn btn-dark btn-sm" [disabled]="!!deleting" (click)="chat = { agent: agent, domain: group.domain }">Chat with agent</button> }
+              @if (has('testAgents') && canChat(agent)) { <button class="btn btn-dark btn-sm" [disabled]="!!deleting" (click)="agentTab = 'chat'; chat = { agent: agent, domain: group.domain }">Chat with agent</button> }
+              @if (has('testAgents') || has('manageAgents')) { <button class="btn btn-outline-secondary btn-sm" [disabled]="!!deleting" (click)="agentTab = 'pipeline'; chat = { agent: agent, domain: group.domain }">Model pipeline</button> }
               @if (has('manageAgents')) { <button class="btn btn-outline-secondary btn-sm" [disabled]="!!deleting" (click)="editing = { agent: agent, domain: group.domain }">Edit</button> }
               @if (agent.config.page === 'payrun') { <a class="btn btn-outline-secondary btn-sm" [href]="api.trinet(group.domain.name)" target="_blank" rel="noreferrer">Open in payrun</a> }
               @if (has('manageAgents')) { <button class="btn btn-outline-danger btn-sm" [disabled]="!!deleting" [attr.aria-label]="'Delete ' + agent.name" (click)="remove(agent, group.domain)">{{deleting === agent.id ? 'Deleting…' : 'Delete'}}</button> }

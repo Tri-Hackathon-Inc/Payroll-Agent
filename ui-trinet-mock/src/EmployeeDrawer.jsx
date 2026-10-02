@@ -46,7 +46,7 @@ function AmountInput({ id, label, value, error, onChange, step = '0.01', max, di
   </span>
 }
 
-export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload }) {
+export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload, children }) {
   const [form, setForm] = useState(() => initialForm(line))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -116,6 +116,7 @@ export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload }
       <div className="tn-drawer-head"><h2>Edit Employee Pay</h2><button type="button" className="tn-icon-btn" onClick={onClose} aria-label="Close"><i className="bi bi-x-lg" /></button></div>
       <div className="tn-drawer-body">
         <h3 className="tn-drawer-name">{line.name}</h3>
+        {children}
         <dl className="tn-details">
           {details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}
           <div><dt><label htmlFor="tn-payment-method">Payment method</label></dt><dd>

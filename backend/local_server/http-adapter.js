@@ -5,7 +5,7 @@ const { encodeStruct, decodeStruct, getGrpcMetadata } = require('../graphql/clie
 const webhookPath = /^\/webhook\/([^/]+)\/([^/]+)\/?$/;
 const agentPath = /^\/agents\/([^/]+)\/([^/]+)\/?$/;
 const isHttpRequest = path => webhookPath.test(path) || agentPath.test(path)
-  || ['/agents', '/agents/', '/anomalies', '/anomalies/review', '/auth/admin', '/auth/logout', '/events/payroll', '/events/preview', '/events/stream'].includes(path);
+  || ['/agent-messages', '/agents', '/agents/', '/anomalies', '/anomalies/review', '/anomalies/feedback', '/auth/admin', '/auth/logout', '/events/payroll', '/events/anomaly', '/events/preview', '/events/stream'].includes(path);
 
 async function readJson(req) {
   const chunks = [];
@@ -40,11 +40,14 @@ async function handleHttp(req, res, url, context) {
     if (url.pathname === '/anomalies') {
       return send(200, await call('ListAnomalies', {
         domainName: url.searchParams.get('domain') || '', payrunId: url.searchParams.get('payrunId') || '',
+        ...(url.searchParams.has('entityId') ? { entityId: url.searchParams.get('entityId'), entityType: url.searchParams.get('entityType') || '' } : {}),
+        ...(url.searchParams.has('tenant') ? { tenant: url.searchParams.get('tenant') } : {}),
       }));
     }
     if (url.pathname === '/events/stream') {
       const stream = grpc.stream(catalogRpc.protoPath, catalogRpc.packageName, catalogRpc.serviceName, 'WatchPayrollEvents',
-        encodeStruct({ domainName: url.searchParams.get('domain') || '', payrunId: url.searchParams.get('payrunId') || '' }), metadata);
+        encodeStruct({ domainName: url.searchParams.get('domain') || '', payrunId: url.searchParams.get('payrunId') || '',
+          ...(url.searchParams.has('entityId') ? { entityId: url.searchParams.get('entityId'), entityType: url.searchParams.get('entityType') || '', tenant: url.searchParams.get('tenant') || '' } : {}) }), metadata);
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
       res.write(': connected\n\n');
       stream.on('data', value => {
@@ -64,6 +67,7 @@ async function handleHttp(req, res, url, context) {
       return send(204, null);
     }
     const body = await readJson(req);
+    if (url.pathname === '/agent-messages') return send(200, await call('CommunicateAgents', body));
     if (['/agents', '/agents/'].includes(url.pathname)) {
       const agent = await call('CreateAgent', {
         domain_name: body.domainName, template_id: body.templateId, name: body.name, config: encodeStruct(body.config),
@@ -80,8 +84,10 @@ async function handleHttp(req, res, url, context) {
       return send(200, result.body);
     }
     if (url.pathname === '/events/payroll') return send(202, await call('PublishPayrollEvent', body));
+    if (url.pathname === '/events/anomaly') return send(202, await call('PublishPayrollEvent', body));
     if (url.pathname === '/events/preview') return send(200, await call('PreviewPayrollChange', body));
     if (url.pathname === '/anomalies/review') return send(200, await call('ReviewAnomaly', body));
+    if (url.pathname === '/anomalies/feedback') return send(200, await call('RecordAnomalyFeedback', body));
     const webhook = webhookPath.exec(url.pathname);
     return send(200, await call('ExecuteAgent', { ...body, domainName: decodeURIComponent(webhook[1]), agentId: decodeURIComponent(webhook[2]), channel: 'payroll' }));
   } catch (error) {

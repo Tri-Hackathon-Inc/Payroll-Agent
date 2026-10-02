@@ -25,7 +25,7 @@ def with_conversation(options, execute, client=None):
     context = options.get("context", {})
     if not isinstance(context, dict):
         raise RuntimeFailure("Conversation context must be an object.", 400)
-    context = {k: v for k, v in context.items() if k in ("page", "payrunId", "employeeId")}
+    context = {k: v for k, v in context.items() if k in ("page", "payrunId", "employeeId", "entityId", "entityType", "tenant", "scope")}
     if any(v is not None and (not isinstance(v, str) or not v.strip() or len(v) > 255) for v in context.values()):
         raise RuntimeFailure("Invalid conversation context.", 400)
     history = options.get("history") or []

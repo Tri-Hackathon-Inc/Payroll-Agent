@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { basePath } from './scripts/settings.mjs'
 
 const BASE = basePath(process.env.STUDIO_BASE_PATH || '/ai_studio/')
-process.env.TRINET_UI_URL = 'http://127.0.0.1:5184/trinet/'
+process.env.TRINET_UI_URL ||= 'http://127.0.0.1:5184/trinet/'
 
 // Exercises published Angular artifacts through the independent host's proxy.
 // Run npm run build first, or set AGENT_RUNTIME_DEV=1 to verify development serving.
@@ -13,7 +13,7 @@ export default defineConfig({
   testMatch: ['payroll-scope.spec.js', 'runtime-template.spec.js', 'runtime-hosts.spec.js'], workers: 1,
   use: { trace: 'retain-on-failure', launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
     ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH } : {} },
-  webServer: [
+  webServer: process.env.AGENT_RUNTIME_EXTERNAL ? undefined : [
     { command: `"${process.execPath}" scripts/${process.env.AGENT_RUNTIME_DEV ? 'dev' : 'preview'}.mjs --host 127.0.0.1 --port 5182`,
       timeout: 180000,
       url: `http://127.0.0.1:5182${BASE}`, env: { GRAPHQL_MODE: 'mock', STUDIO_BASE_PATH: BASE }, reuseExistingServer: false },

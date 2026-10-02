@@ -18,7 +18,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname === BASE.slice(0, -1) && BASE !== '/') { res.writeHead(302, { Location: `${BASE}${url.search}` }); return res.end(); }
     if (!url.pathname.startsWith(BASE)) { res.writeHead(404); return res.end(); }
     const route = url.pathname.slice(BASE.length);
-    const api = ['graphql', 'webhook', 'auth', 'agents', 'events/stream'].find(prefix => route === prefix || route.startsWith(`${prefix}/`));
+    const api = ['graphql', 'webhook', 'auth', 'agents', 'events', 'anomalies', 'agent-messages'].find(prefix => route === prefix || route.startsWith(`${prefix}/`));
     if (api) {
       const upstream = new URL(`${route === 'graphql' ? '/' : '/' + route}${url.search}`, target);
       const proxy = (upstream.protocol === 'https:' ? httpsRequest : httpRequest)(upstream, { method: req.method, headers: { ...req.headers, host: upstream.host } }, reply => {

@@ -21,6 +21,14 @@
   @if (error) { <div role="alert" class="alert alert-danger">{{error}}</div> }
   @if (pending) { <app-question-confirmation [mapping]="pending" [busy]="sending" (confirm)="confirm($event)" (revise)="revise()" /> }
   @if (sending && !pending) { <p role="status">{{payrunId.trim() ? 'Finding the closest predefined question…' : 'Waiting for a response…'}}</p> }
+  @if (agent.templateId === 'general-query') {
+    <div class="mb-3" role="group" aria-label="Predefined questions">
+      <p class="small text-muted">Choose a question or type your own.</p>
+      @for (question of agent.config.questions; track question) {
+        <button type="button" class="btn btn-outline-secondary btn-sm me-2 mb-2" [disabled]="sending || !!pending" (click)="input = question; send()">{{question}}</button>
+      }
+    </div>
+  }
   <form (ngSubmit)="send()"><label class="form-label" for="chat-message">Message</label><textarea id="chat-message" name="message" class="form-control mb-3" rows="3" maxlength="10000" required [disabled]="sending || !!pending" [(ngModel)]="input"></textarea><button class="btn btn-dark" [disabled]="sending || !!pending || !input.trim()" type="submit">{{sending ? 'Sending…' : 'Send message'}}</button></form>
   <p class="small text-muted mt-3">Conversation context is kept temporarily for follow-ups. New chat starts a fresh session.</p>
 </div></div>
