@@ -16,7 +16,7 @@ export const DOMAIN_TEMPLATES_QUERY = `
     getDomainAgentsTemplates(domainName: $domainName) {
       id name description version config
       modelOptions { id name provider modelId enabled details }
-      serviceOptions { id name domain enabled baseUrlEnv method path }
+      serviceOptions { id name domain enabled baseUrlEnv method path operations }
     }
   }
 `
@@ -26,7 +26,7 @@ export const TEMPLATE_QUERY = `
     getTemplate(id: $id) {
       id name description version config
       modelOptions { id name provider modelId details }
-      serviceOptions { id name domain method path }
+      serviceOptions { id name domain method path operations }
     }
   }
 `

@@ -231,6 +231,9 @@ class QuestionTests(SimpleTestCase):
 
 class PreviewTests(SimpleTestCase):
     def setUp(self):
+        permission = patch("runtime.events.agent_access.can_read", return_value=True)
+        permission.start()
+        self.addCleanup(permission.stop)
         self.context = fixture()
         line = next(item for item in self.context["current"]["lines"] if item["payType"] == "hourly")
         self.body = {"payrunId": self.context["current"]["id"], "lineId": line["lineId"], "expectedVersion": self.context["current"]["version"], "changes": {"hours": {"overtime": 180}}}

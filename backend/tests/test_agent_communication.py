@@ -1,3 +1,4 @@
+from tests.access_fixtures import grant_read
 import os
 import json
 import tempfile
@@ -31,6 +32,10 @@ class AgentCommunicationTests(TestCase):
         self.sender = AgentFactory().create('payroll-services', 'anomaly-detection', 'AD', {'model': 'poc-demo'})
         self.target = AgentFactory().create('payroll-services', 'incident-report', 'Reports',
             {'model': 'poc-demo', 'service': self.sender.config['service']})
+        grant_read(self.sender)
+        grant_read(self.target)
+        from storage.models import AgentContextPermission
+        AgentContextPermission.objects.create(reader=self.target, source=self.sender)
         self.agent = AgentFactory().load('payroll-services', str(self.sender.pk))
         self.context = fixture()
         _, self.case = self.agent.check(self.context)
@@ -141,3 +146,42 @@ class AgentCommunicationTests(TestCase):
         self.assertNotIn('base64', json.dumps(incident))
         with self.assertRaises(ValueError):
             save_incident({'id': '../outside'}, context, incident)
+
+    def test_recipient_revocation_prevents_context_transfer(self):
+        from storage.models import AgentContextPermission
+        AgentContextPermission.objects.filter(reader=self.target).delete()
+        with patch('agents.communication.incident.create_report') as report:
+            self.assertEqual(communicate(self.body, self.headers)['agents'], [])
+            with patch('runtime.payroll.load_context', return_value=self.context), self.assertRaises(RuntimeFailure):
+                communicate({**self.body, 'action':'SEND'}, self.headers)
+        report.assert_not_called()
+
+    def test_sender_revocation_prevents_loading_saved_context(self):
+        from storage.models import AgentGroupMembership
+        from agents.communication import service
+        AgentGroupMembership.objects.filter(agent=self.sender).delete()
+        with patch.dict(service.PUBLISHERS, {'anomaly-investigation': lambda *args: self.fail('Context must not be read')}):
+            with self.assertRaises(RuntimeFailure): communicate(self.body, self.headers)
+
+    def test_report_read_permission_does_not_allow_notification_writes(self):
+        from runtime.incidents import create_report
+        with patch.dict(os.environ, EVIDENCE_CAPTURE_URL='', EMAIL_API_BASE_URL='https://example.invalid', SLACK_WEBHOOK_URL='https://example.invalid'), patch('runtime.incidents.deliver') as delivery:
+            result = create_report(services.agent_data(self.target), 'payroll-services', {'payrunId': self.case.payrun_id}, context=self.context, notify=True)
+        delivery.assert_not_called()
+        self.assertIn('incident', result)
+
+    def test_context_permission_is_directional_and_required_for_handoff(self):
+        from storage.models import AgentContextPermission
+        from runtime.agent_access import can_read_context
+        self.assertTrue(can_read_context(self.target.pk,self.sender.pk,'payroll-services'))
+        self.assertFalse(can_read_context(self.sender.pk,self.target.pk,'payroll-services'))
+        AgentContextPermission.objects.all().delete()
+        self.assertEqual(communicate(self.body,self.headers)['agents'],[])
+
+    def test_handoff_context_does_not_require_recipient_source_api_access(self):
+        from storage.models import AgentGroupMembership
+        AgentGroupMembership.objects.filter(agent=self.target).delete()
+        with patch('runtime.payroll.load_context',return_value=self.context), patch.dict(os.environ,EVIDENCE_CAPTURE_URL=''), patch('runtime.incidents.deliver') as delivery:
+            result = communicate({**self.body,'action':'SEND'},self.headers)
+        self.assertEqual(result['status'],'completed')
+        delivery.assert_not_called()

@@ -1,3 +1,4 @@
+from runtime import agent_access
 import hashlib
 import logging
 import re
@@ -57,14 +58,22 @@ def execute(payload, headers):
     invocation = payload.get("context") or {}
     if not isinstance(invocation, dict):
         raise RuntimeFailure("Conversation context must be an object.", 400)
+    context_chat = bool(agent_access.chat_context_sources(agent)) and not agent_access.can_read(agent)
+    # Cached session replies must not bypass revocation.
+    if invocation.get("payrunId") and not context_chat:
+        agent_access.require_payroll(agent)
+    elif (invocation.get("entityId") or payload.get("sessionId")) and not context_chat:
+        agent_access.require_read(agent)
     loaded = {}
 
     def load(options):
+        agent_access.require_read(agent)
         payrun_id = options.get("payrunId", options.get("entityId"))
         if payrun_id not in loaded:
             if is_anomaly_agent(agent):
                 loaded[payrun_id] = runtime_agent.components.domain.load(options)
             else:
+                agent_access.require_payroll(agent)
                 loaded[payrun_id] = load_context(options, history_limit=runtime_agent.settings["query"]["historyLimit"])
         return loaded[payrun_id]
 
@@ -77,14 +86,18 @@ def execute(payload, headers):
 
         def run(conversation):
             effective.update(conversation["context"])
+            if effective.get("payrunId") and not context_chat:
+                agent_access.require_payroll(agent)
+            elif effective.get("entityId") and not context_chat:
+                agent_access.require_read(agent)
             return runtime_agent.respond(question.strip(), effective, conversation, payload.get("confirmation"), load=load)
 
         owner = headers.get("x-session-owner")
         if not owner or not re.fullmatch(r"[a-f0-9]{64}", owner):
             raise RuntimeFailure("A browser session owner is required.", 400)
-        answer = with_conversation({**payload, "question": question, "context": invocation, "scope": {"domainName": domain, "agentId": agent_id, "channel": channel, "owner": owner}}, run)
+        answer = with_conversation({**payload, "question": question, "context": invocation, "scope": {"domainName": domain, "agentId": agent_id, "channel": channel, "owner": owner, "contextOnly": context_chat, "contextSources": [str(value) for value in agent_access.readable_sources(agent_id, domain)]}}, run)
         invocation = effective
-        if not is_anomaly_agent(agent) and answer.get("status") != "confirmation_required" and answer.get("answeredBy") != "clarification" and effective.get("payrunId") and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
+        if not context_chat and not is_anomaly_agent(agent) and answer.get("status") != "confirmation_required" and answer.get("answeredBy") != "clarification" and effective.get("payrunId") and agent["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
             context = load(effective)
             try:
                 answer["incidentAlert"] = raise_incidents(agent, services.get_service_agent_registry("", domain), domain, context, preprocess(context["current"], context["history"]))

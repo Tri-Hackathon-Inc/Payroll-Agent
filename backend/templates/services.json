@@ -6,7 +6,20 @@
     "enabled": true,
     "base_url_env": "PAYRUN_API_BASE_URL",
     "method": "GET",
-    "path": "/payruns"
+    "path": "/payruns",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/payruns",
+        "access": "R"
+      },
+      {
+        "method": "POST",
+        "path": "/payruns",
+        "access": "W",
+        "description": "Write permission only; agent payroll writes are not implemented."
+      }
+    ]
   },
   {
     "id": "payrun-history",
@@ -15,7 +28,14 @@
     "enabled": true,
     "base_url_env": "PAYRUN_API_BASE_URL",
     "method": "GET",
-    "path": "/payruns/history"
+    "path": "/payruns/history",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/payruns/history",
+        "access": "R"
+      }
+    ]
   },
   {
     "id": "employee-details",
@@ -24,7 +44,14 @@
     "enabled": true,
     "base_url_env": "EMPLOYEE_API_BASE_URL",
     "method": "GET",
-    "path": "/employees/{employee_id}/payrun"
+    "path": "/employees/{employee_id}/payrun",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/employees/{employee_id}/payrun",
+        "access": "R"
+      }
+    ]
   },
   {
     "id": "diagnostics",
@@ -33,7 +60,14 @@
     "enabled": true,
     "base_url_env": "DIAGNOSTICS_API_BASE_URL",
     "method": "GET",
-    "path": "/diagnostics/logs"
+    "path": "/diagnostics/logs",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/diagnostics/logs",
+        "access": "R"
+      }
+    ]
   },
   {
     "id": "slack-webhook",
@@ -42,7 +76,14 @@
     "enabled": true,
     "base_url_env": "SLACK_WEBHOOK_BASE_URL",
     "method": "POST",
-    "path": "/services/payroll-alerts"
+    "path": "/services/payroll-alerts",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/services/payroll-alerts",
+        "access": "W"
+      }
+    ]
   },
   {
     "id": "email-notification",
@@ -51,7 +92,14 @@
     "enabled": true,
     "base_url_env": "EMAIL_API_BASE_URL",
     "method": "POST",
-    "path": "/notifications/email"
+    "path": "/notifications/email",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/notifications/email",
+        "access": "W"
+      }
+    ]
   },
   {
     "id": "alert-manager",
@@ -60,7 +108,14 @@
     "enabled": true,
     "base_url_env": "ALERTING_API_BASE_URL",
     "method": "POST",
-    "path": "/alerts"
+    "path": "/alerts",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/alerts",
+        "access": "W"
+      }
+    ]
   },
   {
     "id": "opensearch-sink",
@@ -69,6 +124,13 @@
     "enabled": true,
     "base_url_env": "OPENSEARCH_BASE_URL",
     "method": "POST",
-    "path": "/agent-events/_doc"
+    "path": "/agent-events/_doc",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/agent-events/_doc",
+        "access": "W"
+      }
+    ]
   }
 ]

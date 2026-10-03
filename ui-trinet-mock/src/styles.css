@@ -229,3 +229,6 @@ button { cursor: pointer; }
   .tn-ad-steps small { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .tn-ad-scan .tn-ad-scan-icon { animation: none; } }
+
+.tn-agent-access-help { flex-basis: 100%; margin: 0; color: #8b3b25; }
+.tn-ad-scan.blocked { background: #fff7f3; border-color: #eed4c8; }

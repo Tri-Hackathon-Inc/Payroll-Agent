@@ -1,3 +1,4 @@
+from runtime import agent_access
 """API read/save monitoring and read-only, transient draft checks."""
 import hashlib
 import hmac
@@ -88,6 +89,8 @@ def process(event):
             continue
         monitors = services.get_service_agent_registry("", name)
         for definition in monitors:
+            if not agent_access.can_read(definition):
+                continue
             if not is_anomaly_agent(definition) or not definition["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
                 continue
             profile = definition["config"].get("anomaly", {}).get("profile", "payroll")

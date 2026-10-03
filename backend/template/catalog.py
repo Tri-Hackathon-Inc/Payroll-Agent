@@ -109,6 +109,17 @@ def load_catalog():
                                 f"{field} must be an environment variable name."
                             )
                 if name == "services":
+                    operations = entry.get("operations", [])
+                    if not isinstance(operations, list):
+                        raise ValueError("Service operations must be a list.")
+                    seen = set()
+                    for operation in operations:
+                        if not isinstance(operation, dict) or operation.get("method") not in ("GET", "POST", "PUT", "PATCH", "DELETE") or operation.get("access") not in ("R", "W") or not isinstance(operation.get("path"), str) or not operation["path"].startswith("/"):
+                            raise ValueError("Each API operation needs a method, path and R/W access.")
+                        key = (operation["method"], operation["path"])
+                        if key in seen:
+                            raise ValueError("Duplicate service operation.")
+                        seen.add(key)
                     if (
                         not isinstance(entry.get("domain"), str)
                         or not entry["domain"].strip()

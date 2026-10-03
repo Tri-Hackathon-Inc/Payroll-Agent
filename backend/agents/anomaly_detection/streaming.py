@@ -3,6 +3,7 @@
 The event archive doubles as an inbox so a broker outage cannot lose an accepted
 event. Workers may be deployed separately; short database leases claim work.
 """
+from runtime import agent_access
 from copy import deepcopy
 from datetime import timedelta
 
@@ -92,6 +93,8 @@ def process_record_event(identity, broadcast=None):
         event = context["record"]
         definitions = services.get_service_agent_registry("", event["domainName"])
         for definition in definitions:
+            if not agent_access.can_read(definition):
+                continue
             if not is_anomaly_agent(definition) or not definition["config"].get("capabilities", {}).get("alerts", {}).get("enabled"):
                 continue
             settings = anomaly_settings(definition["config"])

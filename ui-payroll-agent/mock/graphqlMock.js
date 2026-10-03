@@ -25,6 +25,10 @@ function merge(base, override) {
 export function createMockExecutor() {
   const schema = buildSchema(readFile('../graphql/schema.graphql'))
   const { domains, templates, agents } = JSON.parse(readFile('./data.json'))
+  const serviceCatalog = JSON.parse(readFile('../../backend/templates/services.json'))
+  for (const template of templates) for (const service of template.serviceOptions || []) {
+    service.operations = serviceCatalog.find(item => item.id === service.id)?.operations || [{ method: service.method, path: service.path, access: service.method === 'GET' ? 'R' : 'W' }]
+  }
   const domain = name => domains.find(item => item.name === name) || fail(`Domain ${name} not found.`, 'NOT_FOUND')
   const template = id => templates.find(item => item.id === id) || fail(`Template ${id} not found.`, 'NOT_FOUND')
   const snapshotModel = (source, config) => {
@@ -34,6 +38,7 @@ export function createMockExecutor() {
   for (const agent of agents) agent.modelConfig ||= snapshotModel(template(agent.templateId), agent.config)
 
   function save(input, existing) {
+    if (['agentGroupIds','roleGroupIds','apiPermissions','contextSourceIds'].some(key=>input[key]!==undefined)) fail('Access group assignment requires the backend.', 'SERVICE_UNAVAILABLE')
     const selectedDomain = domain(input.domainName)
     const source = template(existing?.templateId || input.templateId)
     const config = merge(existing?.config || source.config, input.config)
@@ -66,6 +71,8 @@ export function createMockExecutor() {
   }
 
   const rootValue = {
+    agentAccess: () => fail('Access control requires the backend. Preview mode cannot manage permissions.', 'SERVICE_UNAVAILABLE'),
+    manageAgentAccess: () => fail('Access control requires the backend. Preview mode cannot manage permissions.', 'SERVICE_UNAVAILABLE'),
     agentHealth: ({ domainName, agentId }) => ({ items: agents.filter(agent => agent.domainName === domainName && (!agentId || agent.id === agentId) && agent.config.service).map(agent => ({ agentId: agent.id, agentName: agent.name, serviceId: agent.config.service, status: 'not_connected', reason: 'Preview mode: no live service health check is available.', checkedAt: new Date().toISOString() })), scope: 'Preview mode; live connectivity is not tested.' }),
     agentPipeline: ({ domainName, agentId, anomalyId }) => {
       domain(domainName)

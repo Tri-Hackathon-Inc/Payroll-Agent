@@ -1202,3 +1202,142 @@ My Agents checks on mount/attachment edits; the payrun checks the domain's attac
 agents. Both recheck every 30 seconds and mark failed/unavailable checks red. Mock
 mode never claims live connectivity. Shared primary services are probed once per
 batch. Missing, disabled, unhealthy or unconfigured services are Not connected.
+
+
+### Agent service access control
+
+Agent Studio -> Access control manages domain-scoped agent groups, memberships,
+role groups, service Read/Write grants, and the `agent_authorization` table mapping
+agent groups to role groups. GraphQL `agentAccess` / `manageAgentAccess` forward
+through `GetAgentAccess` / `ManageAgentAccess` to Python `runtime/agent_access.py`.
+Only administrators with `manageAgents` can read or change these mappings. Existing
+open development authentication still treats everyone as admin; configure
+`STUDIO_ADMIN_KEY` for authenticated administrative access.
+
+Service attachment and authorization are separate requirements. New agents have
+no service permissions until explicitly mapped. Grants are additive across groups;
+Read and Write are independent and evaluated as business actions, not HTTP verbs.
+Disabled services and cross-domain memberships/mappings cannot authorize access.
+Revocation takes effect on the next checked operation; it does not cancel in-flight
+requests or erase previously displayed evidence. No permission cache is used.
+
+Chat checks restored context before responding, AD Review checks before reading
+source evidence, and background monitors skip unauthorized agents before payroll
+retrieval or delivery of record context. A2A checks the sender and recipient
+independently. Incident generation requires its own source read grants; email and
+Slack delivery require explicit Write grants and attachment. Internal report-file
+creation is not a write to the payroll API. Health badges report missing read
+permission as Not connected. The payrun UI shows an actionable access-control
+message and replaces scanning progress with an unavailable status while the AD
+agent is disconnected. Recreated agents have new IDs and must be explicitly added
+to a group again; old memberships do not transfer by name. Draft calculations and source ingestion remain
+infrastructure/user operations rather than saved-agent executions.
+
+The existing combined payroll query retrieves payrun, history and employee fields,
+so payroll operations conservatively require Read on `payrun`, `payrun-history`,
+and `employee-details`. Future source adapters must call the shared authorization
+service with their actual required service IDs/actions before using data or calling
+an API. Permissions do not themselves implement a new write capability.
+
+Migration 0014 adds tables; 0015 explicitly gives existing agents individual
+read-only groups for their enabled GET/HEAD service attachments (and bundled payroll
+reads). No Write permissions are seeded. This is a one-time compatibility migration;
+newly created agents are denied by default. Administrators can consolidate the seeded
+groups in the UI. Catalog removal cascades permission rows, never grants new access.
+This is domain-scoped service authorization, not employee/field-level filtering or
+physical customer isolation; those require separate policies and deployment controls.
+
+
+### API operations in template configuration and access groups
+
+Service catalog entries can include `operations`: method, path, R/W access and an
+optional description. `sync_templates` persists these in `ServiceDefinition.operations`;
+entries without operations use their existing method/path. The template editor
+shows these operations for selected APIs, plus the groups granting each access class.
+Payrun exposes GET/Read and POST/Write permissions. Its POST entry reserves a write
+permission; there is no agent payroll-write executor or new REST route. Permissions
+remain service-level R/W: operations with the same access class share that grant.
+Transport POST for a GraphQL query is still a business read, not a write grant.
+
+Admins can select agent groups when creating/editing an agent. The optional
+`agentGroupIds` input travels as a separate gRPC access message, never as model
+configuration. Python saves memberships and agent changes atomically. Omitting
+this field retains existing memberships; an empty list removes them. Cross-domain
+and non-admin assignments fail without saving partial agent changes. Template
+catalog defaults never grant permissions automatically.
+
+Access control shows methods and paths with each role permission. Editing an
+agent group also permits attaching role groups and previews its granted API
+operations. `roleGroupIds`, when supplied, replaces that group's role mappings
+in the same transaction as member edits. Unsupported service access classes are
+rejected; no new permissions are seeded by migration 0016.
+
+
+### Direct API permissions and directional context reads
+
+The create/edit agent form separates app attachment from backend API access.
+Selecting Payrun sets the existing page attachment and primary payrun service,
+and previews the payrun/employee UI placement. Backend API source switches between
+registered Payrun APIs and external integrations without changing saved grants.
+Roles and access groups are visible with their mapped roles. App selection alone
+does not grant API access. API access has explicit Read/Write checkboxes; Agent context access lists other
+saved agents in the same domain as selectable READ sources. The first agent has
+no context sources. Access groups remain an additive option. Checking
+an API grant attaches that service in the form; saving persists both atomically.
+Direct permissions use `AgentServicePermission`; group grants remain effective
+until their membership or mapping is removed.
+
+`AgentContextPermission(reader, source)` grants only reader -> source READ.
+Incident Report reading AD does not authorize AD to read Incident Report. General
+Query can receive independent grants for AD and Incident Report. No context grants
+are automatically inferred from service attachment, API permission, agent name,
+or creation order. Only admins can change grants. Same-agent/cross-domain grants
+are rejected, deletion cascades grants, and omitted fields preserve them.
+
+The create/update inputs accept `apiPermissions` and `contextSourceIds` alongside
+`agentGroupIds`, all in the separate access message. A2A discovery/delivery requires
+the recipient's explicit READ grant on the sender. General Query reads only granted
+AD sources and completed incident results in the same domain, service, source
+version and exact employee/payrun scope. Incident context excludes image bytes and
+is bounded. It does not initiate new investigations or reports. Context grant IDs
+are part of the chat session authorization scope so changes invalidate old sessions
+instead of replaying old context from history/cache.
+
+For Incident Report handoffs, the context READ grant authorizes the transferred
+snapshot independently of payroll API grants. The receiver passes the trusted
+sender identity to `create_report`, which rechecks the directional grant. Direct
+incident requests and other calls still require payroll API Read. This does not
+permit the receiver to fetch fresh payroll through a context grant. Incident
+receivers with a context grant can pass the limited connectivity health check.
+
+### Explicit role assignment in the agent form
+
+The form offers role checkboxes independently of agent-group membership.
+Optional create/update access input roleGroupIds replaces the agent's direct role
+assignments atomically; omission preserves them and an empty list removes them.
+AgentRoleAssignment stores these domain-scoped assignments (migration 0018).
+The common authorization service adds their current permissions to direct API
+grants and inherited group roles; attachment and enabled-service checks still
+apply. Changes to a role take effect on the next authorization check. Removing
+a direct role does not revoke permissions granted through another path.
+App UI attachment, app backend APIs, external APIs, roles and context READ are
+shown separately. My Agents supports selection and confirmed bulk deletion.
+
+The agent editor orders setup as Agent details (name and description), Instructions
+and models, App attachment, then Data and permissions. A section navigation panel
+and sticky save bar support the long form; optional starting questions are collapsed.
+
+### General Query using saved AD context without payroll API access
+
+When General Query lacks payroll API Read but has a directional context READ grant
+to an AD agent attached to the same domain/service/payrun page, execution selects
+the context-only path. It maps the question internally and calls context_answer
+with authorized saved responses only. No payroll loader, history retrieval or
+automatic incident generation runs. The latest saved payrun version and exact
+employee scope are required; missing scope does not fall back to an older version.
+Replies identify saved-check version, distinguish decisions from investigations,
+and validate the model's source citation. They do not assert live payroll freshness.
+Health checks validate context eligibility and model configuration without probing
+the payroll API. Conversation authorization scope includes context-only mode and
+source grants; revocation is checked before cached responses. Agents with full API
+Read continue using the existing fresh-data pipeline.

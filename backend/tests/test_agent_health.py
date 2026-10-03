@@ -1,3 +1,4 @@
+from tests.access_fixtures import grant_read
 import os
 from unittest.mock import patch
 from django.test import TestCase
@@ -18,6 +19,8 @@ class AgentHealthTests(TestCase):
     def setUp(self):
         self.agent = AgentFactory().create("payroll-services", "general-query", "Chat", {"model": "poc-demo"})
 
+        grant_read(self.agent)
+
     def test_live_uses_safe_query_without_inference(self):
         with patch("agents.health.request_json", return_value={"data": {"__typename": "Query"}}) as request, patch("model.model.Model.generate") as generate:
             result = agent_health({"domainName": "payroll-services"}, {})
@@ -33,7 +36,7 @@ class AgentHealthTests(TestCase):
 
     def test_domain_isolation_and_shared_service_probe(self):
         AgentFactory().create("other", "general-query", "Other", {"model": "poc-demo"})
-        AgentFactory().create("payroll-services", "general-query", "Second", {"model": "poc-demo"})
+        grant_read(AgentFactory().create("payroll-services", "general-query", "Second", {"model": "poc-demo"}))
         with patch("agents.health.probe_service", return_value=(True, "Connected")) as probe:
             result = agent_health({"domainName": "payroll-services"}, {})
         self.assertEqual(len(result["items"]), 2)

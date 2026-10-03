@@ -1,3 +1,4 @@
+from tests.access_fixtures import grant_read
 """Anomaly detection and human review gates, without external model calls."""
 import os
 from copy import deepcopy
@@ -42,6 +43,7 @@ class AnomalyReviewTests(TestCase):
     def setUp(self):
         self.context = fixture()
         self.saved = self.create()
+        grant_read(self.saved)
         self.agent = AgentFactory().load("payroll-services", str(self.saved.id))
         self.headers = {"x-session-owner": "a" * 64}
         self.success = {"summary": "Review the recorded overtime.", "modelStatus": "completed", "evidence": [], "findings": []}

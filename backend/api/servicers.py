@@ -53,6 +53,16 @@ def rpc_handler(handler):
 
 class AIStudioServicer(rpc.ai_studioServicer):
     @rpc_handler
+    def GetAgentAccess(self, request, context):
+        from runtime.agent_access import manage
+        return ParseDict(manage(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
+    @rpc_handler
+    def ManageAgentAccess(self, request, context):
+        from runtime.agent_access import manage
+        return ParseDict(manage(MessageToDict(request), dict(context.invocation_metadata()), write=True), Struct())
+
+    @rpc_handler
     def GetAgentHealth(self, request, context):
         from agents.health import agent_health
         return ParseDict(agent_health(MessageToDict(request), dict(context.invocation_metadata())), Struct())
@@ -161,30 +171,23 @@ class AIStudioServicer(rpc.ai_studioServicer):
 
     @rpc_handler
     def CreateAgent(self, request, context):
+        from runtime.agent_access import save_agent_with_groups
+        headers = dict(context.invocation_metadata())
         config = MessageToDict(request.config)
-        access.check_choices(dict(context.invocation_metadata()), config)
-        return ParseDict(
-            services.create_agent(
-                request.domain_name,
-                request.template_id,
-                request.name,
-                MessageToDict(request.config),
-            ),
-            pb.Agent(),
-        )
+        access.check_choices(headers, config)
+        return ParseDict(save_agent_with_groups(
+            MessageToDict(request.access) if request.HasField("access") else None, headers,
+            lambda: services.create_agent(request.domain_name, request.template_id, request.name, config)), pb.Agent())
 
     @rpc_handler
     def UpdateAgent(self, request, context):
-        access.check_choices(dict(context.invocation_metadata()), MessageToDict(request.config))
-        return ParseDict(
-            services.update_agent(
-                request.id,
-                request.domain_name,
-                request.name,
-                MessageToDict(request.config),
-            ),
-            pb.Agent(),
-        )
+        from runtime.agent_access import save_agent_with_groups
+        headers = dict(context.invocation_metadata())
+        config = MessageToDict(request.config)
+        access.check_choices(headers, config)
+        return ParseDict(save_agent_with_groups(
+            MessageToDict(request.access) if request.HasField("access") else None, headers,
+            lambda: services.update_agent(request.id, request.domain_name, request.name, config)), pb.Agent())
 
     @rpc_handler
     def DeleteAgent(self, request, context):

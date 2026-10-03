@@ -23,6 +23,7 @@ function Loading({ children }) {
 export default function App() {
   const [query, setQuery] = useState(readQuery)
   const [domain, setDomain] = useState(null)
+  const [agentHealth, setAgentHealth] = useState(null)
   const [payruns, setPayruns] = useState(null)
   const [detail, setDetail] = useState(null)
   const [error, setError] = useState('')
@@ -166,6 +167,10 @@ export default function App() {
   const assistantAvailable = Boolean(run && domain && chatAttached)
   // Agent Studio's real-time checks for this payrun (see LiveAlerts.jsx).
   const live = useLiveAlerts(run ? domain?.name : null, run?.id, run?.version)
+  const currentHealth = agentHealth?.domainName === domain?.name ? agentHealth : null
+  const adHealth = currentHealth?.items.filter(item => item.templateId === 'anomaly-detection') || []
+  const scanBlocked = currentHealth && !currentHealth.checking && (currentHealth.error || (adHealth.length > 0 && adHealth.every(item => item.status !== 'live')))
+  const scanReason = currentHealth?.error ? 'Agent connectivity could not be checked. Retrying automatically.' : adHealth.find(item => item.status !== 'live')?.reason
   const scopedCases = live.cases.filter(item => (item.scope || null) === adEmployee && item.version === run?.version)
   const employeeChecked = live.checks.some(item => item.domainName === domain?.name && item.payrunId === run?.id && item.scope === adEmployee && item.version === run?.version)
   const adPanel = <LiveAlerts key={`${run?.id}:${adEmployee || 'payrun'}`} alerts={live.alerts.filter(item => item.type === 'error')} cases={scopedCases} onDismiss={live.dismiss} onReview={live.review} onFeedback={live.feedback} />
@@ -181,7 +186,7 @@ export default function App() {
   return <div className={`tn-app${assistantAvailable && assistantOpen ? ' tn-with-assistant' : ''}`}>
     <header className="tn-header">
       <span className="tn-logo">TriNet</span><span className="tn-mock-tag">Mock</span>
-      {run && live.connected && <span className="tn-live-status" title="Agent Studio checks every saved change to this payroll">
+      {run && live.connected && !scanBlocked && <span className="tn-live-status" title="Agent Studio checks every saved change to this payroll">
         <span className="tn-live-dot" aria-hidden="true" />Live monitoring
       </span>}
       {assistantAvailable && <button type="button" className={`tn-assistant-toggle${assistantOpen ? ' active' : ''}`}
@@ -190,11 +195,11 @@ export default function App() {
       </button>}
     </header>
     <main className="tn-main">
-      {run && domain && <AgentHealth domainName={domain.name} />}
-      {payrunId && !adEmployee && <div className={`tn-ad-scan ${live.scan}`} role="status">
-        <span className="tn-ad-scan-icon" aria-hidden="true"><i className={`bi ${live.scan === 'checked' ? 'bi-check-circle' : live.scan === 'delayed' ? 'bi-clock' : 'bi-radar'}`} /></span>
-        <div><strong>{live.scan === 'checked' ? 'Latest payroll checked' : live.scan === 'delayed' ? 'Waiting for results' : 'Checking your payroll'}</strong><span>
-        {live.scan === 'scanning' ? 'Jev is actively scanning for payroll issues…' : live.scan === 'waiting' ? 'Preparing payroll scan…' : live.scan === 'delayed' ? 'Scan results are delayed. Check that an anomaly agent is enabled.' : 'Payroll scan complete.'}
+      {run && domain && <AgentHealth domainName={domain.name} onChange={setAgentHealth} />}
+      {payrunId && !adEmployee && <div className={`tn-ad-scan ${scanBlocked ? 'blocked' : live.scan}`} role="status">
+        <span className="tn-ad-scan-icon" aria-hidden="true"><i className={`bi ${scanBlocked ? 'bi-exclamation-circle' : live.scan === 'checked' ? 'bi-check-circle' : live.scan === 'delayed' ? 'bi-clock' : 'bi-radar'}`} /></span>
+        <div><strong>{scanBlocked ? 'Payroll check unavailable' : live.scan === 'checked' ? 'Latest payroll checked' : live.scan === 'delayed' ? 'Waiting for results' : 'Checking your payroll'}</strong><span>
+        {scanBlocked ? scanReason : live.scan === 'scanning' ? 'Jev is actively scanning for payroll issues…' : live.scan === 'waiting' ? 'Preparing payroll scan…' : live.scan === 'delayed' ? 'Scan results are delayed. Check that an anomaly agent is enabled.' : 'Payroll scan complete.'}
         </span></div>
       </div>}
       {!adEmployee && adPanel}
@@ -210,7 +215,7 @@ export default function App() {
       {assistantAvailable && <button type="button" className="tn-link" onClick={() => setAssistantOpen(value => !value)}>{assistantOpen ? 'Minimize employee chat' : 'Open employee chat'}</button>}
       {latestVersion > run.version && employeeDirty && <p role="status">Payroll changed elsewhere. Reload the latest data before continuing; your unsaved edits are still shown.</p>}
       {adPanel}
-      {!scopedCases.length && <p className="small text-muted" role="status">{employeeChecked ? 'No review findings for this employee.' : 'Checking this employee’s latest paycheck…'}</p>}
+      {!scopedCases.length && <p className="small text-muted" role="status">{scanBlocked ? scanReason : employeeChecked ? 'No review findings for this employee.' : 'Checking this employee’s latest paycheck…'}</p>}
     </EmployeeDrawer>}
     {assistantAvailable && <AgentUiTemplate key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}
       employeeId={assistantEmployeeId}

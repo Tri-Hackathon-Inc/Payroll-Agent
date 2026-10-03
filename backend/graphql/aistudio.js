@@ -22,6 +22,7 @@ scalar JSON
   }
 
   type Service {
+    operations: JSON!
     id: ID!
     name: String!
     domain: String!
@@ -57,12 +58,20 @@ scalar JSON
     modelConfig: JSON!
   }
   input CreateAgentInput {
+    agentGroupIds: [ID!]
+    roleGroupIds: [ID!]
+    apiPermissions: JSON
+    contextSourceIds: [ID!]
     domainName: String!
     templateId: String!
     name: String!
     config: JSON!
   }
   input UpdateAgentInput {
+    agentGroupIds: [ID!]
+    roleGroupIds: [ID!]
+    apiPermissions: JSON
+    contextSourceIds: [ID!]
     id: ID!
     domainName: String!
     name: String!
@@ -93,6 +102,7 @@ scalar JSON
     rating: String!
   }
   type Mutation {
+    manageAgentAccess(input: JSON!): JSON!
     chatAgent(input: ChatAgentInput!): ChatReply!
     rateAnswer(input: RateAnswerInput!): ID!
     createAgent(input: CreateAgentInput!): Agent!
@@ -100,6 +110,7 @@ scalar JSON
     deleteAgent(id: ID!, domainName: String!): Boolean!
   }
   type Query {
+    agentAccess(domainName: String!): JSON!
     listTemplates(serviceName: String!): [Template!]!
     getTemplate(id: ID!): Template!
     listDomains: [Domain!]!
@@ -118,6 +129,7 @@ const recordInteraction = rpcResolver('RecordInteraction', ({ domainName, agentI
 const resolvers = {
   JSON: jsonResolver,
   Query: {
+    agentAccess: rpcResolver('GetAgentAccess', args => encodeStruct(args), decodeStruct),
     listTemplates: rpcResolver('ListTemplates', ({ serviceName }) => ({ service_name: serviceName }), value => value.templates || []),
     getTemplate: rpcResolver('GetTemplate', ({ id }) => ({ id })),
     listDomains: rpcResolver('ListDomains', () => ({}), value => value.domains || []),
@@ -131,14 +143,19 @@ const resolvers = {
     }), value => decodeStruct(value.metrics || { fields: {} })),
   },
   Mutation: {
+    manageAgentAccess: rpcResolver('ManageAgentAccess', ({ input }) => encodeStruct(input), decodeStruct),
     chatAgent: rpcResolver('ExecuteAgent', ({ input }) => encodeStruct({ ...input, channel: 'studio' }), decodeStruct),
     createAgent: rpcResolver('CreateAgent', ({ input }) => ({
+      ...(['agentGroupIds', 'roleGroupIds', 'apiPermissions', 'contextSourceIds'].some(key => input[key] !== undefined)
+        ? { access: encodeStruct(Object.fromEntries(['agentGroupIds', 'roleGroupIds', 'apiPermissions', 'contextSourceIds'].filter(key => input[key] !== undefined).map(key => [key, input[key]]))) } : {}),
       domain_name: input.domainName, template_id: input.templateId, name: input.name, config: encodeStruct(input.config),
     })),
     rateAnswer: rpcResolver('RateInteraction', ({ input }) => ({
       domain_name: input.domainName, interaction_id: input.interactionId, rating: input.rating,
     }), value => value.id),
     updateAgent: rpcResolver('UpdateAgent', ({ input }) => ({
+      ...(['agentGroupIds', 'roleGroupIds', 'apiPermissions', 'contextSourceIds'].some(key => input[key] !== undefined)
+        ? { access: encodeStruct(Object.fromEntries(['agentGroupIds', 'roleGroupIds', 'apiPermissions', 'contextSourceIds'].filter(key => input[key] !== undefined).map(key => [key, input[key]]))) } : {}),
       id: input.id, domain_name: input.domainName,
       name: input.name, config: encodeStruct(input.config),
     })),

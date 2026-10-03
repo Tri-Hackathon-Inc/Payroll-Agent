@@ -174,3 +174,31 @@ test('agent metrics and answer feedback go to gRPC; the mock reports empty metri
   assert.equal(mock.errors, undefined)
   assert.equal(mock.data.agentMetrics.summary.questions, 0)
 })
+
+
+test('access management forwards input to Python and preview fails explicitly', async () => {
+  const input = { domainName: 'payroll-services', action: 'authorize', agentGroupId: '1', roleGroupId: '2' }
+  const result = await resolvers.Mutation.manageAgentAccess(null, { input }, { context: {}, dataSources: { grpc: { call: async (...call) => {
+    assert.equal(call[3], 'ManageAgentAccess')
+    assert.deepEqual(decodeStruct(call[4]), input)
+    return encodeStruct({ authorizations: [{ id: '1' }] })
+  } } } })
+  assert.equal(result.authorizations[0].id, '1')
+  const execute = createMockExecutor()
+  const preview = await execute({ query: 'query { agentAccess(domainName:"payroll-services") }' })
+  assert.match(preview.errors[0].message, /requires the backend/)
+})
+
+
+test('agent writes preserve explicit group selection and omission', async () => {
+  for (const agentGroupIds of [undefined, [], ['7']]) {
+    for (const operation of ['createAgent','updateAgent']) {
+      const input = {id:'agent',domainName:'payroll-services',templateId:'general-query',name:'Agent',config:{},...(agentGroupIds === undefined ? {} : {agentGroupIds})}
+      await resolvers.Mutation[operation](null,{input},{context:{},dataSources:{grpc:{call:async(...call)=>{
+        if(agentGroupIds === undefined) assert.equal(call[4].access,undefined)
+        else assert.deepEqual(decodeStruct(call[4].access),{agentGroupIds})
+        return {id:'agent'}
+      }}}})
+    }
+  }
+})

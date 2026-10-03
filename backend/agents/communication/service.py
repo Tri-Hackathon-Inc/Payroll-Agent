@@ -3,6 +3,7 @@
 Publishers resolve trusted saved responses; receivers consume context as data.
 Neither the browser nor a model can supply executable instructions or credentials.
 """
+from runtime import agent_access
 import re
 from uuid import UUID
 from django.db import transaction
@@ -63,6 +64,7 @@ def communicate(body, headers):
     service = body.get('service') or sender.config.get('service')
     if not attached(sender, service) or not ServiceDefinition.objects.filter(pk=service, enabled=True, domain=sender.config.get('domain')).exists():
         raise RuntimeFailure('The sender is not attached to an enabled service.', 400)
+    agent_access.require_read(agent_data(sender))
     receiver = RECEIVERS.get(body.get('capability'))
     publisher = PUBLISHERS.get(body.get('responseType'))
     if receiver is None or publisher is None:
@@ -71,6 +73,7 @@ def communicate(body, headers):
     context = publisher(agent_data(sender), body, body['action'] == 'SEND')
     candidates = [agent for agent in Agent.objects.filter(domain_id=sender.domain_id, template_id=receiver.template_id)
                   if agent.pk != sender.pk and attached(agent, service) and available(agent, viewer)
+                  and agent_access.can_read_context(agent.pk, sender.pk, sender.domain_id)
                   and context.entity_type in receiver.entity_types]
     if body['action'] == 'DISCOVER':
         return {'agents': [{'id': str(agent.pk), 'name': agent.name} for agent in candidates]}

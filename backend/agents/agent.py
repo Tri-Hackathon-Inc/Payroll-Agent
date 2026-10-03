@@ -18,6 +18,13 @@ class ConfiguredAgent(AgentInterface):
         self.response_pipeline = response_pipeline if response_pipeline is not None else PayrollResponsePipeline(self.settings["response"])
 
     def respond(self, question, context, conversation, confirmation=None, *, load=load_context):
+        from runtime import agent_access
+        if context.get("payrunId") and agent_access.chat_context_sources(self.definition) and not agent_access.can_read(self.definition):
+            from agents.question.context_answer import answer_context
+            return question_flow(self.definition, self.definition["domain_name"], question, None,
+                                 {**conversation, "context": context},
+                                 lambda mapped: answer_context(self.definition, context, mapped["originalQuery"], self.model),
+                                 automatic=True)
         if context.get("payrunId") and self.settings["query"]["enabled"]:
             def answer(mapped):
                 return answer_payroll(self.definition, self.definition["domain_name"], context, conversation, mapped,

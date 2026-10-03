@@ -1,3 +1,4 @@
+from tests.access_fixtures import grant_read
 """Domain-neutral ingestion, time-safe baselines, recovery, and grounded Review."""
 from copy import deepcopy
 from datetime import timedelta
@@ -74,6 +75,10 @@ class RecordStreamTests(TestCase):
         self.saved = Agent.objects.create(domain_id="leaves", name="Leave anomalies", template_id="leave-anomalies", template_version=1,
             config={"domain": "Leaves", "model": "poc-demo", "anomaly": {"profile": "records"}, "capabilities": {"alerts": {"enabled": True}}},
             model_config=services.model_data(services.ModelConfiguration.objects.get(pk="poc-demo")))
+        ServiceDefinition.objects.get_or_create(id="test-leave-records", defaults={"name": "Leave records", "domain": "Leaves", "base_url_env": "LEAVES_API", "method": "GET", "path": "/records"})
+        self.saved.config["service"] = "test-leave-records"
+        self.saved.save()
+        grant_read(self.saved)
         self.headers = {"x-session-owner": "a" * 64}
 
     def ingest(self, payload):
@@ -243,7 +248,7 @@ class RecordStreamTests(TestCase):
         run["lines"][0]["earnings"]["bonus"] = None
         monitor = {"id": str(self.saved.id), "template_id": "anomaly-detection", "config": {
             "domain": "Payroll", "anomaly": {"profile": "records"}, "capabilities": {"alerts": {"enabled": True}}}}
-        with patch("runtime.events.services.list_domains", return_value=[{"name": "leaves"}]), \
+        with patch("runtime.events.agent_access.can_read", return_value=True), patch("runtime.events.services.list_domains", return_value=[{"name": "leaves"}]), \
                 patch("runtime.events.services.get_service_agent_registry", return_value=[monitor]), \
                 patch("runtime.events.load_context", side_effect=AssertionError("No history reads")), \
                 patch("runtime.payroll.load_current", return_value=run) as load:

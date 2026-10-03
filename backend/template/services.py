@@ -43,6 +43,7 @@ def sync_templates():
             key: entry[key]
             for key in ("name", "domain", "enabled", "base_url_env", "method", "path")
         }
+        values["operations"] = entry.get("operations", [])
         ServiceDefinition.objects.update_or_create(id=entry["id"], defaults=values)
     for entry in catalog["templates"]:
         config = entry["config"]
@@ -92,7 +93,7 @@ def model_data(model):
 def service_data(service):
     return {
         key: getattr(service, key)
-        for key in ("id", "name", "domain", "enabled", "base_url_env", "method", "path")
+        for key in ("id", "name", "domain", "enabled", "base_url_env", "method", "path", "operations")
     }
 
 

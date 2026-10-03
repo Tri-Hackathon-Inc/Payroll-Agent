@@ -35,7 +35,8 @@ export async function mockPayroll(page) {
   })
   await page.route('**/agent-studio/graphql', async route => {
     const { query } = route.request().postDataJSON()
-    const data = query.includes('GetServiceAgentRegistry') ? { getServiceAgentRegistry: agents }
+    const data = query.includes('AgentHealth') ? { agentHealth: { items: agents.map(agent => ({ agentId: agent.id, agentName: agent.name, templateId: agent.templateId, status: 'live', checkedAt: new Date().toISOString() })) } }
+      : query.includes('GetServiceAgentRegistry') ? { getServiceAgentRegistry: agents }
       : query.includes('RateAnswer') ? { rateAnswer: true }
       : { listDomains: [{ name: 'payroll-services', label: 'Payroll Services', domain: 'Payroll' }] }
     await route.fulfill({ json: { data } })

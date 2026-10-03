@@ -6,7 +6,7 @@ export interface Benchmark { name: string; score: string | number; source: strin
 export interface Model { id: string; name: string; provider: string; modelId?: string; details: {
   license?: string; vendor?: string; context_window?: string; description?: string; strengths?: string[]; benchmarks?: Benchmark[];
 }; }
-export interface Service { id: string; name: string; enabled: boolean; method: string; path: string; baseUrlEnv: string; }
+export interface Service { operations?: import('./agent-access.models').ApiOperation[]; id: string; name: string; enabled: boolean; method: string; path: string; baseUrlEnv: string; }
 export interface AgentConfig {
   description: string; instructions: string; model: string; service: string; domain: string; page: string;
   questions: string[]; attached_services: string[]; capabilities?: { alerts?: { enabled: boolean; severity: string } };

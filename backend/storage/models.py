@@ -24,6 +24,7 @@ class ServiceDefinition(models.Model):
     base_url_env = models.CharField(max_length=150)
     method = models.CharField(max_length=10)
     path = models.CharField(max_length=500)
+    operations = models.JSONField(default=list, blank=True)
 
 
 class Template(models.Model):
@@ -74,6 +75,77 @@ class Agent(models.Model):
     class Meta:
         db_table = "agent_info"
         ordering = ["created_at", "id"]
+
+
+class AgentGroup(models.Model):
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
+    name = models.CharField(max_length=150)
+    agents = models.ManyToManyField(Agent, through="AgentGroupMembership")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["domain", "name"], name="unique_agent_group")]
+
+
+class AgentGroupMembership(models.Model):
+    group = models.ForeignKey(AgentGroup, on_delete=models.CASCADE)
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["group", "agent"], name="unique_agent_membership")]
+
+
+class RoleGroup(models.Model):
+    domain = models.ForeignKey(Domain, on_delete=models.CASCADE)
+    name = models.CharField(max_length=150)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["domain", "name"], name="unique_role_group")]
+
+
+class RoleGroupPermission(models.Model):
+    role_group = models.ForeignKey(RoleGroup, on_delete=models.CASCADE, related_name="permissions")
+    service = models.ForeignKey(ServiceDefinition, on_delete=models.CASCADE)
+    read = models.BooleanField(default=False)
+    write = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["role_group", "service"], name="unique_role_service")]
+
+
+class AgentAuthorization(models.Model):
+    agent_group = models.ForeignKey(AgentGroup, on_delete=models.CASCADE)
+    role_group = models.ForeignKey(RoleGroup, on_delete=models.CASCADE)
+
+    class Meta:
+        db_table = "agent_authorization"
+        constraints = [models.UniqueConstraint(fields=["agent_group", "role_group"], name="unique_agent_authorization")]
+
+
+class AgentRoleAssignment(models.Model):
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+    role_group = models.ForeignKey(RoleGroup, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["agent", "role_group"], name="unique_direct_agent_role")]
+
+
+class AgentServicePermission(models.Model):
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE)
+    service = models.ForeignKey(ServiceDefinition, on_delete=models.CASCADE)
+    read = models.BooleanField(default=False)
+    write = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["agent", "service"], name="unique_direct_agent_api")]
+
+
+class AgentContextPermission(models.Model):
+    reader = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="readable_contexts")
+    source = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="context_readers")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["reader", "source"], name="unique_agent_context_read"),
+                       models.CheckConstraint(condition=~models.Q(reader=models.F("source")), name="no_self_context_grant")]
 
 
 class AgentMessage(models.Model):

@@ -1,4 +1,5 @@
 """The anomaly agent owns detection, persisted flags and explicit human review."""
+from runtime import agent_access
 import hashlib
 import re
 import time
@@ -232,7 +233,9 @@ def authorized_agent(body, headers):
 
 
 def review_anomaly(body, headers):
-    return authorized_agent(body, headers).review(body, headers)
+    agent = authorized_agent(body, headers)
+    agent_access.require_read(agent.definition)
+    return agent.review(body, headers)
 
 
 def feedback_anomaly(body, headers):

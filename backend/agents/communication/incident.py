@@ -10,7 +10,7 @@ def receive(agent, envelope, context):
         'payrunId': context.entity_id, 'employeeId': context.response.get('scope'),
         'handoff': {'fromAgent': envelope['sender']['name'], 'communication': envelope,
                     'conversation': [{'role': 'agent', 'text': context.response['summary']}]},
-    }, context=context.evidence['context'], selected_signals=findings, notify=False)
+    }, context=context.evidence['context'], selected_signals=findings, notify=False, context_source=envelope['sender']['id'])
     result['incident']['report'] += '\n\n## Source investigation\n' + context.response['summary']
     result['incident']['report'] += f"\nSource: {context.reference}; version: {context.version}; agent: {envelope['sender']['name']}."
     for source in context.response.get('evidence') or []:

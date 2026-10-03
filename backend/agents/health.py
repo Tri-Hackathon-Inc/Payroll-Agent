@@ -1,4 +1,5 @@
 """Read-only attached-agent connectivity checks. No inference or business API reads."""
+from runtime import agent_access
 import json
 import os
 from urllib.parse import urlsplit
@@ -57,12 +58,20 @@ def agent_health(body, headers):
             decision = getattr(getattr(runtime, "components", None), "detector", None)
             decision = getattr(decision, "decision_model", None)
             readiness = decision.readiness() if hasattr(decision, "readiness") else {"status": "ready"}
-            if not model.get("enabled", True):
+            context_receiver = saved.template_id == "incident-report" and bool(agent_access.readable_sources(saved.pk, domain.name))
+            context_chat = bool(agent_access.chat_context_sources(runtime.definition)) and not agent_access.can_read(runtime.definition)
+            if not agent_access.can_read(runtime.definition) and not context_receiver and not context_chat:
+                reason = "Service read access is not granted. Configure Access control."
+            elif not model.get("enabled", True):
                 reason = "The selected model is disabled."
             elif model.get("credential_env") and not os.getenv(model["credential_env"]):
                 reason = "The selected model credential is not configured."
+            elif context_chat and model.get("provider") == "demo":
+                reason = "Select an inference model for General Query; the demo model is configuration only."
             elif readiness["status"] != "ready":
                 reason = readiness["reason"]
+            elif context_chat:
+                live, reason = True, "Connected to authorized saved AD context; payroll API access is not required."
             else:
                 if service_id not in probes:
                     try:
@@ -72,6 +81,6 @@ def agent_health(body, headers):
                 live, reason = probes[service_id]
         except Exception:
             pass  # Never expose provider endpoints, credentials or exception traces.
-        result.append({"agentId": str(saved.pk), "agentName": saved.name, "serviceId": service_id,
+        result.append({"agentId": str(saved.pk), "agentName": saved.name, "serviceId": service_id, "templateId": saved.template_id,
                        "status": "live" if live else "not_connected", "reason": reason, "checkedAt": now_iso()})
     return {"items": result, "scope": "Agent configuration and primary service connectivity; inference is not tested."}

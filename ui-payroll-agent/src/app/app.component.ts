@@ -1,3 +1,4 @@
+import { AccessControlComponent } from './access-control.component';
 import { Component, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from './api.service';
@@ -20,7 +21,7 @@ const SERVICES = [
   { category: 'Time off', icon: 'bi-calendar-week', description: 'PTO balances, requests, and time-off policy.' },
 ];
 @Component({ selector: 'app-root', standalone: true,
-  imports: [FormsModule, AgentEditorComponent, MyAgentsComponent, CatalogComponent, CustomerToolsComponent, EvaluationComponent, MetricsComponent, ChatWindowComponent],
+  imports: [AccessControlComponent, FormsModule, AgentEditorComponent, MyAgentsComponent, CatalogComponent, CustomerToolsComponent, EvaluationComponent, MetricsComponent, ChatWindowComponent],
   templateUrl: './app.component.html' })
 export class AppComponent implements OnInit {
   viewer: Viewer | null = null; domains: Domain[] = []; templates: Template[] = []; agents: Agent[] = [];
@@ -40,6 +41,7 @@ export class AppComponent implements OnInit {
     if (this.has('tools') || this.has('agentTools')) build.push({ key: this.has('tools') ? 'tools' : 'agent-tools', label: 'Tools & APIs', icon: 'bi-plug' });
     if (this.has('models')) build.push({ key: 'models', label: 'Models', icon: 'bi-cpu' });
     if (this.has('manageAgents') || this.has('testAgents')) manage.push({ key: 'agents', label: 'My Agents', icon: 'bi-robot' });
+    if (this.viewer.role === 'admin' && this.has('manageAgents')) manage.push({ key: 'access', label: 'Access control', icon: 'bi-shield-lock' });
     if (this.has('evaluation')) manage.push({ key: 'evaluation', label: 'Evaluation', icon: 'bi-graph-up' });
     if (this.has('metrics') || this.has('usage')) manage.push({ key: this.has('metrics') ? 'metrics' : 'usage', label: this.has('metrics') ? 'Agent Metrics' : 'Usage', icon: 'bi-bar-chart' });
     const groups = [{ label: 'Build', items: build }, { label: 'Manage', items: manage }].filter(g => g.items.length);

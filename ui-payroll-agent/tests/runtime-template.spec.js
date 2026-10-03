@@ -122,3 +122,22 @@ test('agent connection health turns red on failure and recovers on the next chec
   await page.clock.runFor(31000)
   await expect(health).toContainText('Scope AD: Live')
 })
+
+
+test('missing AD permissions show an actionable message instead of an active scan', async ({ page }) => {
+  await mockPayroll(page)
+  await page.route('**/anomalies?**', route => route.fulfill({json:{items:[]}}))
+  let live = false
+  await page.route('**/agent-studio/graphql', async route => {
+    if (!route.request().postDataJSON().query.includes('AgentHealth')) return route.fallback()
+    return route.fulfill({json:{data:{agentHealth:{items:[{agentId:'scope-ad',agentName:'Anomaly Detection',templateId:'anomaly-detection',status:live?'live':'not_connected',reason:'Service read access is not granted. Configure Access control.',checkedAt:new Date().toISOString()}]}}}})
+  })
+  await page.goto(`${payrollUrl}?domain=payroll-services&payrun=PR-2026-09-B`)
+  await expect(page.getByText('Payroll check unavailable', {exact:true})).toBeVisible()
+  await expect(page.getByText('Checking your payroll', {exact:true})).toHaveCount(0)
+  await expect(page.getByText(/In Agent Studio, open Access control/)).toBeVisible()
+  live = true
+  await page.reload()
+  await expect(page.getByText('Anomaly Detection: Live', {exact:true})).toBeVisible()
+  await expect(page.getByText('Payroll check unavailable', {exact:true})).toHaveCount(0)
+})

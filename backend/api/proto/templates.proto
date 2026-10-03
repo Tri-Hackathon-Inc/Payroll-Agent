@@ -27,6 +27,8 @@ service ai_studio {
   rpc RateInteraction(RateInteractionRequest) returns (InteractionRef);
   rpc GetAgentMetrics(AgentMetricsRequest) returns (AgentMetrics);
   rpc GetAgentPipeline(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc GetAgentAccess(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ManageAgentAccess(google.protobuf.Struct) returns (google.protobuf.Struct);
   rpc GetAgentHealth(google.protobuf.Struct) returns (google.protobuf.Struct);
 }
 message TemplateId { string id = 1; }
@@ -64,12 +66,14 @@ message CreateAgentRequest {
   string template_id = 2;
   string name = 3;
   google.protobuf.Struct config = 4;
+  google.protobuf.Struct access = 5;
 }
 message UpdateAgentRequest {
   string id = 1;
   string domain_name = 2;
   string name = 3;
   google.protobuf.Struct config = 4;
+  google.protobuf.Struct access = 5;
 }
 
 message DeleteAgentRequest { string id = 1; string domain_name = 2; }

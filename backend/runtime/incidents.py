@@ -1,4 +1,5 @@
 """Evidence-based incident handoff and durable finding claims."""
+from runtime import agent_access
 import os
 from urllib.parse import urlsplit
 from uuid import uuid4
@@ -38,7 +39,12 @@ def deliver(url, body):
         return {"status": "failed", "reason": "The notification endpoint could not be reached."}
 
 
-def create_report(agent, domain_name, invocation, *, context=None, selected_signals=None, notify=True):
+def create_report(agent, domain_name, invocation, *, context=None, selected_signals=None, notify=True, context_source=None):
+    if context is not None and context_source is not None:
+        if not agent_access.can_read_context(agent["id"], context_source, domain_name):
+            raise RuntimeFailure("This agent cannot read the source agent's context.", 403)
+    else:
+        agent_access.require_payroll(agent)
     if not invocation.get("payrunId"):
         raise RuntimeFailure("An incident report needs a payrun.", 400)
     context = context or load_context(invocation)
@@ -117,11 +123,13 @@ def create_report(agent, domain_name, invocation, *, context=None, selected_sign
     email = {"status": "not-sent", "reason": "EMAIL_API_BASE_URL is not configured.", "to": to}
     if not notify:
         email = {"status": "not-sent", "reason": "This handoff creates a report only."}
-    if notify and os.getenv("EMAIL_API_BASE_URL"):
+    if notify and not agent_access.allowed(agent, "email-notification", "W"):
+        email = {"status": "not-sent", "reason": "Email write access is not granted."}
+    if notify and agent_access.allowed(agent, "email-notification", "W") and os.getenv("EMAIL_API_BASE_URL"):
         email = {**deliver(os.environ["EMAIL_API_BASE_URL"].rstrip("/") + "/notifications/email", {"to": to, "subject": f"[{severity.upper()}] {identity}: {title}", "body": report}), "to": to}
     config = agent["config"]
     slack = {"status": "off", "reason": "The Slack webhook tool is not attached to this agent."}
-    if notify and "slack-webhook" in [config.get("service"), *config.get("attached_services", [])]:
+    if notify and agent_access.allowed(agent, "slack-webhook", "W") and "slack-webhook" in [config.get("service"), *config.get("attached_services", [])]:
         url = os.getenv("SLACK_WEBHOOK_URL", "")
         parsed = urlsplit(url)
         slack = deliver(url, {"text": f"[{severity.upper()}] {identity}: {title}\nPotential amount at risk: {risk:.2f}"}) if parsed.scheme == "https" and parsed.hostname else {"status": "not-sent", "reason": "Configure an HTTPS Slack webhook."}

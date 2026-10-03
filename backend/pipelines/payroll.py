@@ -86,7 +86,7 @@ def prepare_payroll(agent, domain_name, invocation, conversation, mapped, *, loa
                    "evidence": evidence, "retrievalStatus": status, "sources": sources}
     if agent.get("template_id") == "general-query" and invocation.get("page") == "payrun":
         from agents.question.payroll_context import payroll_chat_context
-        prompt_data["agentContext"] = payroll_chat_context(domain_name, run, invocation.get("employeeId"), agent["config"].get("service"))
+        prompt_data["agentContext"] = payroll_chat_context(domain_name, run, invocation.get("employeeId"), agent["config"].get("service"), reader_id=agent.get("id"))
     return {"context": context, "evidence": evidence, "focus": focus, "ids": ids, "topics": topics,
             "documents": documents, "query": query, "sources": sources, "status": status, "prompt_data": prompt_data}
 
