@@ -45,3 +45,9 @@ export const DOMAINS_QUERY = `
     listDomains { name label domain }
   }
 `
+
+export const CHAT_AGENTS_QUERY = `
+  query GetServiceAgentRegistry($domainName: String) {
+    getServiceAgentRegistry(domainName: $domainName) { id templateId config }
+  }
+`

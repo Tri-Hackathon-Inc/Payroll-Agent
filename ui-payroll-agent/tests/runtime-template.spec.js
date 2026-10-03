@@ -1,70 +1,58 @@
 import { test, expect } from '@playwright/test'
-import { assistant, mockPayroll, payrollUrl } from './payrun-fixture.js'
+import { assistant, mockPayroll, payrollUrl, openAssistant } from './payrun-fixture.js'
 
 test.skip(!process.env.TRINET_UI_URL, 'Use playwright.runtime.config.js for the host integration.')
 
-test('loads the published Angular template and preserves feedback, question library and incident reports', async ({ page }) => {
+test('attached General Query opens automatically and user minimization preserves the draft', async ({ page }) => {
   await mockPayroll(page)
-  const errors = [], assets = [], requests = [], ratings = []
-  page.on('pageerror', error => errors.push(error.message))
-  page.on('response', response => { if (response.url().includes('/ui-templates/')) assets.push(response) })
-  await page.route('**/agent-studio/graphql', async route => {
-    const { query, variables } = route.request().postDataJSON()
-    if (!query.includes('RateAnswer')) return route.fallback()
-    ratings.push(variables.input)
-    await route.fulfill({ json: { data: { rateAnswer: true } } })
-  })
-  const report = { id: 'INC-123', title: 'Review overtime', severity: 'warning', totalAtRisk: 100,
-    writtenBy: 'evidence', report: '# Payroll incident\nReview overtime before approval.',
-    evidence: [{ id: 'E1', name: 'Maya Chen', finding: 'Overtime changed', amountAtRisk: 100 }],
-    email: { status: 'sent', to: 'payroll@example.test' }, slack: { status: 'off' } }
-  await page.route('**/webhook/**', async route => {
-    const body = route.request().postDataJSON(); requests.push(body)
-    await route.fulfill({ json: { reply: body.context.task ? 'Incident created.' : 'Review overtime before approving.',
-      answeredBy: 'payroll-data', interactionId: 'interaction-123', incident: body.context.task ? report : undefined,
-      session: { id: body.sessionId || 'a'.repeat(64) },
-      retrieval: { sources: [{ id: 'source-1', employeeId: 'E1001', payrunId: 'PR-2026-09-A', topic: 'overtime', cited: true }] } } })
+  const requests = []
+  await page.route('**/webhook/**', route => { requests.push(route.request().postDataJSON()); return route.fulfill({ json: { reply: 'Answer' } }) })
+  await page.goto(`${payrollUrl}?domain=payroll-services&payrun=PR-2026-09-B`)
+  const ui = assistant(page)
+  await expect(ui.getByRole('textbox', { name: 'Ask General Query' })).toBeVisible()
+  const bounds = await page.locator('#tn-assistant').boundingBox()
+  expect(bounds.width).toBeLessThanOrEqual(400)
+  expect(requests).toHaveLength(0)
+  await ui.getByRole('textbox', { name: 'Ask General Query' }).fill('Why did payroll change?')
+  await ui.getByRole('button', { name: 'Minimize chat' }).click()
+  await expect(page.locator('#tn-assistant')).toBeHidden()
+  await page.getByRole('button', { name: /Open Payroll Assistant/ }).click()
+  await expect(ui.getByRole('textbox', { name: 'Ask General Query' })).toHaveValue('Why did payroll change?')
+  expect(requests).toHaveLength(0)
+})
+
+test('chat shows Q and A without question options and reveals the composer on hover or focus', async ({ page }) => {
+  await mockPayroll(page)
+  const requests = []
+  await page.route('**/webhook/**', route => {
+    requests.push(route.request().postDataJSON())
+    return route.fulfill({ json: { reply: 'Verify the approved bonus for Maya.',
+      analysis: { details: 'Hidden detailed evidence' }, retrieval: { sources: [{ id: 'source-1' }] } } })
   })
   await page.goto(`${payrollUrl}?domain=payroll-services&payrun=PR-2026-09-B`)
-  await expect(page.getByRole('button', { name: 'Maya Chen', exact: true })).toBeVisible()
-  expect(assets).toHaveLength(0)
-  await page.getByRole('button', { name: /Payroll Assistant/ }).click()
   const ui = assistant(page)
-  await expect(ui.getByRole('heading', { name: 'Payroll Assistant' })).toBeVisible()
-  await expect(ui.getByLabel('Agent', { exact: true })).toBeEnabled()
-  await expect(ui.getByLabel('Agent', { exact: true })).toHaveValue('scope-query')
-  await expect(ui.getByLabel('Agent', { exact: true }).locator('option')).toHaveText(['General Query', 'Another General Query'])
-  expect(await ui.locator('payrun-assistant').getAttribute('ng-version')).toMatch(/^21\./)
-  expect(assets.some(asset => asset.url().endsWith('/manifest.json'))).toBe(true)
-  expect(assets.some(asset => /main-.*\.js$/.test(asset.url()))).toBe(true)
-  expect(assets.every(asset => asset.ok())).toBe(true)
-
-  await ui.getByRole('button', { name: /All questions/ }).click()
-  await ui.getByRole('searchbox', { name: 'Search questions' }).fill('total gross')
-  await ui.getByRole('button', { name: 'What is the total gross pay for this payrun?', exact: true }).click()
-  await expect(ui.locator('.tn-copilot-thread')).toContainText('Review overtime before approving.')
-  await expect(ui.getByRole('dialog', { name: 'All questions' })).toHaveCount(0)
-  await expect(ui.locator('.tn-copilot-source')).toHaveText('Computed from payroll data')
-  await ui.getByText('Historical sources (1)', { exact: true }).click()
-  await expect(ui.locator('.tn-copilot-thread')).toContainText('PR-2026-09-A')
-  await ui.getByRole('button', { name: 'Helpful', exact: true }).click()
-  await expect(ui.getByRole('button', { name: 'Helpful', exact: true })).toHaveAttribute('aria-pressed', 'true')
-  expect(ratings[0]).toEqual({ domainName: 'payroll-services', interactionId: 'interaction-123', rating: 'up' })
-  await ui.getByRole('button', { name: 'Create incident report with Scope incident' }).click()
-  await expect(ui.getByLabel('Incident INC-123')).toContainText('Emailed to payroll@example.test')
-  await ui.getByRole('button', { name: 'View report' }).click()
-  await expect(ui.locator('.tn-incident-report')).toContainText('# Payroll incident')
-  const download = page.waitForEvent('download')
-  await ui.getByRole('button', { name: 'Download report' }).click()
-  expect((await download).suggestedFilename()).toBe('INC-123.md')
-  expect(requests[1].context.handoff.conversation).toHaveLength(2)
-  await ui.getByRole('button', { name: 'New chat' }).click()
-  await expect(ui.locator('.tn-copilot-thread')).not.toContainText('Review overtime before approving.')
-  await ui.getByRole('textbox', { name: 'Ask General Query' }).fill('Try again')
+  await expect(ui.getByRole('button', { name: /All questions|Which payments need review/ })).toHaveCount(0)
+  const input = ui.getByRole('textbox', { name: 'Ask General Query' })
+  await input.fill('Why did Jev flag this payrun?')
   await ui.getByRole('button', { name: 'Send', exact: true }).click()
-  await expect(ui.getByLabel('Agent', { exact: true })).toBeEnabled()
-  expect(requests[2].sessionId).toBeUndefined()
-  expect(errors).toEqual([])
+  await expect(ui.locator('.tn-copilot-thread')).toContainText('Verify the approved bonus for Maya.')
+  await expect(ui.locator('.tn-copilot-author')).toHaveCount(0)
+  await expect(ui.locator('.tn-copilot-thread')).not.toContainText('Hidden detailed evidence')
+  await expect(ui.getByRole('button', { name: /Create incident|Helpful/ })).toHaveCount(0)
+  // Move pointer and keyboard focus outside the frame after reading the answer.
+  await page.getByRole('button', { name: /Payroll Assistant/ }).focus()
+  await page.mouse.move(1, 1)
+  await expect(input).toBeHidden()
+  await ui.locator('.tn-copilot-thread').hover()
+  await expect(input).toBeVisible()
+  await page.mouse.move(1, 1)
+  await ui.getByLabel('Payroll assistant', { exact: true }).focus()
+  await expect(input).toBeVisible()
+  await input.fill('What should I check?')
+  await ui.getByRole('button', { name: 'Minimize chat' }).click()
+  await openAssistant(page)
+  await expect(input).toHaveValue('What should I check?')
+  expect(requests).toHaveLength(1)
 })
 
 test('runtime discovery failure can be retried without losing employee selection', async ({ page }) => {
@@ -77,8 +65,7 @@ test('runtime discovery failure can be retried without losing employee selection
   })
   await page.goto(`${payrollUrl}?domain=payroll-services&payrun=PR-2026-09-B`)
   await page.getByRole('button', { name: 'Maya Chen', exact: true }).click()
-  await page.getByRole('button', { name: 'Close', exact: true }).click()
-  await page.getByRole('button', { name: /Payroll Assistant/ }).click()
+  await openAssistant(page)
   await expect(page.getByRole('alert')).toContainText('503')
   await expect(page.getByRole('button', { name: 'Maya Chen', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Retry agent UI' }).click()
@@ -93,7 +80,7 @@ test('rejects unrelated messages and refreshes saved agents when reopened', asyn
     await route.fulfill({ json: { data: { getServiceAgentRegistry: [] } } })
   })
   await page.goto(`${payrollUrl}?domain=payroll-services&payrun=PR-2026-09-B`)
-  await page.getByRole('button', { name: /Payroll Assistant/ }).click()
+  await openAssistant(page)
   const ui = assistant(page)
   await expect(ui.getByLabel('Employee scope')).toHaveValue('')
   await page.evaluate(() => {
@@ -107,8 +94,31 @@ test('rejects unrelated messages and refreshes saved agents when reopened', asyn
   await expect(page.getByRole('button', { name: /Payroll Assistant/ })).not.toContainText('Maya Chen')
   await expect(ui.getByLabel('Employee scope')).toBeVisible()
   deleted = true
-  await ui.getByRole('button', { name: 'Close assistant' }).click()
-  await page.getByRole('button', { name: /Payroll Assistant/ }).click()
+  await ui.getByRole('button', { name: 'Minimize chat' }).click()
+  await openAssistant(page)
   await expect(ui.getByText(/No General Query agent is attached to the payrun page yet/)).toBeVisible()
   await expect(ui.getByLabel('Agent', { exact: true })).toHaveCount(0)
+})
+
+
+test('agent connection health turns red on failure and recovers on the next check', async ({ page }) => {
+  await mockPayroll(page)
+  await page.clock.install()
+  let offline = false
+  await page.route('**/agent-studio/graphql', route => {
+    if (!route.request().postDataJSON().query.includes('query AgentHealth')) return route.fallback()
+    if (offline) return route.fulfill({ status: 503, json: { errors: [{ message: 'Unavailable' }] } })
+    return route.fulfill({ json: { data: { agentHealth: { scope: 'Connectivity check', items: [{ agentId: 'scope-ad', agentName: 'Scope AD', status: 'live', reason: 'Primary service responded.', checkedAt: new Date().toISOString() }] } } } })
+  })
+  await page.goto(`${payrollUrl}?domain=payroll-services&payrun=PR-2026-09-B`)
+  const health = page.getByLabel('Agent connections')
+  await expect(health).toContainText('Scope AD: Live')
+  await expect(health.locator('.live')).toHaveCount(1)
+  offline = true
+  await page.clock.runFor(31000)
+  await expect(health).toContainText('Scope AD: Not connected')
+  await expect(health.locator('.offline')).toHaveCount(1)
+  offline = false
+  await page.clock.runFor(31000)
+  await expect(health).toContainText('Scope AD: Live')
 })

@@ -151,6 +151,11 @@ class ai_studioStub(object):
                 request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
                 _registered_method=True)
+        self.GetAgentHealth = channel.unary_unary(
+                '/ai_studio_agents.ai_studio/GetAgentHealth',
+                request_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                _registered_method=True)
 
 
 class ai_studioServicer(object):
@@ -294,6 +299,12 @@ class ai_studioServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetAgentHealth(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ai_studioServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -409,6 +420,11 @@ def add_ai_studioServicer_to_server(servicer, server):
             ),
             'GetAgentPipeline': grpc.unary_unary_rpc_method_handler(
                     servicer.GetAgentPipeline,
+                    request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+                    response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            ),
+            'GetAgentHealth': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetAgentHealth,
                     request_deserializer=google_dot_protobuf_dot_struct__pb2.Struct.FromString,
                     response_serializer=google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
             ),
@@ -1032,6 +1048,33 @@ class ai_studio(object):
             request,
             target,
             '/ai_studio_agents.ai_studio/GetAgentPipeline',
+            google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
+            google_dot_protobuf_dot_struct__pb2.Struct.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetAgentHealth(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/ai_studio_agents.ai_studio/GetAgentHealth',
             google_dot_protobuf_dot_struct__pb2.Struct.SerializeToString,
             google_dot_protobuf_dot_struct__pb2.Struct.FromString,
             options,

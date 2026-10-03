@@ -46,7 +46,7 @@ function AmountInput({ id, label, value, error, onChange, step = '0.01', max, di
   </span>
 }
 
-export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload, children }) {
+export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload, onDirtyChange, children }) {
   const [form, setForm] = useState(() => initialForm(line))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
@@ -58,6 +58,7 @@ export default function EmployeeDrawer({ line, run, onClose, onSaved, onReload, 
   const fields = hourly ? [...HOUR_FIELDS, ...MONEY_FIELDS] : MONEY_FIELDS
   const { input, errors } = readForm(form, line, fields)
   const dirty = Object.keys(input).length > 0
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
   const invalid = Object.keys(errors).length > 0
   const draft = JSON.stringify(input)
   useEffect(() => {

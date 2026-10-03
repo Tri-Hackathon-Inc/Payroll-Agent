@@ -66,6 +66,7 @@ export function createMockExecutor() {
   }
 
   const rootValue = {
+    agentHealth: ({ domainName, agentId }) => ({ items: agents.filter(agent => agent.domainName === domainName && (!agentId || agent.id === agentId) && agent.config.service).map(agent => ({ agentId: agent.id, agentName: agent.name, serviceId: agent.config.service, status: 'not_connected', reason: 'Preview mode: no live service health check is available.', checkedAt: new Date().toISOString() })), scope: 'Preview mode; live connectivity is not tested.' }),
     agentPipeline: ({ domainName, agentId, anomalyId }) => {
       domain(domainName)
       const agent = agents.find(item => item.id === agentId && item.domainName === domainName)

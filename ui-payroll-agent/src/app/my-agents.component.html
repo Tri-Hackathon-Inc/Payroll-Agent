@@ -25,6 +25,7 @@
         <ul class="list-group list-group-flush">
           @for (agent of group.agents; track agent.id) {
             <li class="list-group-item d-flex flex-wrap align-items-center gap-3 p-3 my-agent-row"><span class="registry-icon"><i aria-hidden="true" class="bi bi-stars"></i></span>
+              @if (agent.config.service) { <app-agent-health [agent]="agent" /> }
               <div class="flex-grow-1"><strong>{{agent.name}}</strong> <span class="runtime-badge runtime-interactive">{{runtime(agent)}}</span><div class="small text-muted">{{agent.config.description}}</div><div class="small text-muted">{{agent.templateId}} · {{agent.modelConfig?.name || agent.config.model}} · {{agent.config.page || 'No page'}}</div></div>
               @if (has('testAgents') && canChat(agent)) { <button class="btn btn-dark btn-sm" [disabled]="!!deleting" (click)="agentTab = 'chat'; chat = { agent: agent, domain: group.domain }">Chat with agent</button> }
               @if (has('testAgents') || has('manageAgents')) { <button class="btn btn-outline-secondary btn-sm" [disabled]="!!deleting" (click)="agentTab = 'pipeline'; chat = { agent: agent, domain: group.domain }">Model pipeline</button> }

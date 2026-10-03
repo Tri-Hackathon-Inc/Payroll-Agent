@@ -47,7 +47,7 @@ test('completed investigation discovers a receiver but transfers context only on
   expect((await download).suggestedFilename()).toBe('INC-test.md')
 })
 
-test('Jev waits for user Review, supports minimizing, and downloads a readable report', async ({ page }) => {
+test('Jev waits for user Review, supports minimizing, and has no AD report download', async ({ page }) => {
   const { run, item } = await payrollPage(page)
   const calls = []
   let release
@@ -70,6 +70,7 @@ test('Jev waits for user Review, supports minimizing, and downloads a readable r
     window.payrollStreams.at(-1).emit(event)
   }, item)
   await expect(page.getByRole('button', { name: 'Review', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Download Report', exact: true })).toHaveCount(0)
   expect(calls).toHaveLength(0)
   await page.getByRole('button', { name: 'Minimize AD agent' }).click()
   await expect(page.getByRole('button', { name: 'Review', exact: true })).not.toBeVisible()
@@ -81,15 +82,7 @@ test('Jev waits for user Review, supports minimizing, and downloads a readable r
   expect(calls).toHaveLength(1)
   release()
   await expect(page.getByText('Verify the approved bonus.', { exact: true })).toBeVisible()
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Download Report', exact: true }).click()
-  const file = await download
-  expect(file.suggestedFilename()).toMatch(/payroll-investigation.*\.txt$/)
-  const report = readFileSync(await file.path(), 'utf8')
-  expect(report).toContain('CONCLUSION')
-  expect(report).toContain('Verify the approved bonus.')
-  expect(report).toContain('Bonus increase')
-  expect(report).toContain('source-1')
+  await expect(page.getByRole('button', { name: 'Download Report', exact: true })).toHaveCount(0)
   expect(calls).toHaveLength(1)
 })
 
@@ -104,13 +97,9 @@ test('partial investigation leads with explanations and keeps unexplained findin
   await page.goto(`/trinet/?domain=payroll-services&payrun=${run.id}`)
   await expect(page.getByText('The bonus needs approval verification.', { exact: true })).toBeVisible()
   await expect(page.getByText(item.summary, { exact: true })).not.toBeVisible()
-  await expect(page.getByText('Some findings still need manual review. See the report for coverage.', { exact: true })).toBeVisible()
+  await expect(page.getByText('Some findings still need manual review.', { exact: true })).toBeVisible()
   await expect(page.getByText('Findings and evidence', { exact: true })).toHaveCount(0)
-  const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Download Report', exact: true }).click()
-  const report = readFileSync(await (await download).path(), 'utf8')
-  expect(report).toContain('Verify approval.')
-  expect(report).toContain('The model did not explain this finding.')
+  await expect(page.getByRole('button', { name: 'Download Report', exact: true })).toHaveCount(0)
   await page.evaluate(item => window.payrollStreams.at(-1).emit({ type: 'checked', domainName: item.domainName, payrunId: item.payrunId,
     version: item.version, anomaly: { ...item, id: 'new-check', createdAt: '2026-09-30T11:00:00Z' } }), item)
   await expect(page.getByRole('article')).toHaveCount(1)
@@ -167,6 +156,72 @@ test('opening a paycheck requests fresh scoped source data before editing', asyn
   expect(requests[0].query).toContain('monitor: true')
   expect(requests[1].query).toContain('checkLineId: $lineId')
   expect(requests[1].variables).toEqual({ id: run.id, domainName: 'payroll-services', lineId: employee.lineId })
+})
+
+test('saving rechecks the open employee and returning rechecks the whole payrun', async ({ page }) => {
+  const { run, item } = await payrollPage(page)
+  const employee = run.lines[0]
+  const requests = []
+  await page.route('**/anomalies?**', route => route.fulfill({ json: { items: [] } }))
+  await page.route('**/events/preview', route => route.fulfill({ json: { saved: false, analysis: { findings: [], employees: [] } } }))
+  await page.route('**/graphql', route => {
+    if (route.request().url().includes('agent-studio')) return route.fallback()
+    const body = route.request().postDataJSON()
+    requests.push(body)
+    if (body.query.includes('mutation UpdatePayLine')) {
+      run.version++
+      employee.earnings.bonus = body.variables.input.earnings.bonus
+      return route.fulfill({ json: { data: { updatePayLine: run } } })
+    }
+    return route.fulfill({ json: { data: { payrun: run } } })
+  })
+  await page.goto(`/trinet/?domain=payroll-services&payrun=${run.id}`)
+  await page.getByRole('button', { name: employee.name, exact: true }).first().click()
+  const drawer = page.getByRole('complementary', { name: 'Edit employee pay' })
+  await drawer.getByRole('spinbutton', { name: 'Bonus', exact: true }).fill('777')
+  await drawer.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(drawer.getByRole('spinbutton', { name: 'Bonus', exact: true })).toHaveValue('777')
+  await expect.poll(() => requests.filter(body => body.query.includes('EmployeePaycheck')).length).toBe(2)
+  await page.evaluate(item => window.payrollStreams.at(-1).emit({ type: 'checked', domainName: item.domainName,
+    payrunId: item.payrunId, version: item.version, scope: item.scope, anomaly: item }), {
+    ...item, id: 'fresh-employee', version: run.version, scope: employee.employeeId, reviewStatus: 'pending', investigation: null,
+  })
+  await expect(drawer.getByRole('button', { name: 'Review', exact: true })).toBeVisible()
+  await drawer.getByRole('button', { name: 'Close', exact: true }).click()
+  await expect.poll(() => requests.filter(body => body.query.includes('query Payrun(')).length).toBe(2)
+  expect(requests.at(-1).query).toContain('monitor: true')
+  await expect(drawer).toHaveCount(0)
+})
+
+test('new payroll versions refresh an open employee without overwriting unsaved edits', async ({ page }) => {
+  const { run } = await payrollPage(page)
+  const employee = run.lines[0]
+  let reads = 0
+  await page.route('**/anomalies?**', route => route.fulfill({ json: { items: [] } }))
+  await page.route('**/events/preview', route => route.fulfill({ json: { saved: false, analysis: { findings: [], employees: [] } } }))
+  await page.route('**/graphql', route => {
+    if (route.request().url().includes('agent-studio')) return route.fallback()
+    if (route.request().postDataJSON().query.includes('EmployeePaycheck')) reads++
+    return route.fulfill({ json: { data: { payrun: run } } })
+  })
+  const emit = () => page.evaluate(event => window.payrollStreams.at(-1).emit(event), {
+    type: 'checked', domainName: 'payroll-services', payrunId: run.id, version: run.version,
+    analysis: { findings: [], employees: [], payrunFindings: [] }, monitor: { name: 'AD' },
+  })
+  await page.goto(`/trinet/?domain=payroll-services&payrun=${run.id}`)
+  await page.getByRole('button', { name: employee.name, exact: true }).first().click()
+  run.version++
+  employee.earnings.bonus = 888
+  await emit()
+  await expect(page.getByRole('spinbutton', { name: 'Bonus', exact: true })).toHaveValue('888')
+  expect(reads).toBe(2)
+  await page.getByRole('spinbutton', { name: 'Bonus', exact: true }).fill('999')
+  run.version++
+  employee.earnings.bonus = 1000
+  await emit()
+  await expect(page.getByText(/Payroll changed elsewhere/)).toBeVisible()
+  await expect(page.getByRole('spinbutton', { name: 'Bonus', exact: true })).toHaveValue('999')
+  expect(reads).toBe(2)
 })
 
 test('opening an employee clears the payrun conclusion and shows only that employee case', async ({ page }) => {
@@ -255,9 +310,7 @@ test('anomalies persist and only an explicit Review invokes investigation once',
   await expect(card.getByText('The bonus is higher than the previous three eligible payruns.', { exact: true })).toBeVisible()
   await expect(card.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0)
   await expect(card.getByText('history-1', { exact: true })).toHaveCount(0)
-  const download = page.waitForEvent('download')
-  await card.getByRole('button', { name: 'Download Report', exact: true }).click()
-  expect(readFileSync(await (await download).path(), 'utf8')).toContain('history-1')
+  await expect(card.getByRole('button', { name: 'Download Report', exact: true })).toHaveCount(0)
   await card.getByRole('button', { name: 'Confirm finding', exact: true }).click()
   await expect(card.getByText('Feedback saved: finding confirmed', { exact: true })).toBeVisible()
   expect(feedbackCalls).toHaveLength(1)

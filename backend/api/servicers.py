@@ -53,6 +53,11 @@ def rpc_handler(handler):
 
 class AIStudioServicer(rpc.ai_studioServicer):
     @rpc_handler
+    def GetAgentHealth(self, request, context):
+        from agents.health import agent_health
+        return ParseDict(agent_health(MessageToDict(request), dict(context.invocation_metadata())), Struct())
+
+    @rpc_handler
     def CommunicateAgents(self, request, context):
         from agents.communication.service import communicate
         return ParseDict(communicate(MessageToDict(request), dict(context.invocation_metadata())), Struct())

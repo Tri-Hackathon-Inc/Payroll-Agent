@@ -12,7 +12,11 @@ Node 24. `backend/graphql/` contains only the JavaScript GraphQL-to-gRPC adapter
 Python services in `backend/` own question matching, historical retrieval,
 model calls, response validation, sessions, access checks and real-time monitoring.
 Node manifests are at `backend/`; the HTTP/SSE transport is in `backend/local_server/`.
-General payrun questions default to selecting a matched question before retrieval and inference.
+General Query on the payrun page internally maps typed prompts to predefined questions,
+then postprocesses answers using payroll data and the latest
+matching Jev check or validated investigation. Scope-specific predefined questions stay
+internal. The compact chat shows Q&A, with input revealed on hover or keyboard focus
+(always available on touch). Other query flows retain configured question matching.
 Anomaly Detection combines rules/statistics with the configured Jev decision model
 on saved checks. Unsaved previews calculate rules/statistics without inference.
 Saved checks persist `NORMAL` or `REVIEW`, with severity stored separately; only an explicit **Review**
@@ -130,7 +134,8 @@ or change payroll. The page reloads persisted cases using `GET /anomalies` on
 load and reconnect, so missed SSE messages do not erase saved reviews.
 
 Payrun alerts show a short conclusion and one compact issue summary per affected
-employee. Detailed checks, citations and coverage limitations are in **Download Report**.
+employee. Report creation and downloads belong to the Incident Report agent;
+AD does not offer a Download Report action during detection or investigation.
 This presentation uses no model inference.
 
 Completed investigations offer **Report to Incident Agent** when an Incident Report
@@ -190,9 +195,8 @@ must select **Review** to authorize investigation through the authenticated Revi
 endpoint. Jev results, page loads and reconnects never start the LLM automatically.
 The detection section collapses while investigation runs. Failed attempts require
 manual retry, and backend claims prevent concurrent duplicate investigations.
-The screen limits the conclusion to 320 characters; **Download Report** exports
-a plain-language text report with the full conclusion, data for each finding,
-explanations, recommended next steps, sources, limitations and reviewer feedback.
+The screen limits the conclusion to 320 characters. After a completed investigation,
+**Report to Incident Agent** creates the report and enables its download.
 **Minimize AD agent** collapses the panel without clearing results or authorizing
 investigation; **Expand AD agent** restores it.
 Valid partial explanations are retained with `modelStatus: partial_response` and
@@ -548,3 +552,11 @@ bash docker/podman.sh logs --tail=100
 
 If the engine is stopped, repeat Starter. For service errors, check logs.
 If a port is busy, stop the other stack.
+
+
+Attached agents show green **Live** or red **Not connected** in My Agents and on
+the payrun page. Connectivity checks refresh every 30 seconds without model calls;
+hover the status for the failure reason and timestamp. Live verifies configuration
+and the primary service connection, not model credits or inference. For other domain
+services, configure `<prefix>_HEALTH_URL` alongside `<prefix>_BASE_URL`, or expose
+`GET /health` at the base URL. Payroll checks its GraphQL endpoint without loading data.

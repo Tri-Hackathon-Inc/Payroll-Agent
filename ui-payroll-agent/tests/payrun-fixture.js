@@ -9,6 +9,18 @@ export const agents = [
   { id: 'scope-incident', name: 'Scope incident', templateId: 'incident-report', config: { page: 'payrun', questions: [] } },
 ]
 export const assistant = page => page.frameLocator('iframe[title="Payroll Assistant"]')
+export async function openAssistant(page) {
+  const drawer = page.getByRole('complementary', { name: 'Edit employee pay' })
+  // Chat remains available alongside the employee editor.
+  if (await drawer.isVisible()) {
+    const open = drawer.getByRole('button', { name: 'Open employee chat', exact: true })
+    if (await open.isVisible()) await open.click()
+    return
+  }
+  const toggle = page.getByRole('button', { name: /Payroll Assistant/ })
+  await toggle.waitFor({ state: 'visible' })
+  if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click()
+}
 
 export async function mockPayroll(page) {
   let run = { ...structuredClone(fixture), lines: fixture.lines.map((line, i) => ({ ...line, lineId: `L${i}` })) }

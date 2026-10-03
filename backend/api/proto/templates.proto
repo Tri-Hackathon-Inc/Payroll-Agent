@@ -27,6 +27,7 @@ service ai_studio {
   rpc RateInteraction(RateInteractionRequest) returns (InteractionRef);
   rpc GetAgentMetrics(AgentMetricsRequest) returns (AgentMetrics);
   rpc GetAgentPipeline(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc GetAgentHealth(google.protobuf.Struct) returns (google.protobuf.Struct);
 }
 message TemplateId { string id = 1; }
 message ServiceName { string service_name = 1; }

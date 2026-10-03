@@ -8,8 +8,8 @@ export const requestId = (): string => globalThis.crypto.randomUUID?.()
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   url(path: string): string { return new URL(path, document.baseURI).href; }
-  async graphql<T>(query: string, variables: object = {}): Promise<T> {
-    const response = await fetch(this.url('graphql'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
+  async graphql<T>(query: string, variables: object = {}, signal?: AbortSignal): Promise<T> {
+    const response = await fetch(this.url('graphql'), { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, variables }) });
     const payload = await response.json().catch(() => ({}));
     if (payload.errors?.length) throw new ApiError(payload.errors[0].message, payload.errors[0].extensions?.code);
     if (!response.ok) throw new ApiError(`Request failed (${response.status}).`);

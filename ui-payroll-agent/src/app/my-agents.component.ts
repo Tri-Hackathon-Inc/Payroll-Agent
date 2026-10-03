@@ -5,9 +5,10 @@ import { Agent, Domain, Viewer, errorMessage } from './models';
 import { AgentChatComponent } from './agent-chat.component';
 import { AgentEditorComponent } from './agent-editor.component';
 import { AgentPipelineComponent } from './agent-pipeline.component';
+import { AgentHealthComponent } from './agent-health.component';
 import { SERVICE_AGENT_REGISTRY_QUERY, DELETE_AGENT_MUTATION } from '../graphql/operations.js';
 
-@Component({ selector: 'app-my-agents', standalone: true, imports: [FormsModule, AgentChatComponent, AgentEditorComponent, AgentPipelineComponent], templateUrl: './my-agents.component.html' })
+@Component({ selector: 'app-my-agents', standalone: true, imports: [FormsModule, AgentChatComponent, AgentEditorComponent, AgentPipelineComponent, AgentHealthComponent], templateUrl: './my-agents.component.html' })
 export class MyAgentsComponent implements OnInit, OnDestroy {
   @Input() domains: Domain[] = [];
   @Input({ required: true }) viewer!: Viewer;

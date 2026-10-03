@@ -27,11 +27,18 @@ def catalogue(agent, domain_name):
     return list(result.values())
 
 
-def question_flow(agent, domain_name, question, confirmation, conversation, answer_question, store=None, now=None):
-    if not conversation.get("scopeHash"):
+def question_flow(agent, domain_name, question, confirmation, conversation, answer_question, store=None, now=None, *, automatic=False):
+    if not automatic and not conversation.get("scopeHash"):
         raise RuntimeFailure("Question confirmation requires conversation storage. Configure Redis and retry.")
     settings = pipeline_settings(agent["config"])["query"]
     questions = catalogue(agent, domain_name)
+    if automatic:
+        # Named demonstration questions must never move a user's query to another employee.
+        questions = [item for item in questions if not re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+|\bE\d{4,}\b", item["text"])]
+        subject = "this employee's paycheck" if conversation.get("context", {}).get("employeeId") else "this payrun"
+        for text in (f"Is the bonus unusual in {subject}?", f"What needs review in {subject}?",
+                     "Why did Jev request review?", "What did the latest investigation conclude?"):
+            questions.append({"id": digest([domain_name, agent["id"], text]), "scope": digest([domain_name, agent["id"], subject]), "text": text})
     revision = digest([questions, agent["config"]])
     now = time.time() * 1000 if now is None else now
     if confirmation is not None:
@@ -59,6 +66,12 @@ def question_flow(agent, domain_name, question, confirmation, conversation, answ
     candidates = [{"id": item["id"], "text": trusted[item["id"]]["text"], "distance": item["distance"]} for item in matches if item.get("id") in trusted and isinstance(item.get("distance"), (int, float)) and math.isfinite(item["distance"])]
     if not candidates:
         raise RuntimeFailure("No predefined question could be matched. Rephrase the query or update the agent questions.")
+    if automatic:
+        match = min(candidates, key=lambda item: item["distance"])
+        mapped = {**match, "originalQuery": question.strip(), "confirmed": False, "selection": "automatic"}
+        answer = answer_question(mapped)
+        focus = answer.pop("focus", conversation.get("focus"))
+        return {"answer": {**answer, "status": "answered", "mappedQuestion": mapped}, "focus": focus}
     pending = {"id": str(uuid4()), "originalQuery": question.strip(), "candidates": candidates, "revision": revision, "expiresAt": now + settings["confirmationTtlSeconds"] * 1000}
     return {"recordTurn": False, "pendingQuestion": pending, "answer": {"status": "confirmation_required", "answeredBy": "question-mapping",
             "reply": "Confirm the predefined question you want this agent to answer.", "questionMapping": {k: v for k, v in pending.items() if k != "revision"} | {"embeddingModel": LocalEmbeddings.version}, "model": None, "metrics": None}}

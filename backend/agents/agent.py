@@ -22,7 +22,11 @@ class ConfiguredAgent(AgentInterface):
             def answer(mapped):
                 return answer_payroll(self.definition, self.definition["domain_name"], context, conversation, mapped,
                                       load=load, model=self.model, query_pipeline=self.query_pipeline, response_pipeline=self.response_pipeline)
-            if self.settings["query"]["questionMatching"]:
+            contextual_chat = self.definition.get("template_id") == "general-query" and context.get("page") == "payrun"
+            if contextual_chat:
+                return question_flow(self.definition, self.definition["domain_name"], question, None,
+                                     {**conversation, "context": context}, answer, automatic=True)
+            if self.settings["query"]["questionMatching"] and not contextual_chat:
                 return question_flow(self.definition, self.definition["domain_name"], question, confirmation, conversation, answer)
             if confirmation is not None:
                 raise RuntimeFailure("Question matching is disabled for this agent. Submit a new query.", 409)

@@ -199,20 +199,32 @@ function ReviewCase({ item, onReview, onFeedback }) {
     ? 'The investigation failed, but this saved attempt did not record the provider cause. Select Review to retry. Calculated findings remain available; no AI explanation was produced.'
     : investigation?.reason
   const critical = item.decision === 'CRITICAL' || item.severity === 'critical'
-  return <article className={`tn-live-alert ${dismissed ? 'checked' : critical ? 'critical' : 'warning'}`} aria-label={`${item.agentName}: ${dismissed ? 'Dismissed' : critical ? 'Critical' : 'Needs review'}`}>
-    <div className="fw-semibold">{dismissed ? 'Dismissed by reviewer' : item.scope ? 'Employee review' : 'Payrun review'}</div>
-    <div className="tn-meta">{item.agentName} · Version {item.version}</div>
-    {investigating && <div role="status"><span className="spinner-border spinner-border-sm me-2" />Investigating flagged findings…</div>}
+  const complete = item.reviewStatus === 'completed' && investigation?.modelStatus === 'completed'
+  return <article className={`tn-live-alert tn-ad-case ${dismissed ? 'checked' : critical ? 'critical' : 'warning'}`} aria-label={`${item.agentName}: ${dismissed ? 'Dismissed' : critical ? 'Critical' : 'Needs review'}`}>
+    <div className="tn-ad-case-head">
+      <div><h3>{dismissed ? 'Dismissed by reviewer' : item.scope ? 'Employee review' : 'Payrun review'}</h3>
+        <div className="tn-meta">{item.agentName} · Version {item.version}</div></div>
+      <span className={`tn-ad-badge ${dismissed || complete ? 'resolved' : critical ? 'urgent' : ''}`}>
+        <i className={`bi ${dismissed || complete ? 'bi-check-circle' : 'bi-exclamation-circle'}`} aria-hidden="true" />
+        {dismissed ? 'Expected payment' : investigating ? 'In progress' : complete ? 'Investigation complete' : critical ? 'High priority' : 'Needs review'}
+      </span>
+    </div>
+    {!dismissed && <ol className="tn-ad-steps" aria-label="Review progress">
+      <li className="done"><i className="bi bi-shield-check" aria-hidden="true" /><span>Check<small>Findings saved</small></span></li>
+      <li className={complete ? 'done' : 'current'} aria-current={!complete ? 'step' : undefined}><i className={`bi ${investigating ? 'bi-hourglass-split' : 'bi-search'}`} aria-hidden="true" /><span>Investigate<small>{complete ? 'Conclusion ready' : investigating ? 'Reviewing evidence' : 'Your review starts this'}</small></span></li>
+      <li className={complete ? 'current' : ''} aria-current={complete ? 'step' : undefined}><i className="bi bi-file-earmark-text" aria-hidden="true" /><span>Report<small>{complete ? 'Optional next step' : 'After investigation'}</small></span></li>
+    </ol>}
+    {investigating && <div className="tn-ad-working" role="status"><span className="spinner-border spinner-border-sm me-2" />Investigating flagged findings…</div>}
     {investigation ? <div className="tn-review-investigation">
       <div className="fw-semibold">{partial ? 'Partial conclusion — more review needed' : investigation.modelStatus === 'completed' ? 'Investigation conclusion' : 'No investigation conclusion yet'}</div>
-      <p className="mb-1">{investigation.modelStatus === 'completed' || partial ? (investigation.summary.length > 320 ? investigation.summary.slice(0, 317) + '…' : investigation.summary) : 'Investigation incomplete. Download the report for supporting data.'}</p>
+      <p className="mb-1">{investigation.modelStatus === 'completed' || partial ? (investigation.summary.length > 320 ? investigation.summary.slice(0, 317) + '…' : investigation.summary) : 'Investigation incomplete. Review the flagged employees below.'}</p>
       {investigation.reason && item.reviewStatus !== 'failed' && <p className="small text-muted mb-1">{investigation.reason}</p>}
     </div> : !dismissed && !investigating && <p className="mb-1">{employees.length ? `${employees.length} employee${employees.length === 1 ? '' : 's'} flagged. Select Review to investigate.` : 'Payroll checks need review.'}</p>}
-    {!dismissed && employees.length > 0 && <ul className="small my-2" aria-label="Employees needing review">{employees.map(employee => <li key={employee.id}><strong>{employee.name}</strong>: {employee.issues}</li>)}</ul>}
-    {partial && <p className="small mb-1">Some findings still need manual review. See the report for coverage.</p>}
-    <button type="button" className="btn btn-sm btn-outline-secondary mt-2 me-2" onClick={() => downloadInvestigation(item)}>Download Report</button>
+    {!dismissed && employees.length > 0 && <ul className="tn-ad-people" aria-label="Employees needing review">{employees.map(employee => <li key={employee.id}><span className="tn-ad-avatar" aria-hidden="true">{employee.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span><div><strong>{employee.name}</strong><span>{employee.issues}</span></div><i className="bi bi-flag" aria-hidden="true" /></li>)}</ul>}
+    {partial && <p className="small mb-1">Some findings still need manual review.</p>}
     {item.reviewStatus === 'completed' && !dismissed && <AgentHandoff item={item} />}
-    {item.reviewStatus !== 'completed' && !dismissed && <button type="button" className="btn btn-sm btn-primary mt-2" onClick={() => onReview(item)} disabled={investigating}>
+    {item.reviewStatus !== 'completed' && !dismissed && <button type="button" className="btn btn-sm btn-primary mt-2 tn-ad-review" onClick={() => onReview(item)} disabled={investigating}>
+      <i className="bi bi-search me-2" aria-hidden="true" />
       {investigating ? 'Investigating...' : 'Review'}
     </button>}
     {item.reviewStatus !== 'completed' && !item.feedback && <button type="button" className="btn btn-sm btn-outline-secondary mt-2 ms-2" disabled={investigating || item.savingFeedback} onClick={() => setDismissing(!dismissing)}>Dismiss as expected</button>}
@@ -285,50 +297,16 @@ function Alert({ alert, onDismiss }) {
   </div>
 }
 
-function downloadInvestigation(item) {
-  const investigation = item.investigation
-  const explanations = new Map((investigation?.findings || []).map(finding => [finding.findingId || finding.id, finding]))
-  const label = key => key.replace(/([a-z])([A-Z])/g, '$1 $2').replaceAll('_', ' ')
-  function dataLines(value, prefix = '') {
-    if (value === null || value === undefined) return [prefix + ': Not available']
-    if (typeof value !== 'object') return [prefix + ': ' + String(value)]
-    return Object.entries(value).flatMap(([key, child]) => dataLines(child, prefix ? `${prefix} / ${label(key)}` : label(key)))
-  }
-  const lines = ['PAYROLL INVESTIGATION REPORT', '', `Agent: ${item.agentName}`, `Payroll: ${item.payrunId}`, `Data version: ${item.version}`,
-    `Scope: ${item.scope ? 'Employee ' + item.scope : 'Whole payrun'}`, '', 'CONCLUSION',
-    investigation?.modelStatus === 'completed' ? 'Investigation complete.' : 'Investigation incomplete. Some findings still need review.',
-    ['completed', 'partial_response'].includes(investigation?.modelStatus) ? investigation.summary : 'No validated AI conclusion is available. Use the calculated findings below.',
-    investigation?.reason || '', '', 'WHAT WAS FLAGGED', item.adminSummary?.summary || item.summary,
-    'Flags indicate possible issues. They do not establish an error or an unauthorized payment.', '', 'DATA, EXPLANATIONS AND NEXT STEPS']
-  for (const [index, finding] of (item.findings || []).entries()) {
-    const explanation = explanations.get(finding.id)
-    lines.push('', `${index + 1}. ${finding.label || finding.kind}`, `Employee: ${finding.employeeName || finding.name || finding.employeeId || 'Payrun-level check'}`,
-      'Data checked:', ...dataLines(finding.evidence || {}, '  Evidence'),
-      `Agent explanation: ${explanation?.explanation || 'The model did not explain this finding. Manual review is needed.'}`,
-      `Recommended next step: ${explanation?.reviewAction || 'Compare this finding with approved payroll records.'}`)
-  }
-  lines.push('', 'SOURCE RECORDS', 'These are the records supplied to the investigation. Citations support the overall answer; they are not individual finding-to-source links.')
-  for (const source of investigation?.evidence || []) lines.push(`- Payroll ${source.payrunId || 'not recorded'}; pay date ${source.payDate || 'not recorded'}; ${source.employeeId ? 'employee ' + source.employeeId : 'payrun scope'}; ${source.cited ? 'cited by the model' : 'supplied as evidence'}. Reference: ${source.id}`)
-  lines.push('', 'LIMITATIONS', ...(item.adminSummary?.limitations || ['No additional coverage information recorded.']), '', 'REVIEWER DECISION',
-    item.feedback ? `${item.feedback.action === 'DISMISSED' ? 'Dismissed as expected' : 'Finding confirmed'}: ${item.feedback.note || 'No note supplied.'}` : 'No reviewer decision recorded.',
-    '', 'This report does not change payroll or approve payments.')
-  const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }))
-  const link = document.createElement('a')
-  link.href = url; link.download = `payroll-investigation-${item.version}-${item.id.slice(0, 12)}.txt`
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
-
 export default function LiveAlerts({ alerts, cases, onDismiss, onReview, onFeedback }) {
   const [minimized, setMinimized] = useState(false)
   if (!alerts.length && !cases.length) return null
-  return <div className="tn-live-alerts" style={{ position: 'static', width: 'auto', maxHeight: 'none', margin: '16px 24px' }} aria-live="polite">
-    <div className="d-flex justify-content-between align-items-center"><strong>AD agent {minimized && `· ${cases.length} review case(s)`}</strong>
-      <button type="button" className="btn btn-sm btn-outline-secondary" aria-expanded={!minimized} onClick={() => setMinimized(value => !value)}>{minimized ? 'Expand AD agent' : 'Minimize AD agent'}</button>
+  return <section className="tn-live-alerts tn-ad-panel" aria-label="Anomaly Detection agent" aria-live="polite">
+    <div className="tn-ad-panel-head"><div className="tn-ad-brand"><span className="tn-ad-mark"><i className="bi bi-shield-check" aria-hidden="true" /></span><div><h2>Anomaly Detection</h2><span>Payroll checks & investigation {minimized && `· ${cases.length} review case(s)`}</span></div></div>
+      <button type="button" className="tn-ad-collapse" aria-label={minimized ? 'Expand AD agent' : 'Minimize AD agent'} title={minimized ? 'Expand AD agent' : 'Minimize AD agent'} aria-expanded={!minimized} onClick={() => setMinimized(value => !value)}><i className={`bi ${minimized ? 'bi-chevron-down' : 'bi-dash-lg'}`} aria-hidden="true" /></button>
     </div>
     <div hidden={minimized}>
     {cases.map(item => <ReviewCase key={item.id} item={item} onReview={onReview} onFeedback={onFeedback} />)}
     {alerts.map((alert) => <Alert key={alert.key} alert={alert} onDismiss={() => onDismiss(alert.key)} />)}
     </div>
-  </div>
+  </section>
 }

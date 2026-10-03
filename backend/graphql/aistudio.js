@@ -107,6 +107,7 @@ scalar JSON
     getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
     agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
     agentPipeline(domainName: String!, agentId: ID!, anomalyId: ID): JSON!
+    agentHealth(domainName: String!, agentId: ID): JSON!
     viewer: Viewer!
   }
 
@@ -123,6 +124,7 @@ const resolvers = {
     getDomainAgentsTemplates: rpcResolver('GetDomainAgentsTemplates', ({ domainName }) => ({ domain_name: domainName }), value => value.templates || []),
     getServiceAgentRegistry: rpcResolver('GetServiceAgentRegistry', ({ serviceName, domainName }) => ({ service_name: serviceName || '', domain_name: domainName || '' }), value => value.agents || []),
     agentPipeline: rpcResolver('GetAgentPipeline', args => encodeStruct(args), decodeStruct),
+    agentHealth: rpcResolver('GetAgentHealth', args => encodeStruct(args), decodeStruct),
     viewer: rpcResolver('GetViewer', () => ({}), decodeStruct),
     agentMetrics: rpcResolver('GetAgentMetrics', ({ domainName, agentId, sinceHours }) => ({
       domain_name: domainName, agent_id: agentId || '', since_hours: Math.max(0, sinceHours || 0),

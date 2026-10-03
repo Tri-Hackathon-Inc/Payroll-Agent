@@ -50,13 +50,14 @@ export default function AgentHandoff({ item }) {
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
-  return <div className="mt-2">
+  return <div className="tn-ad-handoff">
     {agents.length > 1 && !result && <label className="small">Incident Report agent
       <select className="form-select form-select-sm" value={target} onChange={event => setTarget(event.target.value)} disabled={busy}>
         {agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
       </select>
     </label>}
-    {discovered && !result && <button className="btn btn-link p-0" disabled={busy || !target} onClick={send}>
+    {discovered && !result && <button className="btn btn-sm btn-outline-primary" disabled={busy || !target} onClick={send}>
+      <i className="bi bi-file-earmark-plus me-2" aria-hidden="true" />
       {busy ? 'Recreating incident and capturing snapshots…' : 'Report to Incident Agent'}
     </button>}
     {discovered && agents.length === 0 && <p className="small text-muted">Attach an Incident Report agent to this service in My Agents to enable reporting.</p>}

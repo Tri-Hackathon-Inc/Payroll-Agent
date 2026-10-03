@@ -519,6 +519,10 @@ anomaly components. AD retains its scanning, explicit Review, model pipeline and
 incident handoff UI; My Agents does not offer a chat tab for AD. General Query
 owns free-text chat, suggested questions and the searchable predefined question
 library. Its My Agents chat view also offers the saved predefined questions.
+On payrun entry, an attached General Query agent opens in a compact floating chat
+window without invoking a model. The user can minimize it and reopen it through
+Payroll Assistant; the iframe stays mounted to preserve messages and unsent text.
+Payroll version changes do not override the user's minimized state.
 The employee scope selector is available for every payrun agent. Selecting or
 saving an employee's pay on the payroll screen carries that employee into the
 assistant; closing and reopening the panel retains the selection. Changing the
@@ -629,7 +633,7 @@ flowchart TD
     Features --> Jev["Jev decision model; show scanning status"]
     Jev --> Review["REVIEW: wait for admin to select Review"]
     Review --> Investigation["Investigation LLM and response validation"]
-    Investigation --> Conclusion["Concise conclusion; employee issues; Download Report"]
+    Investigation --> Conclusion["Concise conclusion and employee issues"]
     Conclusion --> Click["Admin selects Report to Incident Agent"]
     Click --> A2A["Shared agent communication service: validate and claim handoff"]
     A2A --> Recipient["Incident Report agent receives saved response and evidence"]
@@ -943,11 +947,18 @@ profile for existing payrun UIs; generic domain UIs use the entity APIs.
 The payrun UI requires the user's explicit Review action after Jev responds.
 Neither page load nor detection events authorize LLM investigation. Failed attempts
 require explicit retries. `case_data` exposes decisionModel metadata for display.
-Scanning SSE events precede model detection. The UI offers the full saved report
-as a plain-language text download and keeps the visible investigation conclusion concise.
+Scanning SSE events precede model detection. AD keeps the visible investigation
+conclusion concise and does not offer a report download. Reports are created and
+downloaded through the Incident Report agent after an explicit handoff.
 The AD panel can be minimized without changing its findings or review state.
 Opening an employee paycheck clears the payrun conclusion from view and shows
 only that employee's same-version case; closing it restores the payrun view.
+Saving employee pay keeps that paycheck open and issues a monitored paycheck read
+for a fresh employee-scoped AD check. Closing it (or switching to General Query)
+issues a monitored whole-payrun read. Newer source versions arriving via SSE
+refresh an open employee panel when it has no unsaved edits; otherwise show a
+reload notice and preserve the draft. All refreshed facts remain version-scoped,
+and none of these refreshes authorizes the investigation LLM.
 
 UI reads with `payrun(monitor: true, domainName)` emit `payrun.loaded`; adding
 `checkLineId` emits `paycheck.opened` with the server-resolved employee identity.
@@ -1153,3 +1164,41 @@ GraphQL adapter and Python tests live in `backend/tests/`; fixtures live in `tes
 `getServiceAgentRegistry(serviceName, domainName)` filters saved agents by their
 primary `config.service` and optionally domain. Either filter can be omitted.
 `config.model` in create/update requests selects an enabled model configuration.
+
+### Contextual General Query chat on the payrun page
+
+General Query with `page: payrun` first maps the submitted prompt to a predefined
+question internally, then retrieves evidence and postprocesses the answer. Automatic
+mapping is not recorded as user confirmation; the original prompt remains authoritative.
+Named demonstration questions are excluded from automatic matching. No candidates
+are displayed. Invalid model output produces a short, explicitly calculated answer,
+including current versus historical bonus amounts for bonus questions. Other query flows
+keep their configured matching behavior. Its internal predefined questions vary by
+payrun/employee scope and saved decision/investigation status. `payroll_context.py`
+loads AD context server-side from an attached anomaly agent in the same domain and
+service, for the current source version and exact employee scope. Only completed,
+validated investigations supply conclusions; otherwise use detection context.
+Absent or stale cases are explicitly unavailable. Chat never triggers AD Review.
+The embedded assistant displays Q and A only in its conversation; no question library,
+evidence cards, feedback controls or incident actions. Incident handoff remains in AD.
+After an answer, the composer is revealed by hover or keyboard focus; touch devices,
+unsent drafts and errors keep it visible. Minimization preserves the conversation.
+
+Chat remains accessible alongside the employee editor; closing the editor restores
+payrun scope. Conversation bubbles have no Q/A labels.
+
+### Attached-agent health
+
+`agentHealth(domainName, agentId?)` -> gRPC `GetAgentHealth` runs read-only Python
+checks in `agents/health.py`. It validates the saved runtime, selected model enabled
+state and required credential presence, including Jev readiness. Primary service
+connectivity uses a three-second timeout. Payroll uses GraphQL `__typename` so it
+never fetches payroll or emits monitored source events. Other services use the
+configured `<prefix>_HEALTH_URL` (derived from `<prefix>_BASE_URL`), or base URL plus
+`/health`, with GET and no redirects. No inference, notification, or business write
+is invoked. Green Live means this limited connectivity check passed, not verified
+provider credits or end-to-end inference. UI badges show the reason and timestamp.
+My Agents checks on mount/attachment edits; the payrun checks the domain's attached
+agents. Both recheck every 30 seconds and mark failed/unavailable checks red. Mock
+mode never claims live connectivity. Shared primary services are probed once per
+batch. Missing, disabled, unhealthy or unconfigured services are Not connected.

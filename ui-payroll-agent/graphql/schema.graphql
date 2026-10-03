@@ -98,5 +98,6 @@ scalar JSON
     getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
     agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
     agentPipeline(domainName: String!, agentId: ID!, anomalyId: ID): JSON!
+    agentHealth(domainName: String!, agentId: ID): JSON!
     viewer: Viewer!
   }
