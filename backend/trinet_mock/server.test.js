@@ -186,3 +186,29 @@ test('a saved pay line sends a payrun.changed event, and delivery failures never
   }
   assert.equal(await createEventNotifier({ url: '' }).notify({}), false, 'no URL, no event');
 })
+
+
+test('POST and PUT paycheck saves emit versioned AD events; rejected saves emit none', async t => {
+  const { startPayrollServer } = require('./server');
+  const store = openDatabase();
+  const sent = [];
+  const server = await startPayrollServer({ store, events: { notify: event => sent.push(event) }, port: 0 });
+  t.after(async () => { await server.stop(); store.close(); });
+  const url = server.url + 'payruns/PR-2026-09-B/paychecks/PR-2026-09-B-L07';
+  for (const [index, method] of ['POST', 'PUT'].entries()) {
+    const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedVersion: index + 1, earnings: { bonus: 100 + index } }) });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).version, index + 2);
+    assert.equal(sent[index].type, 'payrun.changed');
+    assert.equal(sent[index].employeeId, 'E1006');
+    assert.equal(sent[index].version, index + 2);
+  }
+  const stale = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion: 1, earnings: { bonus: 5 } }) });
+  assert.equal(stale.status, 409);
+  assert.equal(sent.length, 2);
+  const query = await fetch(server.url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: '{ payruns { id } }' }) });
+  assert.equal((await query.json()).data.payruns.length, 4);
+});

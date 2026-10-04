@@ -18,6 +18,17 @@
         "path": "/payruns",
         "access": "W",
         "description": "Write permission only; agent payroll writes are not implemented."
+      },
+      {
+        "method": "POST",
+        "path": "/graphql",
+        "access": "R",
+        "description": "Read-only GraphQL payroll queries."
+      },
+      {
+        "method": "PUT",
+        "path": "/payruns/{payrunId}/paychecks/{lineId}",
+        "access": "W"
       }
     ]
   },

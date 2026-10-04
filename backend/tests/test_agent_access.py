@@ -24,6 +24,19 @@ class AgentAccessTests(TestCase):
     def manage(self, **body):
         return agent_access.manage({"domainName":"payroll-services", **body}, {}, write=True)
 
+    def test_restore_payrun_reader_is_idempotent_and_read_only(self):
+        from django.core.management import call_command
+        call_command('restore_payrun_reader')
+        call_command('restore_payrun_reader')
+        group = AgentGroup.objects.get(domain_id='payroll-services', name='user-group')
+        role = RoleGroup.objects.get(domain_id='payroll-services', name='payrun-reader')
+        group.agents.add(self.agent)
+        self.assertEqual(AgentAuthorization.objects.filter(agent_group=group, role_group=role).count(), 1)
+        self.assertTrue(agent_access.allowed(self.definition, 'payrun', 'R', method='GET'))
+        self.assertTrue(agent_access.allowed(self.definition, 'payrun', 'R', method='POST'))
+        self.assertFalse(agent_access.allowed(self.definition, 'payrun', 'W', method='POST'))
+        self.assertFalse(agent_access.allowed(self.definition, 'payrun', 'W', method='PUT'))
+
     def test_default_deny_and_independent_read_write(self):
         self.assertFalse(agent_access.allowed(self.definition, "payrun"))
         group, role = grant_read(self.agent)
@@ -135,7 +148,7 @@ class AgentAccessTests(TestCase):
         group, role = grant_read(self.agent)
         state = agent_access.snapshot(self.agent.domain)
         payrun = next(s for s in state["services"] if s["id"] == "payrun")
-        self.assertEqual([(o["method"],o["access"]) for o in payrun["operations"]], [("GET","R"),("POST","W")])
+        self.assertEqual([(o["method"],o["access"]) for o in payrun["operations"]], [("GET","R"),("POST","W"),("POST","R"),("PUT","W")])
         self.assertTrue(agent_access.allowed(self.definition,"payrun","R",method="GET"))
         self.assertFalse(agent_access.allowed(self.definition,"payrun","R",method="DELETE"))
         self.assertFalse(agent_access.allowed(self.definition,"payrun","W",method="POST"))

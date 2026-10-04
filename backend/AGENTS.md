@@ -1444,3 +1444,19 @@ Model-enabled startup checks 35 GiB free before workload changes. Launcher tests
 run without an engine using `python -m unittest discover -s infra/deploy -p test_platform.py`.
 The launcher checks Kubernetes `/readyz` with a bounded timeout before workload
 changes and gives recovery instructions instead of only a subprocess error.
+
+
+### Payroll reader restoration and paycheck write events
+
+`python manage.py restore_payrun_reader` explicitly restores
+`user-group -> payrun-reader` with payroll, history and employee Read grants.
+Existing memberships are preserved. GET reads and GraphQL POST queries are R
+operations; paycheck mutations remain W operations.
+
+The payroll mock accepts POST and PUT at
+`/payruns/{payrunId}/paychecks/{lineId}` with an UpdatePayLineInput JSON body.
+Both reuse the GraphQL mutation resolver, so committed changes emit payrun.changed
+with version, line and employee IDs. Invalid/stale saves emit no event.
+Alerts-enabled saved AD agents with payroll Read access consume those events.
+Source delivery is asynchronous and best effort; backend acceptance starts durable
+processing. Restoring agents/access does not migrate payroll history or incidents.
