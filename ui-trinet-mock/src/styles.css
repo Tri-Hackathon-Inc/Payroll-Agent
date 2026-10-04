@@ -232,3 +232,27 @@ button { cursor: pointer; }
 
 .tn-agent-access-help { flex-basis: 100%; margin: 0; color: #8b3b25; }
 .tn-ad-scan.blocked { background: #fff7f3; border-color: #eed4c8; }
+
+/* AD Review: evidence-based paycheck comparison */
+.tn-pay-comparison { margin: 16px 0; color: #183653; }
+.tn-pay-question { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: #fff; border: 1px solid #ccd9e6; border-radius: 12px; }
+.tn-pay-question > i { font-size: 22px; color: #3069a0; }
+.tn-pay-question span, .tn-pay-period header span { display: block; font-size: 12px; margin-top: 3px; color: #546b80; }
+.tn-pay-select { display: block; margin-top: 12px; font-size: 13px; }
+.tn-pay-periods { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.tn-pay-period { overflow: hidden; border: 1px solid #cbd8e6; border-radius: 14px; background: white; }
+.tn-pay-period.current { border: 2px solid #299963; }
+.tn-pay-period header { padding: 12px 14px; background: #eff4f9; font-size: 13px; }
+.tn-pay-period.current header { background: #e6f7ec; }
+.tn-pay-period dl { margin: 0; padding: 8px 14px 14px; }
+.tn-pay-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; min-height: 53px; font-size: 13px; }
+.tn-pay-row dt { font-weight: 400; }
+.tn-pay-row dd { text-align: right; margin: 0; font-variant-numeric: tabular-nums; }
+.tn-pay-row dd small { display: block; font-size: 11px; color: #536a80; }
+.tn-pay-row.net { border-top: 1px solid #dce4ec; font-size: 16px; }
+.tn-pay-row.net dt, .tn-pay-row.net dd { font-weight: 700; }
+.tn-pay-explanation { display: flex; gap: 12px; background: #e8f0ff; border-radius: 12px; padding: 14px 16px; margin-top: 14px; }
+.tn-pay-explanation p { margin: 5px 0; font-size: 13px; }
+.tn-pay-explanation small, .tn-pay-source { font-size: 11px; color: #52677c; }
+.tn-pay-source { margin: 8px 0 0; }
+@media (max-width: 560px) { .tn-pay-periods { grid-template-columns: 1fr; } }

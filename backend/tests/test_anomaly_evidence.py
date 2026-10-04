@@ -206,6 +206,21 @@ class InvestigationEvidenceTests(SimpleTestCase):
         self.assertEqual(result["modelStatus"], "invalid_response")
         self.assertTrue(result["analysis"]["findings"])
 
+    @patch.dict(os.environ, HF_TOKEN="test-only", AD_HF_FALLBACK="true")
+    def test_backup_repair_keeps_evidence_but_omits_rejected_answer(self):
+        from agents.anomaly_detection.fallback import InvestigationModel
+        primary = Mock(generate=Mock(return_value="Rejected primary response"))
+        backup = response_model()
+        runtime = InvestigationModel(primary, fallback_factory=Mock(return_value=backup))
+        with patch("agents.anomaly_detection.investigation.InvestigationModel", return_value=runtime):
+            result = investigate(definition(), self.context, self.detection, model=primary)
+        self.assertEqual(result["modelStatus"], "completed")
+        self.assertEqual(result["modelRoute"]["validationCode"], "format")
+        messages = backup.generate.call_args.args[0]
+        self.assertFalse(any(message["role"] == "assistant" for message in messages))
+        self.assertIn("calculatedEvidence", messages[1]["content"])
+        self.assertIn("requiredFindingIds", messages[-1]["content"])
+
     def test_provider_failures_do_not_retry_or_expose_raw_errors(self):
         for error, status in ((ModelConfigurationError("secret detail"), "not_configured"), (ModelExecutionError("secret detail"), "unavailable")):
             with self.subTest(status=status):

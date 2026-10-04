@@ -1,6 +1,7 @@
 """Provider-independent model initialization and text generation."""
 
 import json
+import math
 import os
 import socket
 import time
@@ -56,6 +57,12 @@ class CompatibleChatModel(ModelRuntime):
 
     def __init__(self, config, default_url=""):
         self.config = deepcopy(config)
+        try:
+            self.timeout_seconds = float(os.getenv("MODEL_TIMEOUT_MS", "60000")) / 1000
+        except ValueError:
+            raise ModelConfigurationError("MODEL_TIMEOUT_MS must be a number between 1000 and 180000.") from None
+        if not math.isfinite(self.timeout_seconds) or not 1 <= self.timeout_seconds <= 180:
+            raise ModelConfigurationError("MODEL_TIMEOUT_MS must be between 1000 and 180000.")
         base_url = (os.getenv(config.get("endpoint_env", ""), "") or default_url).rstrip("/")
         parsed = urlsplit(base_url)
         if (parsed.scheme not in ("http", "https") or not parsed.hostname
@@ -85,7 +92,7 @@ class CompatibleChatModel(ModelRuntime):
         request = Request(self.url, data=json.dumps(payload).encode(), headers=self.headers, method="POST")
         started = time.monotonic()
         try:
-            with self.opener.open(request, timeout=45) as response:
+            with self.opener.open(request, timeout=self.timeout_seconds) as response:
                 raw = response.read(1024 * 1024 + 1)
             if len(raw) > 1024 * 1024:
                 raise ModelExecutionError("The model response exceeded the size limit.")

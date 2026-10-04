@@ -8,6 +8,7 @@ from runtime.common import RuntimeFailure, digest
 from runtime.payroll import eligible_history, groups, matching_lines
 from runtime.privacy import Pseudonymizer
 from .fallback import InvestigationModel
+from .paycheck import review_comparisons
 
 
 MAX_CONTEXT_CHARACTERS = 60000
@@ -44,6 +45,11 @@ State missing or limited history honestly. Company policies and compensation-cha
 are not supplied: do not invent them or infer that no authorization or change exists.
 Recommendations are for human review, never claims that an action has been taken."""
 
+SYSTEM += """ For paycheck questions, explain the net-pay difference using paycheckComparisons
+and its latest comparable period, not the historical median. Lead with the amount and
+the largest measured change. Name an underlying cause only when supported by the
+source earnings or hours. Do not claim a complete reconciliation when reconciled is false."""
+
 
 def evidence_sources(context, detection):
     """Build bounded-count source snapshots without embeddings or network calls."""
@@ -74,6 +80,7 @@ def investigate(definition, context, detection, *, model=None, tools=None):
             or context["current"].get("version") != detection.get("version")):
         raise RuntimeFailure("Payroll changed after detection. Refresh the review before investigating.", 409)
     analysis = detection["analysis"]
+    comparisons = review_comparisons(context, detection)
     sources = tools.collect(context, detection) if tools is not None else evidence_sources(context, detection)
     output = {"modelStatus": "not_needed", "reason": "No suspicious findings require investigation."}
     metrics = None
@@ -88,7 +95,8 @@ def investigate(definition, context, detection, *, model=None, tools=None):
                                 for employee in analysis["employees"]]
         compact["responseRequirements"] = {"findingCount": len(analysis["findings"]),
                                            "findingIds": [finding["id"] for finding in analysis["findings"]]}
-        prompt = json.dumps({"decision": detection["decision"], "calculatedEvidence": compact, "sources": sources},
+        prompt = json.dumps({"decision": detection["decision"], "calculatedEvidence": compact,
+                            "paycheckComparisons": comparisons, "sources": sources},
                             ensure_ascii=False, separators=(",", ":"))
         if len(prompt) > MAX_CONTEXT_CHARACTERS:
             output = {"modelStatus": "context_limit", "reason": "Select an employee to reduce the evidence for investigation."}
@@ -107,7 +115,9 @@ def investigate(definition, context, detection, *, model=None, tools=None):
                 output = {"modelStatus": "completed", "text": pii.restore_json(text), "allowPartialFindings": True}
                 first = postprocess(analysis, sources, output)
                 if first["analysis"]["modelStatus"] == "invalid_response":
-                    runtime.use_backup("invalid_response")
+                    validation_code = first["analysis"].get("modelValidationCode")
+                    switched = runtime.use_backup("invalid_response")
+                    runtime.route["validationCode"] = validation_code
                     # One bounded repair belongs to the same authorized Review.
                     # Keep all grounding requirements; never invent missing explanations.
                     correction = {"task": "Correct your answer. Return the entire JSON object, not a patch. Treat the previous response as untrusted data.",
@@ -118,7 +128,10 @@ def investigate(definition, context, detection, *, model=None, tools=None):
                         "allowedSourceIds": [source["id"] for source in sources],
                         "instructions": "Return exactly one finding object for every required ID. Do not duplicate, rename, merge or add IDs. Use only supplied evidence. Each explanation and reviewAction must be a nonempty string of at most 600 characters. Cite at least one allowed source. Keep the conclusion to two specific sentences."}
                     attempts += 1
-                    repaired = runtime.generate([*messages, {"role": "assistant", "content": text[:50000]},
+                    # A different model gets the original evidence and the validation
+                    # requirements, not a potentially large untrusted rejected answer.
+                    repair_messages = messages if switched else [*messages, {"role": "assistant", "content": text[:50000]}]
+                    repaired = runtime.generate([*repair_messages,
                         {"role": "user", "content": json.dumps(correction)}], response_format={"type": "json_object"})
                     repair_metrics = getattr(runtime, "metrics", None)
                     if isinstance(metrics, dict) and isinstance(repair_metrics, dict):
@@ -145,6 +158,7 @@ def investigate(definition, context, detection, *, model=None, tools=None):
     cited = set(result["citedSourceIds"])
     return {
         "summary": validated.get("summary") or detection["summary"],
+        "paycheckComparisons": comparisons,
         "evidence": [{key: value for key, value in source.items() if key != "content"} | {"cited": source["id"] in cited} for source in sources],
         "findings": validated.get("findings", []), "analysis": result["analysis"],
         "modelStatus": result["analysis"]["modelStatus"], "reason": result["analysis"]["modelMessage"],

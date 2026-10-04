@@ -11,10 +11,10 @@ def receive(agent, envelope, context):
         'handoff': {'fromAgent': envelope['sender']['name'], 'communication': envelope,
                     'conversation': [{'role': 'agent', 'text': context.response['summary']}]},
     }, context=context.evidence['context'], selected_signals=findings, notify=False, context_source=envelope['sender']['id'])
-    result['incident']['report'] += '\n\n## Source investigation\n' + context.response['summary']
-    result['incident']['report'] += f"\nSource: {context.reference}; version: {context.version}; agent: {envelope['sender']['name']}."
-    for source in context.response.get('evidence') or []:
-        result['incident']['report'] += f"\n- Source {source.get('id', '')}: {source.get('payrunId', '')}"
+    from runtime.incident_document import readable_report
+    result['incident']['report'] = readable_report(result['incident'],
+        currency=context.evidence['context']['current'].get('currency', 'USD'),
+        conclusion=context.response.get('summary'))
     result['handoff'] = {key: envelope[key] for key in ('id', 'schemaVersion', 'sender', 'recipient', 'source', 'entity')}
     result['artifacts'] = save_incident(envelope, context, result['incident'])
     result['pipeline'] = {'status': 'completed' if not result['incident']['screenshots'].get('error') else 'completed_with_warnings',

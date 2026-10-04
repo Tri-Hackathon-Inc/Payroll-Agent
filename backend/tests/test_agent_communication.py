@@ -58,7 +58,8 @@ class AgentCommunicationTests(TestCase):
 
     def test_send_transfers_saved_response_and_duplicate_returns_same_report(self):
         with patch('runtime.payroll.load_context', return_value=self.context), patch(
-                'agents.communication.incident.create_report', return_value={'incident': {'id': 'INC-test', 'report': 'Evidence', 'evidence': [], 'screenshots': {}}}) as report:
+                'agents.communication.incident.create_report', return_value={'incident': {'id': 'INC-test', 'report': 'Evidence', 'evidence': [], 'screenshots': {},
+                    'title': 'Payroll review', 'impactedService': 'payrun', 'payrunId': self.case.payrun_id, 'expectedBehavior': 'Verify approved pay.'}}) as report:
             first = communicate({**self.body, 'action': 'SEND', 'response': {'summary': 'forged'}}, self.headers)
             second = communicate({**self.body, 'action': 'SEND'}, self.headers)
         self.assertEqual(first, second)

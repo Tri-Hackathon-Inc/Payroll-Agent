@@ -1,0 +1,21 @@
+# From the repository root: docker compose -f infra/docker/docker-compose.yaml -f infra/docker/docker-compose.dev.yaml up --build
+services:
+  backend:
+    volumes:
+      - ../../backend/agents:/app/agents:ro
+      - ../../backend/agent_factory:/app/agent_factory:ro
+      - ../../backend/template:/app/template:ro
+      - ../../backend/model:/app/model:ro
+      - ../../backend/pipelines:/app/pipelines:ro
+      - ../../backend/runtime:/app/runtime:ro
+      - ../../backend/storage:/app/storage:ro
+      - ../../backend/api:/app/api:ro
+      - ../../backend/tests:/app/tests:ro
+      - ../../backend/templates:/app/templates:ro
+      - ../../backend/local_server:/app/local_server:ro
+      - ../../backend/graphql:/app/graphql:ro
+  ui:
+    volumes:
+      - ../../ui-payroll-agent/src:/app/src:ro
+      - ../../ui-payroll-agent/mock:/app/mock:ro
+      - ../../ui-payroll-agent/graphql:/app/graphql:ro

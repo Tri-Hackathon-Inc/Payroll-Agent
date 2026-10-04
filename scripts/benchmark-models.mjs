@@ -11,7 +11,7 @@
 // --bank runs ui-payroll-agent/src/questionBank.js on the General Query template's models and
 // adds a pass rate per question category to the report.
 //
-// Requires the local stack (docker/docker-compose.local.yaml) with HF_TOKEN set in the root .env.
+// Requires the local stack (infra/docker/docker-compose.local.yaml) with HF_TOKEN set in the root .env.
 import { writeFileSync } from 'node:fs'
 import { EVALUATION_PAYRUN, EVALUATION_SUITES, gradeReply } from '../ui-payroll-agent/src/evaluationSuites.js'
 import { QUESTION_BANK } from '../ui-payroll-agent/src/questionBank.js'

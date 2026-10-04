@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agent-models
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ray-model-cache
+  namespace: agent-models
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: ray.io/v1
+kind: RayService
+metadata:
+  name: local-slm
+  namespace: agent-models
+spec:
+  serviceUnhealthySecondThreshold: 1800
+  deploymentUnhealthySecondThreshold: 1800
+  serveConfigV2: |
+    applications:
+      - name: local-slm
+        route_prefix: /
+        import_path: ray.serve.llm:build_openai_app
+        args:
+          llm_configs:
+            - model_loading_config:
+                model_id: agent-slm
+                model_source: Qwen/Qwen2.5-0.5B-Instruct
+              deployment_config:
+                autoscaling_config:
+                  min_replicas: 1
+                  max_replicas: 1
+              engine_kwargs:
+                dtype: half
+                max_model_len: 2048
+                max_num_seqs: 1
+                gpu_memory_utilization: 0.70
+                enforce_eager: true
+                disable_log_stats: true
+  rayClusterConfig:
+    rayVersion: 2.49.2
+    # Single model pod on this laptop; no second GPU needed during upgrades.
+    headGroupSpec:
+      rayStartParams:
+        dashboard-host: 0.0.0.0
+        num-cpus: "2"
+        num-gpus: "1"
+        object-store-memory: "268435456"
+      template:
+        metadata:
+          labels:
+            app: local-slm
+        spec:
+          automountServiceAccountToken: false
+          securityContext:
+            fsGroup: 1000
+          containers:
+            - name: ray-head
+              image: rayproject/ray-llm:2.49.2-py311-cu128
+              imagePullPolicy: IfNotPresent
+              ports:
+                - {name: gcs, containerPort: 6379}
+                - {name: dashboard, containerPort: 8265}
+                - {name: serve, containerPort: 8000}
+              env:
+                - {name: HF_HOME, value: /model-cache}
+                - {name: HF_HUB_DISABLE_TELEMETRY, value: "1"}
+                - {name: RAY_USAGE_STATS_ENABLED, value: "0"}
+                - {name: VLLM_NO_USAGE_STATS, value: "1"}
+              resources:
+                requests: {cpu: "2", memory: 4Gi, nvidia.com/gpu: "1"}
+                limits: {cpu: "4", memory: 7Gi, nvidia.com/gpu: "1"}
+              volumeMounts:
+                - {name: cache, mountPath: /model-cache}
+                - {name: shm, mountPath: /dev/shm}
+          volumes:
+            - name: cache
+              persistentVolumeClaim: {claimName: ray-model-cache}
+            - name: shm
+              emptyDir: {medium: Memory, sizeLimit: 1Gi}
+    workerGroupSpecs: []
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: model-gateway
+  namespace: agent-models
+data:
+  default.conf.template: |
+    server {
+      listen 8000;
+      server_tokens off;
+      client_max_body_size 1m;
+      location = /health { access_log off; return 200 'ok'; }
+      location / {
+        if ($http_authorization != "Bearer ${VLLM_API_KEY}") { return 401; }
+        resolver kube-dns.kube-system.svc.cluster.local valid=10s;
+        set $upstream local-slm-serve-svc.agent-models.svc.cluster.local:8000;
+        proxy_pass http://$upstream;
+        proxy_read_timeout 180s;
+        proxy_buffering off;
+        access_log off;
+      }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: model-gateway
+  namespace: agent-models
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: model-gateway}
+  template:
+    metadata:
+      labels: {app: model-gateway}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: gateway
+          image: nginx:1.28-alpine
+          env:
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef: {name: vllm-auth, key: api-key}
+            - {name: NGINX_ENVSUBST_FILTER, value: VLLM_API_KEY}
+          ports: [{name: http, containerPort: 8000}]
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+          resources:
+            requests: {cpu: 25m, memory: 32Mi}
+            limits: {cpu: 250m, memory: 128Mi}
+          volumeMounts:
+            - {name: config, mountPath: /etc/nginx/templates, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: model-gateway}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: slm-inference
+  namespace: agent-models
+spec:
+  selector: {app: model-gateway}
+  ports: [{name: http, port: 8000, targetPort: http}]

@@ -243,7 +243,7 @@ class AgentWorkflowTests(TestCase):
         self.assertEqual(
             offered["anomaly-detection"],
             ["bedrock-claude", "gemini-flash-lite", "groq-gpt-oss-120b", "groq-qwen-3-8-27b",
-             "llama-3-3-70b", "mistral-large", "ollama-local", "openrouter-qwen-3-8-27b", "poc-demo"],
+             "llama-3-3-70b", "mistral-large", "ollama-local", "openrouter-qwen-3-8-27b", "poc-demo", "vllm-slm"],
         )
         self.assertNotIn("qwen-2-5-72b", offered["anomaly-detection"])
         self.assertIn("qwen-2-5-72b", offered["summarizer"])

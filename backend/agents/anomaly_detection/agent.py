@@ -21,7 +21,12 @@ from .models import AnomalyCase, AnomalyAudit
 
 def case_data(case):
     from .presentation import admin_summary
+    from .paycheck import review_comparisons
     feedback = case.audit.filter(action__in=["CONFIRMED", "DISMISSED"]).order_by("-created_at").first()
+    investigation = case.investigation
+    if investigation and case.entity_type == "payrun" and "paycheckComparisons" not in investigation:
+        investigation = {**investigation, "paycheckComparisons": review_comparisons(
+            case.snapshot["context"], case.snapshot["detection"])}
     return {
         "id": case.id, "domainName": case.domain_id, "agentId": str(case.agent_id),
         "agentName": case.agent_name, "entityType": case.entity_type, "entityId": case.payrun_id,
@@ -30,7 +35,7 @@ def case_data(case):
         "decision": case.decision, "reviewStatus": case.review_status, "summary": case.summary,
         "decisionModel": case.snapshot["detection"].get("analysis", {}).get("decisionModel"),
         **({"adminSummary": admin_summary(case.snapshot)} if case.entity_type == "payrun" else {}),
-        "findings": case.snapshot["detection"]["findings"], "investigation": case.investigation,
+        "findings": case.snapshot["detection"]["findings"], "investigation": investigation,
         **({"tenant": case.snapshot["context"]["record"]["tenant"],
             "score": case.snapshot["detection"].get("score"), "scoreType": case.snapshot["detection"].get("scoreType")}
            if "record" in case.snapshot["context"] else {}),

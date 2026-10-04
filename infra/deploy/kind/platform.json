@@ -1,0 +1,951 @@
+{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "v1",
+      "kind": "Namespace",
+      "metadata": {
+        "name": "payroll"
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "mysql-data",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "5Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "vector-data",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "5Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "trinet-data",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "2Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "embedding-cache",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "3Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "metadata": {
+        "name": "incidents",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "accessModes": [
+          "ReadWriteOnce"
+        ],
+        "resources": {
+          "requests": {
+            "storage": "5Gi"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "db",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "db"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "db"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "db",
+                "image": "mysql:8.4",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 3306
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "envFrom": [
+                  {
+                    "secretRef": {
+                      "name": "db-env"
+                    }
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 3306
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 3306
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "volumeMounts": [
+                  {
+                    "name": "mysql-data",
+                    "mountPath": "/var/lib/mysql"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "mysql-data",
+                "persistentVolumeClaim": {
+                  "claimName": "mysql-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "db",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "db"
+        },
+        "ports": [
+          {
+            "port": 3306,
+            "targetPort": 3306
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "vector-db",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "vector-db"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "vector-db"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "vector-db",
+                "image": "pgvector/pgvector:pg17",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 5432
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "envFrom": [
+                  {
+                    "secretRef": {
+                      "name": "vector-db-env"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "PGDATA",
+                    "value": "/var/lib/postgresql/data/pgdata"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 5432
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 5432
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "volumeMounts": [
+                  {
+                    "name": "vector-data",
+                    "mountPath": "/var/lib/postgresql/data"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "vector-data",
+                "persistentVolumeClaim": {
+                  "claimName": "vector-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "vector-db",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "vector-db"
+        },
+        "ports": [
+          {
+            "port": 5432,
+            "targetPort": 5432
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "redis",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "redis"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "redis"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "redis",
+                "image": "redis:8-alpine",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 6379
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "args": [
+                  "--save",
+                  "",
+                  "--appendonly",
+                  "no"
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 6379
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 6379
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "redis",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "redis"
+        },
+        "ports": [
+          {
+            "port": 6379,
+            "targetPort": 6379
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "backend",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "backend"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "backend"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "backend",
+                "image": "payroll-local-backend:latest",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 4000
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "envFrom": [
+                  {
+                    "secretRef": {
+                      "name": "backend-env"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "MYSQL_HOST",
+                    "value": "db"
+                  },
+                  {
+                    "name": "GRPC_ADDRESS",
+                    "value": "127.0.0.1:50051"
+                  },
+                  {
+                    "name": "HOST",
+                    "value": "0.0.0.0"
+                  },
+                  {
+                    "name": "PORT",
+                    "value": "4000"
+                  },
+                  {
+                    "name": "REDIS_URL",
+                    "value": "redis://redis:6379"
+                  },
+                  {
+                    "name": "VECTOR_DB_HOST",
+                    "value": "vector-db"
+                  },
+                  {
+                    "name": "TRINET_API_URL",
+                    "value": "http://trinet-mock:4100/"
+                  },
+                  {
+                    "name": "EVIDENCE_CAPTURE_URL",
+                    "value": "http://evidence-capture:4300"
+                  },
+                  {
+                    "name": "INCIDENT_ARTIFACT_ROOT",
+                    "value": "/incident-artifacts"
+                  },
+                  {
+                    "name": "EMBEDDING_CACHE_DIR",
+                    "value": "/models"
+                  },
+                  {
+                    "name": "VLLM_BASE_URL",
+                    "value": "http://slm-inference.agent-models.svc.cluster.local:8000/v1"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 4000
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 4000
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "volumeMounts": [
+                  {
+                    "name": "embedding-cache",
+                    "mountPath": "/models"
+                  },
+                  {
+                    "name": "incidents",
+                    "mountPath": "/incident-artifacts"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "embedding-cache",
+                "persistentVolumeClaim": {
+                  "claimName": "embedding-cache"
+                }
+              },
+              {
+                "name": "incidents",
+                "persistentVolumeClaim": {
+                  "claimName": "incidents"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "backend",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "backend"
+        },
+        "ports": [
+          {
+            "port": 4000,
+            "targetPort": 4000
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "ui",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "ui"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "ui"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "ui",
+                "image": "payroll-local-ui:latest",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 5173
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "GRAPHQL_MODE",
+                    "value": "backend"
+                  },
+                  {
+                    "name": "API_PROXY_TARGET",
+                    "value": "http://backend:4000"
+                  },
+                  {
+                    "name": "STUDIO_BASE_PATH",
+                    "value": "/ai_studio/"
+                  },
+                  {
+                    "name": "TRINET_MOCK_URL",
+                    "value": "http://localhost:5274/trinet/"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 5173
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 5173
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "ui",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "ui"
+        },
+        "ports": [
+          {
+            "port": 5173,
+            "targetPort": 5173,
+            "nodePort": 30173
+          }
+        ],
+        "type": "NodePort"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "trinet-mock",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "trinet-mock"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "trinet-mock"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "trinet-mock",
+                "image": "payroll-local-trinet-mock:latest",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 4100
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "envFrom": [
+                  {
+                    "secretRef": {
+                      "name": "trinet-mock-env"
+                    }
+                  }
+                ],
+                "env": [
+                  {
+                    "name": "DATABASE_PATH",
+                    "value": "/data/trinet_mock.sqlite3"
+                  },
+                  {
+                    "name": "PAYROLL_EVENTS_URL",
+                    "value": "http://backend:4000/events/payroll"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 4100
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 4100
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                },
+                "volumeMounts": [
+                  {
+                    "name": "trinet-data",
+                    "mountPath": "/data"
+                  }
+                ]
+              }
+            ],
+            "volumes": [
+              {
+                "name": "trinet-data",
+                "persistentVolumeClaim": {
+                  "claimName": "trinet-data"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "trinet-mock",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "trinet-mock"
+        },
+        "ports": [
+          {
+            "port": 4100,
+            "targetPort": 4100
+          }
+        ]
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "trinet-ui",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "trinet-ui"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "trinet-ui"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "trinet-ui",
+                "image": "payroll-local-trinet-ui:latest",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 5174
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "TRINET_API_TARGET",
+                    "value": "http://trinet-mock:4100"
+                  },
+                  {
+                    "name": "AGENT_STUDIO_TARGET",
+                    "value": "http://ui:5173/ai_studio/"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 5174
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 5174
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "trinet-ui",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "trinet-ui"
+        },
+        "ports": [
+          {
+            "port": 5174,
+            "targetPort": 5174,
+            "nodePort": 30174
+          }
+        ],
+        "type": "NodePort"
+      }
+    },
+    {
+      "apiVersion": "apps/v1",
+      "kind": "Deployment",
+      "metadata": {
+        "name": "evidence-capture",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "replicas": 0,
+        "strategy": {
+          "type": "Recreate"
+        },
+        "selector": {
+          "matchLabels": {
+            "app": "evidence-capture"
+          }
+        },
+        "template": {
+          "metadata": {
+            "labels": {
+              "app": "evidence-capture"
+            }
+          },
+          "spec": {
+            "containers": [
+              {
+                "name": "evidence-capture",
+                "image": "payroll-local-evidence-capture:latest",
+                "imagePullPolicy": "IfNotPresent",
+                "ports": [
+                  {
+                    "containerPort": 4300
+                  }
+                ],
+                "resources": {
+                  "requests": {
+                    "cpu": "100m",
+                    "memory": "128Mi"
+                  },
+                  "limits": {
+                    "memory": "2Gi"
+                  }
+                },
+                "env": [
+                  {
+                    "name": "TRINET_UI_URL",
+                    "value": "http://trinet-ui:5174/trinet/"
+                  }
+                ],
+                "readinessProbe": {
+                  "tcpSocket": {
+                    "port": 4300
+                  },
+                  "periodSeconds": 5
+                },
+                "startupProbe": {
+                  "tcpSocket": {
+                    "port": 4300
+                  },
+                  "periodSeconds": 5,
+                  "failureThreshold": 120
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "v1",
+      "kind": "Service",
+      "metadata": {
+        "name": "evidence-capture",
+        "namespace": "payroll"
+      },
+      "spec": {
+        "selector": {
+          "app": "evidence-capture"
+        },
+        "ports": [
+          {
+            "port": 4300,
+            "targetPort": 4300
+          }
+        ]
+      }
+    }
+  ]
+}

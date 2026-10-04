@@ -44,8 +44,8 @@ services:
 
   backend:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
       target: backend
     environment:
       MYSQL_HOST: db
@@ -70,6 +70,8 @@ services:
       AD_HF_BACKUP_MODEL: ${AD_HF_BACKUP_MODEL:-Qwen/Qwen3-235B-A22B-Instruct-2507}
       # Local Ollama on the host, e.g. http://host.docker.internal:11434/v1 (no key needed).
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-}
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
       MODEL_TIMEOUT_MS: ${MODEL_TIMEOUT_MS:-60000}
       TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
       JEV_PROVIDER: ${JEV_PROVIDER:-typesafe}
@@ -108,7 +110,7 @@ services:
       CUSTOMER_TOOLS: ${CUSTOMER_TOOLS:-}
     volumes:
       - embedding_cache:/models
-      - ../.local-data/incidents:/incident-artifacts
+      - ../../.local-data/incidents:/incident-artifacts
     ports:
       - "127.0.0.1:4000:4000"
       - "127.0.0.1:50051:50051"
@@ -133,8 +135,8 @@ services:
 
   ui:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
       target: ui
     environment:
       GRAPHQL_MODE: backend
@@ -157,8 +159,8 @@ services:
   # agent is embedded in TriNet. Uses Agent Studio's API and runtime UI templates.
   trinet-mock:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
       target: trinet-mock
     environment:
       DATABASE_PATH: /data/trinet_mock.sqlite3
@@ -183,8 +185,8 @@ services:
 
   trinet-ui:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
       target: trinet-ui
     environment:
       TRINET_API_TARGET: http://trinet-mock:4100
@@ -212,8 +214,8 @@ services:
   # incident finding: the employee's pay rows and their Edit Employee Pay drawer.
   evidence-capture:
     build:
-      context: ..
-      dockerfile: docker/Dockerfile
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
       target: evidence-capture
     environment:
       TRINET_UI_URL: http://trinet-ui:5174/trinet/

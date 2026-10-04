@@ -14,7 +14,7 @@ from runtime.retrieval import vector_connection
 from agents.anomaly_detection.rules import detect_signals
 from pipelines.payroll import resolve_scope
 from runtime.privacy import Pseudonymizer
-from runtime.incident_document import document_details
+from runtime.incident_document import document_details, readable_report
 
 
 def signals(evidence):
@@ -82,12 +82,7 @@ def create_report(agent, domain_name, invocation, *, context=None, selected_sign
     identity = "INC-" + evidence["payrunId"] + "-" + uuid4().hex[:10].upper()
     details = document_details(items, handoff.get('communication', {}).get('service') or agent['config'].get('service'))
     title = details['title']
-    document_header = '\n'.join([f'# {title}', '', f'Incident: {identity}', '', '## Expected system behavior',
-        details['expectedBehavior'], '', '## Impacted service',
-        f"Service: {details['impactedService']} | Domain: {domain_name}",
-        f"Payrun: {evidence['payrunId']} | Version: {context['current'].get('version', 'Not supplied')}",
-        f"Employee scope: {invocation.get('employeeId') or 'Whole payrun'}"])
-    report = "\n".join([f"# {identity}: {title}", "", "## Summary", f"{len(items)} calculated findings require payroll review.", "", "## Impact", f"Potential amount at risk: {risk:.2f} {evidence['currency']}. Review indicators may overlap; this is not a confirmed loss.", "", "## Recommended actions", *[f"- {item['id']}: Verify {item['finding'].lower()} against authorized payroll records." for item in items], "", "## Evidence", *[f"- {item['id']} â€” {item['employeeId']} {item['name']}: {item['finding']}. {item['snapshot']}" for item in items]])
+    report = ""
     written_by, model_error, model_metrics = "evidence", None, None
     try:
         pii = Pseudonymizer(context)
@@ -98,27 +93,18 @@ def create_report(agent, domain_name, invocation, *, context=None, selected_sign
         if len(narrative) > 15000 or not all(heading in narrative for heading in ("## Summary", "## Impact", "## Recommended actions")) or references - {item["id"] for item in items} or items and not references:
             model_error = "The model report did not pass validation; calculated evidence is shown."
         else:
-            report = f"# {identity}: {title}\n\n" + pii.restore(narrative) + "\n\n" + report[report.index("## Evidence"):]
+            report = pii.restore(narrative)
             written_by = agent["model_config"].get("name", "model")
             model_metrics = getattr(runtime, "metrics", None)
     except (ModelConfigurationError, ModelExecutionError) as error:
         model_error = str(error)
-    # Required document fields survive both model success and evidence fallback.
-    report = document_header + '\n\n' + report.split('\n', 1)[1].lstrip()
-    report += '\n\n## Evidence snapshots\n'
-    if capture.get('error'):
-        report += capture['error'] + '\n'
-    for item in items:
-        if item.get('captureError'):
-            report += f"\n- {item['id']}: {item['captureError']}"
-    attached_images = set()
-    for item in items:
-        for shot in item["screenshots"]:
-            if shot.get("dataUrl") and shot['dataUrl'] not in attached_images:
-                attached_images.add(shot['dataUrl'])
-                report += f"\n\n![{item['id']} {shot.get('label', 'Evidence')}]({shot['dataUrl']})"
-    if not attached_images:
-        report += '\nNo evidence snapshots were captured. See calculated evidence above.'
+    # Keep the administrator document concise; technical evidence stays in JSON.
+    conclusion = None
+    if written_by != 'evidence':
+        summary_match = re.search(r'## Summary\s*\n(.*?)(?=\n## |\Z)', report, re.S)
+        conclusion = re.sub(r'\bEV-\d+:?\s*', '', summary_match[1]).strip() if summary_match else None
+    report = readable_report({'title':title, **details, 'payrunId':evidence['payrunId'], 'evidence':items},
+                             currency=evidence['currency'], conclusion=conclusion)
     to = os.getenv("INCIDENT_EMAIL_TO", "payroll-team@example.com")
     email = {"status": "not-sent", "reason": "EMAIL_API_BASE_URL is not configured.", "to": to}
     if not notify:

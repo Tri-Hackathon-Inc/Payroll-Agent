@@ -118,6 +118,20 @@ class CompatibleModelTests(SimpleTestCase):
                 model.generate([])
             self.assertNotIn("secret", str(caught.exception))
 
+    @patch.dict("os.environ", {"TEST_MODEL_URL": "http://localhost:8080/v1", "TEST_MODEL_KEY": "test-secret", "MODEL_TIMEOUT_MS": "120000"})
+    def test_configured_timeout_reaches_provider_client(self):
+        model = CompatibleChatModel(self.config())
+        with patch.object(model.opener, "open", side_effect=TimeoutError("private")) as call:
+            with self.assertRaises(ModelTimeout):
+                model.generate([])
+        self.assertEqual(call.call_args.kwargs["timeout"], 120)
+
+    def test_invalid_timeout_is_configuration_error(self):
+        for value in ("NaN", "inf", "0", "-1", "bad", "180001"):
+            with self.subTest(value=value), patch.dict("os.environ", MODEL_TIMEOUT_MS=value):
+                with self.assertRaises(ModelConfigurationError):
+                    CompatibleChatModel(self.config())
+
     @patch.dict("os.environ", {}, clear=True)
     def test_missing_configuration_and_unsupported_provider(self):
         with self.assertRaises(ModelConfigurationError):

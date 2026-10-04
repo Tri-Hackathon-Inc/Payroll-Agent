@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Platform architecture — README.md</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#203346;background:#f3f6f9;line-height:1.65}
+    body{margin:0}header{background:#173248;color:white;padding:24px max(24px,calc((100vw - 1180px)/2))}header h1{margin:0;font-size:26px}header p{margin:6px 0;color:#d1dfe9}header a{color:#b7f3e1}main{max-width:1180px;margin:24px auto;padding:28px;background:white;border:1px solid #dde5ec;border-radius:12px}h2{font-size:25px}h3{font-size:21px;border-top:1px solid #dce6ed;margin-top:40px;padding-top:26px}p{max-width:950px}a{color:#006e70}code{background:#eff3f6;border-radius:4px;padding:2px 4px}pre{overflow:auto;padding:20px;background:#f7f9fb;border-radius:8px}pre code{padding:0;background:none}.mermaid{margin:28px 0;padding:20px 8px;overflow:auto;border:1px solid #e1e8ef;border-radius:10px;text-align:center;background:white}.mermaid svg{height:auto}#status{color:#526d80;font-size:13px}.error{color:#a21e24!important}@media(max-width:700px){main{margin:12px;padding:16px}.mermaid svg{min-width:850px}}@media print{header{background:white;color:black}header p,header a{color:black}main{border:none;margin:0;max-width:none}.mermaid{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <header><h1>Platform architecture</h1><p>Three diagrams and their explanations, rendered directly from <a href="/README.md">README.md</a>.</p></header>
+  <main><p id="status" role="status">Loading documentation…</p><article id="content"></article></main>
+  <script src="/assets/marked.js"></script>
+  <script src="/assets/mermaid.js"></script>
+  <script>
+    (async()=>{
+      const status=document.getElementById('status');
+      try{
+        const response=await fetch('/architecture.md');
+        if(!response.ok)throw new Error('Cannot load README.md');
+        // Render our local Markdown. Escape raw HTML tokens; Mermaid handles its own labels.
+        marked.use({renderer:{html({text}){return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}}});
+        document.getElementById('content').innerHTML=marked.parse(await response.text());
+        document.querySelectorAll('pre code.language-mermaid').forEach(code=>{
+          const diagram=document.createElement('div');diagram.className='mermaid';diagram.textContent=code.textContent;code.parentElement.replaceWith(diagram);
+        });
+        mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'default',sequence:{useMaxWidth:true},flowchart:{useMaxWidth:true}});
+        await mermaid.run({querySelector:'.mermaid'});
+        const count=document.querySelectorAll('.mermaid svg').length;
+        status.textContent=`${count} diagrams rendered · Refresh to load updates from README.md`;
+        document.documentElement.dataset.rendered=String(count);
+      }catch(error){status.textContent='Unable to render documentation: '+error.message;status.classList.add('error');}
+    })();
+  </script>
+</body>
+</html>

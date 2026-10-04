@@ -7,6 +7,12 @@ service with GraphQL adapters**. Django has no HTTP routes; names such as
 only `aistudio.js` and `client.js`; no business logic, tests, manifests or assets
 belong there. Python owns execution behind gRPC, including the chat webhook flow.
 
+## Platform architecture
+
+The three architecture and request-flow diagrams, with their explanations, live
+in the [root README](../README.md#platform-architecture-and-request-walkthroughs).
+Keep that section as the source for the documentation webpage.
+
 ## Interfaces and configurable execution
 
 Python services live directly under `backend/`. Each component keeps its
@@ -307,7 +313,7 @@ same document builder and vector store as the query path, including historical
 employees not present in a current run. From the repository root with the services running:
 
 ```sh
-docker compose -f docker/docker-compose.yaml --env-file backend/.env exec backend python manage.py ingest_payroll_history --domain payroll-services --service payrun
+docker compose -f infra/docker/docker-compose.yaml --env-file backend/.env exec backend python manage.py ingest_payroll_history --domain payroll-services --service payrun
 ```
 
 Match the domain/service arguments to the saved agent. Omit the `--env-file`
@@ -566,6 +572,16 @@ amounts. This calculated comparison also enters the answer prompt. The shared
 `pay-comparison.component` displays period dates, change amounts and the accepted
 model summary, with the full text review available on expansion. Cards remain
 available when model output is rejected; broad employee queries retain text replies.
+
+AD Review also returns `investigation.paycheckComparisons`, calculated from the
+same saved payroll snapshot as the investigation. Employee reviews show that
+employee; payrun reviews offer a selector for employees with findings. Each card
+compares the latest eligible payment with current gross, taxes, deductions and net.
+The concise calculated explanation and reconciliation warning are separate from
+the validated LLM conclusion. Missing amounts remain unavailable, never zero.
+Existing saved reviews derive these cards when read without another model call.
+Only the administrator's Review action invokes the investigation model; incident
+creation remains a separate explicit handoff.
 
 | `analysis.modelStatus` | Behavior |
 | --- | --- |
@@ -1014,9 +1030,9 @@ metadata do not provide authentication or authorization.
 
 ## Local server and container setup
 
-All Docker and Podman assets live in `docker/`. `docker/Dockerfile` builds the `backend`,
+All Docker and Podman assets live in `infra/docker/`. `infra/docker/Dockerfile` builds the `backend`,
 `ui`, `trinet-mock`, `trinet-ui` and `evidence-capture` targets using the repository root as context.
-`docker/Dockerfile.dockerignore` excludes local dependencies, credentials, and
+`infra/docker/Dockerfile.dockerignore` excludes local dependencies, credentials, and
 database files. Do not add Dockerfiles or Docker ignore files inside UI folders.
 The core services are `backend` (gRPC and GraphQL together), `ui`, `db`
 (MySQL 8.4), `redis`, and `vector-db` (PostgreSQL 17 with pgvector). There is no separate Apollo container. The Compose files also define
@@ -1025,18 +1041,18 @@ three optional demo services: `trinet-mock`, `trinet-ui` and `evidence-capture`.
 From the repository root, with Docker Desktop's Linux engine running:
 
 ```sh
-docker compose -f docker/docker-compose.yaml up --build -d --wait db backend ui
-docker compose -f docker/docker-compose.yaml ps
-docker compose -f docker/docker-compose.yaml logs --tail=100 ui backend db redis vector-db
+docker compose -f infra/docker/docker-compose.yaml up --build -d --wait db backend ui
+docker compose -f infra/docker/docker-compose.yaml ps
+docker compose -f infra/docker/docker-compose.yaml logs --tail=100 ui backend db redis vector-db
 ```
 
 On Windows, `docker desktop start` starts Docker Desktop if its engine is stopped.
 On macOS, use the [Podman run command](../README.md): install
 `podman` and `podman-compose`, initialize a VM once with `podman machine init`,
 and run `podman machine start`. From the repository root,
-`bash docker/podman.sh up --build -d db backend ui` starts the core services;
-omit the service list for all eight. Use `bash docker/podman.sh ps` to check
-health and `bash docker/podman.sh logs --tail=100 backend` for diagnostics.
+`bash infra/docker/podman.sh up --build -d db backend ui` starts the core services;
+omit the service list for all eight. Use `bash infra/docker/podman.sh ps` to check
+health and `bash infra/docker/podman.sh logs --tail=100 backend` for diagnostics.
 The launcher selects the native Compose provider, loads root `.env` then
 `backend/.env` when present, and explicitly passes the shared build ignore file.
 Retain those settings for Podman builds and recreation; never copy credentials
@@ -1054,18 +1070,18 @@ as `db:3306` within Docker and has no published host port. The UI uses backend
 mode and proxies requests under its mount path to the backend.
 
 Use the explicit core service list when only UI, backend, and DB are requested.
-Running `docker compose -f docker/docker-compose.yaml up --build -d --wait` without that list starts all eight
+Running `docker compose -f infra/docker/docker-compose.yaml up --build -d --wait` without that list starts all eight
 services, including the TriNet demo at `http://localhost:5174/trinet/` and its
 payroll API at `http://localhost:4100/`, plus the internal screenshot service.
 The demo is needed for payrun context.
-`docker/docker-compose.local.yaml` selects the same configuration as the default file.
+`infra/docker/docker-compose.local.yaml` selects the same configuration as the default file.
 
 Rebuild with the same startup command after code changes. For mounted development
-source, use `docker compose -f docker/docker-compose.yaml -f docker/docker-compose.dev.yaml up --build -d --wait db backend ui`;
+source, use `docker compose -f infra/docker/docker-compose.yaml -f infra/docker/docker-compose.dev.yaml up --build -d --wait db backend ui`;
 restart `backend` after Python, GraphQL, or template changes. Rebuild images after
-dependency changes. Use `docker compose -f docker/docker-compose.yaml stop ui backend db redis vector-db` to stop the core
-services and `docker compose -f docker/docker-compose.yaml up -d --wait db backend ui` to resume them.
-`docker compose -f docker/docker-compose.yaml down` removes the project containers and network, retaining named
+dependency changes. Use `docker compose -f infra/docker/docker-compose.yaml stop ui backend db redis vector-db` to stop the core
+services and `docker compose -f infra/docker/docker-compose.yaml up -d --wait db backend ui` to resume them.
+`docker compose -f infra/docker/docker-compose.yaml down` removes the project containers and network, retaining named
 volumes. Never delete database volumes as part of a routine rebuild or upgrade.
 
 Run these commands from the repository root so Compose reads the root `.env`.
@@ -1076,10 +1092,10 @@ settings, pass `--env-file .env --env-file backend/.env` in that order. Check
 only credential presence, never print token values or resolved Compose config.
 Keep project names (`payroll-local` / `payroll-api-test`) and volume names stable
 when editing the Compose files. Local/test variants extend the main file in the
-same directory. Development bind mounts resolve relative to `docker/`.
-`docker/publish-images.sh` runs Bake from `docker/` with context `..`; it publishes
+same directory. Development bind mounts resolve relative to `infra/docker/`.
+`infra/docker/publish-images.sh` runs Bake from `infra/docker/` with context `../..`; it publishes
 images and must not be run as part of local verification. Inspect its build
-configuration with `docker buildx bake -f docker-compose.yaml --print` from `docker/`.
+configuration with `docker buildx bake -f docker-compose.yaml --print` from `infra/docker/`.
 
 `local_server/run_backend.py` migrates and syncs the database, supervises both
 API processes, and stops the sibling if one exits. `local_server/grpc-client.js`
@@ -1151,7 +1167,7 @@ Run `npm test` from `backend/` for the JavaScript transport contracts. Python ru
 pgvector using:
 
 ```sh
-docker compose -f docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_TESTS=1 backend python manage.py test tests.test_runtime_storage --noinput
+docker compose -f infra/docker/docker-compose.yaml run --rm --no-deps -e RUN_STORAGE_TESTS=1 backend python manage.py test tests.test_runtime_storage --noinput
 ```
 
 Cover history isolation, missing data, zero baselines, duplicated lines,
@@ -1341,3 +1357,90 @@ Health checks validate context eligibility and model configuration without probi
 the payroll API. Conversation authorization scope includes context-only mode and
 source grants; revocation is checked before cached responses. Agents with full API
 Read continue using the existing fresh-data pipeline.
+
+### Separate vLLM small-model serving
+
+infra/deploy/vllm contains a Kubernetes Deployment, ClusterIP Service and persistent
+weight cache for Qwen2.5-0.5B-Instruct using the official pinned vLLM image.
+The server alias agent-slm matches the vllm-slm model catalog entry. GPU startup,
+readiness and liveness probes are separate from business API authorization.
+VLLM_BASE_URL and VLLM_API_KEY connect the existing compatible-chat client.
+The server uses a Kubernetes Secret, disables prompt logging and usage telemetry,
+and exposes no public load balancer. Model downloads require outbound access;
+this deployment does not claim air-gapped operation or tenant isolation.
+The optional docker-compose.vllm.yaml runs the same serving process independently
+of Kubernetes. The backend contains no GPU dependencies. Local vLLM selection
+cannot use the Hugging Face investigation fallback. Existing agents retain their
+selected model until explicitly changed. The conservative 2048-token context and
+0.5B model target development and short questions, not full-payrun investigations.
+A cluster with an NVIDIA device plugin, GPU node and default storage provisioner
+must exist before applying the Kubernetes resources.
+
+### Kind platform deployment and Ray Serve migration
+
+The dedicated `payroll-agent` Kind cluster uses explicit kubeconfig
+`.local-data/kind-kubeconfig`; never target or remove unrelated clusters.
+`infra/deploy/kind/platform.json` stages eight workloads at zero replicas for initial
+migration only. Do not apply it to a running installation as an update procedure.
+The payroll namespace contains both UIs, backend, payroll mock API, evidence
+capture, MySQL, pgvector and Redis. Persistent claims hold database data, model
+embedding cache and incident evidence. Redis remains ephemeral. UI NodePorts map
+to localhost 5273 (Studio) and 5274 (Payroll). Backend/model APIs are internal.
+
+`prepare_secrets.py` copies resolved Compose configuration without logging values;
+it also creates a stable local model key in ignored `.local-data`. `migrate.py`
+stops original app writers, creates logical MySQL/Postgres dumps and filesystem
+archives, imports into empty Kind storage, then starts app workloads. Original
+Compose volumes and timestamped backups remain available. After accepting writes
+in Kind, switching back requires a reverse migration; old Compose data is stale.
+Kind local-path volumes do not survive deletion of the cluster container.
+
+`infra/deploy/ray/serving.yaml` describes a separate RayService running the official
+Ray LLM image with vLLM and Qwen2.5-0.5B-Instruct. KubeRay 1.4.2 manages its lifetime.
+A single GPU head pod limits laptop overhead; cache is persistent. The internal
+nginx gateway validates the shared bearer key, while raw Ray services remain
+cluster-internal. Namespace separation is not tenant or network isolation.
+The GPU resource requires a functioning NVIDIA Kubernetes device plugin. Docker
+WSL GPU visibility alone is insufficient. Do not fake Kubernetes GPU capacity.
+
+Deployment status: all eight platform workloads and migrated data were verified
+on Kind. KubeRay was installed. The Ray image download and temporary WSL driver
+copy exhausted C: space and stopped Docker; the temporary copy was removed.
+Docker was subsequently recovered by restarting all WSL instances to clear its
+stale data-disk attachment. The existing Kind node and all eight platform services
+were restored without recreating the cluster; ports 5273 and 5274 were verified.
+RayService/model inference has NOT been validated or activated. Run the disk
+preflight before further model downloads. Never copy the entire WSL driver store
+or prune Docker volumes as a space recovery step. Preserve payroll backups.
+
+### Optional deployment configuration
+
+Keep infrastructure code under `/infra`: container build and Compose assets in
+`infra/docker`, deployment configuration, launchers and cluster/model manifests
+in `infra/deploy`. Build contexts resolve to the repository root. Runtime data,
+credentials and backups remain in ignored `.local-data`, excluded from images.
+
+`infra/deploy/platform.json` is the launcher configuration. `kubernetes.enabled` and
+`rayServe.enabled` are independent booleans, both false by default. Run
+`python infra/deploy/platform.py up|stop|status`; `--dry-run` previews without writes,
+Docker calls, cluster calls or downloads. Config selects Compose versus an
+already provisioned Kind cluster. It never creates/deletes clusters or migrates
+data automatically. Stop the old deployment and reconcile data before switching.
+
+Compose local inference uses `infra/docker/docker-compose.ray.yaml`, with the
+`local-model` profile activated only when Ray Serve is enabled. The Ray container
+uses `infra/deploy/ray/serve.yaml`; an internal authenticated nginx gateway connects the
+backend. Neither Ray dashboard nor inference ports are published to the host.
+With Ray disabled, startup stops previous Ray/gateway containers on the selected
+target and clears backend local-inference connection settings. Saved agents keep
+their selected models; an agent selecting a disabled local model is unavailable.
+Disabling Kubernetes selects Compose; it does not shut down or remove an existing
+Kind cluster. Legacy direct Docker/kubectl commands bypass this config.
+
+Kind startup requires existing platform resources. Ray additionally requires the
+KubeRay CRD and advertised NVIDIA GPU capacity. Disabling Ray removes its
+RayService/gateway workloads but preserves model PVCs. No cloud fallback is added.
+Model-enabled startup checks 35 GiB free before workload changes. Launcher tests
+run without an engine using `python -m unittest discover -s infra/deploy -p test_platform.py`.
+The launcher checks Kubernetes `/readyz` with a bounded timeout before workload
+changes and gives recovery instructions instead of only a subprocess error.

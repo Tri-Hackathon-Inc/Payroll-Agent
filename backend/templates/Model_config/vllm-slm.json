@@ -1,0 +1,27 @@
+{
+  "id": "vllm-slm",
+  "name": "Local SLM - Qwen 0.5B (vLLM)",
+  "provider": "openai-compatible",
+  "model_id": "agent-slm",
+  "enabled": true,
+  "endpoint_env": "VLLM_BASE_URL",
+  "credential_env": "VLLM_API_KEY",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 512
+  },
+  "details": {
+    "license": "open-source",
+    "vendor": "Self-hosted - vLLM",
+    "context_window": "2048 tokens (configured)",
+    "description": "Apache-2.0 model. Small local model for short questions and summaries. Requires the separate GPU vLLM service. Not a substitute for a validated payroll investigation model; long evidence may exceed its context window.",
+    "strengths": [
+      "Local inference",
+      "Small GPU footprint"
+    ],
+    "best_for": [
+      "General Query",
+      "Summarizer"
+    ]
+  }
+}

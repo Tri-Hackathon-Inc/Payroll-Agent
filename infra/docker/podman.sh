@@ -2,7 +2,7 @@
 # Use the shared stack with the native Podman Compose provider on macOS.
 set -euo pipefail
 
-repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_dir"
 
 if ! command -v podman >/dev/null 2>&1; then
@@ -20,8 +20,8 @@ export PODMAN_COMPOSE_PROVIDER="$(command -v podman-compose)"
 # Podman needs the shared ignore file explicitly; paths resolve from repo_dir.
 compose_args=(
   --in-pod=false
-  --podman-build-args=--ignorefile=docker/Dockerfile.dockerignore
-  -f docker/docker-compose.yaml
+  --podman-build-args=--ignorefile=infra/docker/Dockerfile.dockerignore
+  -f infra/docker/docker-compose.yaml
 )
 
 # Keep deployment settings and model credentials on every invocation. Do not

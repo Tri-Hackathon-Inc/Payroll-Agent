@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import AgentHandoff from './AgentHandoff'
 import IncidentCard from './IncidentCard'
+import PaycheckComparison from './PaycheckComparison'
 
 // Jev flags findings; only the user's Review action authorizes investigation.
 const API = `${import.meta.env.BASE_URL}agent-studio`
@@ -215,6 +216,7 @@ function ReviewCase({ item, onReview, onFeedback }) {
       <li className={complete ? 'current' : ''} aria-current={complete ? 'step' : undefined}><i className="bi bi-file-earmark-text" aria-hidden="true" /><span>Report<small>{complete ? 'Optional next step' : 'After investigation'}</small></span></li>
     </ol>}
     {investigating && <div className="tn-ad-working" role="status"><span className="spinner-border spinner-border-sm me-2" />Investigating flagged findings…</div>}
+    {investigation?.paycheckComparisons?.length > 0 && <PaycheckComparison comparisons={investigation.paycheckComparisons} />}
     {investigation ? <div className="tn-review-investigation">
       <div className="fw-semibold">{partial ? 'Partial conclusion — more review needed' : investigation.modelStatus === 'completed' ? 'Investigation conclusion' : 'No investigation conclusion yet'}</div>
       <p className="mb-1">{investigation.modelStatus === 'completed' || partial ? (investigation.summary.length > 320 ? investigation.summary.slice(0, 317) + '…' : investigation.summary) : 'Investigation incomplete. Review the flagged employees below.'}</p>

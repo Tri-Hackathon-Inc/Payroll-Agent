@@ -1,0 +1,13 @@
+server {
+  listen 8000;
+  server_tokens off;
+  client_max_body_size 1m;
+  location = /health { access_log off; return 200 'ok'; }
+  location / {
+    if ($http_authorization != "Bearer ${VLLM_API_KEY}") { return 401; }
+    proxy_pass http://ray-serve:8000;
+    proxy_read_timeout 180s;
+    proxy_buffering off;
+    access_log off;
+  }
+}

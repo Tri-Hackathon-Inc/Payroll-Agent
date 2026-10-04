@@ -1,0 +1,9 @@
+{
+  "kubernetes": {
+    "enabled": true,
+    "kubeconfig": ".local-data/kind-kubeconfig"
+  },
+  "rayServe": {
+    "enabled": false
+  }
+}

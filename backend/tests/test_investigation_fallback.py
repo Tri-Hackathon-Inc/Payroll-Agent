@@ -49,3 +49,13 @@ class InvestigationFallbackTests(SimpleTestCase):
                 with self.assertRaises(ModelExecutionError):
                     model.generate([])
                 factory.assert_not_called()
+
+    def test_local_vllm_does_not_fall_back_to_cloud(self):
+        primary = Mock(configuration={"endpoint_env":"VLLM_BASE_URL"},
+                       generate=Mock(side_effect=ModelExecutionError("Local server unavailable")))
+        factory = Mock()
+        model = InvestigationModel(primary, fallback_factory=factory)
+        with self.assertRaises(ModelExecutionError):
+            model.generate([])
+        self.assertFalse(model.use_backup("invalid_response"))
+        factory.assert_not_called()

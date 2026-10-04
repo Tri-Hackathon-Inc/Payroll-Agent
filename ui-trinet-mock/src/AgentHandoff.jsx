@@ -63,7 +63,7 @@ export default function AgentHandoff({ item }) {
     {discovered && agents.length === 0 && <p className="small text-muted">Attach an Incident Report agent to this service in My Agents to enable reporting.</p>}
     {result?.status === 'completed' && <div role="status">Incident report created.
       <button className="btn btn-sm btn-link" onClick={download}>Download incident report</button>
-      {result.result.artifacts && <div className="small text-muted">Saved {result.result.artifacts.snapshotCount} snapshots with the report in <code>.local-data/{result.result.artifacts.folder}</code>.</div>}
+      {result.result.artifacts && <div className="small text-muted">The report and {result.result.artifacts.snapshotCount} snapshots are saved in server storage. Use Download incident report to save the report to your computer.</div>}
       {result.result.incident?.screenshots?.error && <p className="small text-warning">{result.result.incident.screenshots.error} The available evidence and report were saved.</p>}
     </div>}
     {result?.status === 'processing' && <p role="status" className="small">Report creation is already in progress. Reload and select Report to Incident Agent to retrieve it.</p>}

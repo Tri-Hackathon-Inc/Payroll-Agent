@@ -1,0 +1,7 @@
+{
+  "cluster": "payroll-agent",
+  "namespace": "payroll",
+  "services": ["backend", "ui", "trinet-ui"],
+  "pollSeconds": 2,
+  "debounceSeconds": 1
+}

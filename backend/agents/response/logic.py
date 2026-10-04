@@ -63,6 +63,7 @@ def postprocess(evidence, sources, output):
     status = output.get("modelStatus", "not_configured")
     reason = output.get("reason")
     parsed = None
+    validation_code = None
     if status == "completed":
         try:
             parsed = validate_answer(output.get("text"), sources, evidence["findings"], allow_partial=output.get("allowPartialFindings", False))
@@ -71,6 +72,7 @@ def postprocess(evidence, sources, output):
                 reason = (f"The model explained {len(parsed['findings'])} of {len(evidence['findings'])} findings. "
                           "The remaining findings still need manual review or another Review attempt. This investigation is incomplete.")
         except AnswerValidationError as error:
+            validation_code = str(error)
             status, reason = "invalid_response", VALIDATION_MESSAGES[str(error)] + " Calculated findings remain available; no validated AI explanation was produced."
         except (ValueError, TypeError, KeyError):
             status, reason = "invalid_response", "The model answer, citations or findings were invalid. Showing calculated evidence only."
@@ -96,6 +98,6 @@ def postprocess(evidence, sources, output):
         details = [parsed["answer"], "Historical sources:", *[" | ".join(str(v) for v in item.values() if v) for item in cited], "Calculated review:", *details]
     if reason:
         details.append(reason)
-    analysis.update(modelStatus=status, modelMessage=reason, modelAnswer=model_answer, details="\n".join(details))
+    analysis.update(modelStatus=status, modelMessage=reason, modelAnswer=model_answer, modelValidationCode=validation_code, details="\n".join(details))
     return {"reply": parsed["answer"] if parsed else lead + " " + (reason or "See the calculated review for details."), "analysis": analysis,
             "citedSourceIds": parsed["sourceIds"] if parsed else []}

@@ -11,7 +11,8 @@
     "groq-gpt-oss-120b",
     "gemini-flash-lite",
     "openrouter-qwen-3-8-27b",
-    "ollama-local"
+    "ollama-local",
+    "vllm-slm"
   ],
   "config": {
     "description": "Produce a structured employee or payrun summary.",

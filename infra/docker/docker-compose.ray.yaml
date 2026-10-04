@@ -1,0 +1,48 @@
+# Included by infra/deploy/platform.py. The profile is enabled only by configuration.
+services:
+  ray-serve:
+    profiles: [local-model]
+    image: rayproject/ray-llm:2.49.2-py311-cu128
+    user: "0:0"
+    entrypoint: ["/bin/bash", "-lc"]
+    command:
+      - >-
+        ray start --head --num-cpus=2 --num-gpus=1 --object-store-memory=268435456 --disable-usage-stats
+        && serve run --address=auto /config/serve.yaml
+    gpus: all
+    shm_size: 1gb
+    mem_limit: 7g
+    environment:
+      HF_HOME: /model-cache
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      RAY_USAGE_STATS_ENABLED: "0"
+      VLLM_NO_USAGE_STATS: "1"
+    volumes:
+      - ../deploy/ray/serve.yaml:/config/serve.yaml:ro
+      - ray_model_cache:/model-cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/v1/models', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      start_period: 15m
+      retries: 20
+    restart: unless-stopped
+  model-gateway:
+    profiles: [local-model]
+    image: nginx:1.28-alpine
+    environment:
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
+      NGINX_ENVSUBST_FILTER: VLLM_API_KEY
+    volumes:
+      - ../deploy/ray/gateway.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      ray-serve:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+volumes:
+  ray_model_cache:

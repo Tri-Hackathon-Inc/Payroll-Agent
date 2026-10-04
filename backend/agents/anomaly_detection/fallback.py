@@ -15,6 +15,9 @@ class InvestigationModel:
         self.route = {"fallback": False, "model": primary_name, "provider": primary_provider}
 
     def use_backup(self, reason):
+        # A local serving selection must not silently send evidence to a cloud backup.
+        if getattr(self.primary, "configuration", {}).get("endpoint_env") == "VLLM_BASE_URL":
+            return False
         if self.route["fallback"]:
             return False
         if os.getenv("AD_HF_FALLBACK", "true").lower() != "true" or not os.getenv("HF_TOKEN", "").strip():
