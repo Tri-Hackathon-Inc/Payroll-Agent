@@ -60,9 +60,49 @@ Docker and Podman keep separate containers and named volumes. A stopped or unrea
 | Open the three diagrams and explanations from this README. | <http://localhost:5280/> |
 | Stop the documentation server in its terminal. | `Ctrl+C` |
 
+## Kubernetes with Podman
+
+The platform launcher uses the configured kubeconfig for Kubernetes, including
+clusters whose Kind nodes run in Podman. Set `kubernetes.enabled=true` and point
+`kubernetes.kubeconfig` at that cluster in `infra/deploy/platform.json`. Then run:
+
+```powershell
+python infra/deploy/platform.py up --engine podman
+python infra/deploy/platform.py status --engine podman
+python infra/deploy/platform.py stop --engine podman
+python infra/deploy/dev.py --engine podman --once
+python infra/deploy/dev.py --engine podman
+```
+
+For Kubernetes, `--engine` does not select or migrate the cluster: the kubeconfig
+selects it. For the watcher, it selects the build engine and Kind provider, which
+must match the existing cluster. Podman builds use native `podman-compose` as in
+the Compose setup below, then export Docker-format image archives into Kind
+before restarting deployments. Ray Serve retains the Kubernetes GPU checks;
+the Podman Compose restriction does not apply to Kubernetes.
+
+For a **new, empty** Podman-backed Kind cluster, install Kind, kubectl and Podman,
+start the Podman machine on Windows/macOS, and explicitly select its provider:
+
+```powershell
+$env:KIND_EXPERIMENTAL_PROVIDER = 'podman'
+kind create cluster --config infra/deploy/kind/cluster.yaml --kubeconfig .local-data/podman-kubeconfig
+```
+
+Use a separate cluster name and available host ports in a copy of the Kind config
+if the Docker cluster already exists. Provision application images, environment
+Secrets and the platform manifest before using normal startup; cluster creation
+alone does not deploy the application. Existing data requires an explicit
+migration. Keep the original kubeconfig until that migration is verified.
+
+Kind documents [Podman provider selection](https://kind.sigs.k8s.io/docs/user/quick-start/)
+and [rootless requirements](https://kind.sigs.k8s.io/docs/user/rootless/), including
+cgroup v2 and systemd delegation on Linux. Use the same Podman connection for
+cluster creation, image builds and watcher commands.
+
 ## Develop with automatic reload (Kind)
 
-Keep Docker Desktop and the existing Kind cluster running. This optional watcher
+Keep the Docker or Podman engine and the existing Kind cluster running. This optional watcher
 uses the Kubernetes setting in `infra/deploy/platform.json`; normal startup does
 not enable it. Run it in a separate terminal while editing.
 

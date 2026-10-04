@@ -8,6 +8,8 @@ from pathlib import Path
 import subprocess
 import tarfile
 import time
+import tempfile
+from platform import select_engine, check_compose
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCES = {'backend': 'backend', 'ui': 'ui-payroll-agent', 'trinet-ui': 'ui-trinet-mock'}
@@ -61,8 +63,10 @@ def archive(service, names):
 
 
 class Watcher:
-    def __init__(self, config):
+    def __init__(self, config, engine='auto'):
         self.config = config
+        self.engine = engine
+        self.env = os.environ.copy()
         platform = json.loads((ROOT / 'infra/deploy/platform.json').read_text(encoding='utf-8'))
         if not platform['kubernetes']['enabled']:
             raise ValueError('This watcher requires kubernetes.enabled=true in infra/deploy/platform.json.')
@@ -70,7 +74,7 @@ class Watcher:
         self.kind = str(ROOT / '.local-data/tools/kind.exe') if os.name == 'nt' else 'kind'
 
     def run(self, command, **kwargs):
-        return subprocess.run(command, cwd=ROOT, check=True, timeout=600, **kwargs)
+        return subprocess.run(command, cwd=ROOT, env=self.env, check=True, timeout=600, **kwargs)
 
     def pod(self, service):
         data = json.loads(self.run(self.kube + ['get', 'pods', '-l', 'app=' + service, '-o', 'json'], capture_output=True).stdout)
@@ -85,8 +89,16 @@ class Watcher:
 
     def rebuild(self, service):
         print(f'{service}: rebuilding and deploying (brief interruption).', flush=True)
-        self.run(['docker', 'compose', '-f', 'infra/docker/docker-compose.yaml', 'build', service])
-        self.run([self.kind, 'load', 'docker-image', f'payroll-local-{service}:latest', '--name', self.config['cluster']])
+        self.run(self.compose + ['-f', 'infra/docker/docker-compose.yaml', 'build', service])
+        image = f'payroll-local-{service}:latest'
+        if self.engine == 'podman':
+            # An archive preserves the exact tag referenced by the Kubernetes manifest.
+            with tempfile.TemporaryDirectory(prefix='payroll-kind-') as temp:
+                archive_path = str(Path(temp) / 'image.tar')
+                self.run(['podman', 'save', '--format', 'docker-archive', '--output', archive_path, image])
+                self.run([self.kind, 'load', 'image-archive', archive_path, '--name', self.config['cluster']])
+        else:
+            self.run([self.kind, 'load', 'docker-image', image, '--name', self.config['cluster']])
         self.run(self.kube + ['rollout', 'restart', 'deployment/' + service])
         self.run(self.kube + ['rollout', 'status', 'deployment/' + service, '--timeout=180s'])
 
@@ -99,6 +111,9 @@ class Watcher:
         context = self.run(self.kube[:3] + ['config', 'current-context'], capture_output=True, text=True).stdout.strip()
         if context != 'kind-' + self.config['cluster']:
             raise ValueError('Kubeconfig context must match the configured Kind cluster.')
+        self.engine = select_engine(self.engine)
+        self.env['KIND_EXPERIMENTAL_PROVIDER'] = self.engine
+        self.compose = check_compose(self.engine, self.env, 'build')
         previous, pods = {}, {}
         # Establish a reproducible baseline, including removals since the last run.
         for service in self.config['services']:
@@ -134,6 +149,8 @@ class Watcher:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=ROOT / 'infra/deploy/dev.json')
+    parser.add_argument('--engine', choices=['auto', 'docker', 'podman'], default='auto',
+                        help='Build engine and provider of the existing Kind cluster.')
     parser.add_argument('--once', action='store_true', help='Build/deploy once, then exit.')
     parser.add_argument('--dry-run', action='store_true', help='Show watched projects without changing anything.')
     args = parser.parse_args()
@@ -142,7 +159,7 @@ def main():
         if (not config['services'] or any(s not in SOURCES for s in config['services'])
                 or not 1 <= config['pollSeconds'] <= 60 or not 0.2 <= config['debounceSeconds'] <= 10):
             raise ValueError('Choose backend/ui/trinet-ui; pollSeconds 1-60; debounceSeconds 0.2-10.')
-        watcher = Watcher(config)
+        watcher = Watcher(config, args.engine)
         if args.dry_run:
             for service in config['services']:
                 print(f'{service}: {len(snapshot(service)) - 1} watched files; ' + ('automatic rebuild/redeploy' if service == 'backend' else 'UI source sync; other edits rebuild/redeploy'))

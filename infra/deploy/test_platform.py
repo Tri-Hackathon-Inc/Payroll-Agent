@@ -103,7 +103,7 @@ class DeploymentTests(unittest.TestCase):
 
     @patch.object(launcher.subprocess, 'run', side_effect=launcher.subprocess.TimeoutExpired('kubectl', 15))
     def test_cluster_timeout_is_actionable(self, run):
-        with self.assertRaisesRegex(ValueError, 'Docker Desktop'):
+        with self.assertRaisesRegex(ValueError, 'Docker or Podman'):
             launcher.check_cluster(['kubectl'])
 
 
@@ -207,11 +207,19 @@ class ComposeEngineTests(unittest.TestCase):
         write.assert_not_called()
 
     @patch.object(launcher.subprocess, 'run')
-    def test_explicit_engine_cannot_silently_switch_kind(self, run):
+    def test_podman_kubernetes_dry_run_never_probes_or_changes_provider(self, run):
         self.config['kubernetes']['enabled'] = True
-        with self.assertRaisesRegex(ValueError, 'Compose only'):
-            launcher.execute(self.config, 'up', engine='podman')
+        launcher.execute(self.config, 'up', dry_run=True, engine='podman')
         run.assert_not_called()
+
+    @patch.object(launcher, 'check_cluster')
+    @patch.object(Path, 'is_file', return_value=True)
+    @patch.object(launcher.subprocess, 'run')
+    def test_podman_kubernetes_status_uses_only_kubectl(self, run, exists, check):
+        self.config['kubernetes']['enabled'] = True
+        launcher.execute(self.config, 'status', engine='podman')
+        self.assertEqual(run.call_args.args[0][0], 'kubectl')
+        self.assertEqual(run.call_args.args[0][-3:], ['get', 'pods', '-A'])
 
 if __name__ == '__main__':
     unittest.main()

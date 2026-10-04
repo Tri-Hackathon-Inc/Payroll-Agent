@@ -42,6 +42,7 @@ class WatcherTests(unittest.TestCase):
     def test_failed_build_does_not_load_or_restart(self):
         watcher = dev.Watcher.__new__(dev.Watcher)
         watcher.config = {'cluster': 'payroll-agent'}
+        watcher.engine, watcher.compose = 'docker', ['docker', 'compose']
         watcher.kind, watcher.kube = 'kind', ['kubectl']
         watcher.run = Mock(side_effect=dev.subprocess.CalledProcessError(1, 'build'))
         with self.assertRaises(dev.subprocess.CalledProcessError):
@@ -51,6 +52,7 @@ class WatcherTests(unittest.TestCase):
     def test_build_load_restart_then_wait(self):
         watcher = dev.Watcher.__new__(dev.Watcher)
         watcher.config = {'cluster': 'payroll-agent'}
+        watcher.engine, watcher.compose = 'docker', ['docker', 'compose']
         watcher.kind, watcher.kube = 'kind', ['kubectl']
         watcher.run = Mock()
         watcher.rebuild('backend')
@@ -59,3 +61,17 @@ class WatcherTests(unittest.TestCase):
         self.assertIn('load', commands[1])
         self.assertIn('restart', commands[2])
         self.assertIn('status', commands[3])
+
+    def test_podman_archive_loaded_before_restart(self):
+        watcher = dev.Watcher.__new__(dev.Watcher)
+        watcher.config = {'cluster': 'payroll-agent'}
+        watcher.engine, watcher.compose = 'podman', ['podman', 'compose']
+        watcher.kind, watcher.kube = 'kind', ['kubectl']
+        watcher.run = Mock()
+        watcher.rebuild('backend')
+        commands = [call.args[0] for call in watcher.run.call_args_list]
+        self.assertEqual(commands[0][:2], ['podman', 'compose'])
+        self.assertEqual(commands[1][:4], ['podman', 'save', '--format', 'docker-archive'])
+        self.assertEqual(commands[2][:3], ['kind', 'load', 'image-archive'])
+        self.assertEqual(commands[1][5], commands[2][3])
+        self.assertIn('restart', commands[3])

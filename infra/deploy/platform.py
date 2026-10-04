@@ -24,7 +24,7 @@ def read_config(path):
     return config
 
 def plan(config, action, engine='auto'):
-    target = 'Kind' if config['kubernetes']['enabled'] else {
+    target = 'Kubernetes (existing kubeconfig)' if config['kubernetes']['enabled'] else {
         'auto': 'Compose (Docker when installed, otherwise Podman)',
         'docker': 'Docker Compose', 'podman': 'Podman Compose'}[engine]
     model = 'enabled' if config['rayServe']['enabled'] else 'disabled (no model download)'
@@ -73,10 +73,10 @@ def check_compose(engine, env, action):
 
 def check_cluster(kube):
     """Fail promptly with recovery steps before changing any cluster workloads."""
-    message = ('The Kubernetes API is not ready. Check Docker Desktop is running, then '
-               'check the existing Kind node with: docker ps -a --filter name=payroll-agent-control-plane. '
-               'If that container is stopped, run: docker start payroll-agent-control-plane. '
-               'Do not recreate or delete the cluster to fix a connection error; it contains platform data.')
+    message = ('The Kubernetes API is not ready. Check the cluster selected by the configured '
+               'kubeconfig. For Kind, start its Docker or Podman engine and inspect its node '
+               'with docker/podman ps -a. Start the existing stopped node with the same engine. '
+               'Do not recreate or delete the cluster; it contains platform data.')
     try:
         result = subprocess.run(kube + ['--request-timeout=10s', 'get', '--raw=/readyz'],
                                 cwd=ROOT, capture_output=True, text=True, timeout=15)
@@ -86,9 +86,6 @@ def check_cluster(kube):
         raise ValueError(message)
 
 def execute(config, action, dry_run=False, engine='auto'):
-    if config['kubernetes']['enabled'] and engine != 'auto':
-        raise ValueError('--engine applies to Compose only. Set kubernetes.enabled=false to use '
-                         'Docker/Podman Compose; the existing Kind cluster is not switched or migrated.')
     print(plan(config, action, engine), flush=True)
     if dry_run:
         return
@@ -189,7 +186,7 @@ def main():
     parser.add_argument('--config', type=Path, default=ROOT / 'infra/deploy/platform.json')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--engine', choices=['auto', 'docker', 'podman'], default='auto',
-                        help='Compose engine: prefer installed Docker, otherwise Podman. Does not change Kind.')
+                        help='Compose engine; with Kubernetes, commands use the existing kubeconfig and never change its provider.')
     args = parser.parse_args()
     try:
         execute(read_config(args.config), args.action, args.dry_run, args.engine)
