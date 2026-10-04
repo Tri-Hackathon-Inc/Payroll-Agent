@@ -71,7 +71,9 @@ class WatcherTests(unittest.TestCase):
         watcher.rebuild('backend')
         commands = [call.args[0] for call in watcher.run.call_args_list]
         self.assertEqual(commands[0][:2], ['podman', 'compose'])
-        self.assertEqual(commands[1][:4], ['podman', 'save', '--format', 'docker-archive'])
-        self.assertEqual(commands[2][:3], ['kind', 'load', 'image-archive'])
-        self.assertEqual(commands[1][5], commands[2][3])
-        self.assertIn('restart', commands[3])
+        self.assertEqual(commands[1], ['podman', 'tag', 'localhost/payroll-local-backend:latest',
+                                       'docker.io/library/payroll-local-backend:latest'])
+        self.assertEqual(commands[2][:4], ['podman', 'save', '--format', 'docker-archive'])
+        self.assertEqual(commands[3][:3], ['kind', 'load', 'image-archive'])
+        self.assertEqual(commands[2][5], commands[3][3])
+        self.assertIn('restart', commands[4])

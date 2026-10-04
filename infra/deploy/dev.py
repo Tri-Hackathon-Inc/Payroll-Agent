@@ -9,6 +9,7 @@ import subprocess
 import tarfile
 import time
 import tempfile
+import shutil
 from platform import select_engine, check_compose
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -71,7 +72,7 @@ class Watcher:
         if not platform['kubernetes']['enabled']:
             raise ValueError('This watcher requires kubernetes.enabled=true in infra/deploy/platform.json.')
         self.kube = ['kubectl', '--kubeconfig', str(ROOT / platform['kubernetes']['kubeconfig']), '-n', config['namespace']]
-        self.kind = str(ROOT / '.local-data/tools/kind.exe') if os.name == 'nt' else 'kind'
+        self.kind = shutil.which('kind') or (str(ROOT / '.local-data/tools/kind.exe') if os.name == 'nt' else 'kind')
 
     def run(self, command, **kwargs):
         return subprocess.run(command, cwd=ROOT, env=self.env, check=True, timeout=600, **kwargs)
@@ -92,6 +93,9 @@ class Watcher:
         self.run(self.compose + ['-f', 'infra/docker/docker-compose.yaml', 'build', service])
         image = f'payroll-local-{service}:latest'
         if self.engine == 'podman':
+            canonical = 'docker.io/library/' + image
+            self.run(['podman', 'tag', 'localhost/' + image, canonical])
+            image = canonical
             # An archive preserves the exact tag referenced by the Kubernetes manifest.
             with tempfile.TemporaryDirectory(prefix='payroll-kind-') as temp:
                 archive_path = str(Path(temp) / 'image.tar')

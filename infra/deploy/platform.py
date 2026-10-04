@@ -7,6 +7,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import sys
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICES = ['db', 'vector-db', 'redis', 'backend', 'ui', 'trinet-mock', 'trinet-ui', 'evidence-capture']
@@ -86,6 +87,24 @@ def check_cluster(kube):
     if result.returncode != 0 or result.stdout.strip() != 'ok':
         raise ValueError(message)
 
+def ensure_podman_machine(env):
+    """Mac and Windows use a Linux VM; native Linux/WSL use the local engine."""
+    if os.name != 'nt' and sys.platform != 'darwin':
+        return
+    def run(command, **kwargs):
+        return subprocess.run(command, cwd=ROOT, env=env, check=True, **kwargs)
+    machines = json.loads(run(['podman', 'machine', 'list', '--format', 'json'],
+                              capture_output=True, text=True).stdout)
+    if not machines:
+        run(['podman', 'machine', 'init', '--rootful', '--cpus', '4',
+             '--memory', '8192', '--disk-size', '50'])
+        run(['podman', 'machine', 'start'])
+    elif len(machines) == 1 and not machines[0].get('Running'):
+        run(['podman', 'machine', 'start', machines[0]['Name']])
+    elif len(machines) > 1 and not any(machine.get('Running') for machine in machines):
+        raise ValueError('Multiple Podman machines exist. Start the intended machine and select its connection first.')
+
+
 def provision_kind(kubeconfig, env, engine='podman'):
     """Create or resume a dedicated Kind cluster, then deploy application resources."""
     try:
@@ -95,21 +114,15 @@ def provision_kind(kubeconfig, env, engine='podman'):
     engine = select_engine(engine)
     kind = shutil.which('kind')
     bundled = ROOT / '.local-data/tools/kind.exe'
-    if not kind and bundled.is_file():
+    if not kind and os.name == 'nt' and bundled.is_file():
         kind = str(bundled)
     if not kind or not shutil.which('kubectl'):
         raise ValueError('Install Kind and kubectl on PATH before first-time startup.')
     env['KIND_EXPERIMENTAL_PROVIDER'] = engine
     def run(command, **kwargs):
         return subprocess.run(command, cwd=ROOT, env=env, check=True, **kwargs)
-    if engine == 'podman' and os.name == 'nt':
-        machines = json.loads(run(['podman', 'machine', 'list', '--format', 'json'],
-                                  capture_output=True, text=True).stdout)
-        if not machines:
-            run(['podman', 'machine', 'init', '--cpus', '4', '--memory', '8192', '--disk-size', '50'])
-            run(['podman', 'machine', 'start'])
-        elif len(machines) == 1 and not machines[0].get('Running'):
-            run(['podman', 'machine', 'start', machines[0]['Name']])
+    if engine == 'podman':
+        ensure_podman_machine(env)
     compose = check_compose(engine, env, 'build') + ['-f', 'infra/docker/docker-compose.yaml']
     for path in ('.env', 'backend/.env'):
         if (ROOT / path).exists():
@@ -129,7 +142,7 @@ def provision_kind(kubeconfig, env, engine='podman'):
     built = [name for name in SERVICES if settings['services'][name].get('build')]
     # Explicit tags match the manifest, independent of Compose provider naming.
     for name in built:
-        image = f'payroll-local-{name}:latest'
+        image = f'docker.io/library/payroll-local-{name}:latest'
         build = [engine, 'build', '-f', 'infra/docker/Dockerfile', '--target', name, '-t', image]
         if engine == 'podman':
             build += ['--ignorefile', 'infra/docker/Dockerfile.dockerignore']
@@ -206,6 +219,8 @@ def execute(config, action, dry_run=False, engine='auto'):
         if action != 'up':
             raise ValueError('Kind is not provisioned. Run platform.py up first.')
         provision_kind(kubeconfig, env, 'podman' if engine == 'auto' else engine)
+    if action == 'up' and engine == 'podman':
+        ensure_podman_machine(env)
     kube = ['kubectl', '--kubeconfig', str(kubeconfig)]
     check_cluster(kube)
     if action == 'status':

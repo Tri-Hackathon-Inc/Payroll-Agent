@@ -71,7 +71,7 @@ python infra/deploy/platform.py up
 With the default configuration, this creates a Podman-backed Kind cluster when
 `.local-data/podman-kubeconfig` is missing, builds and loads application images,
 and deploys the databases, Redis, backend, Agent Studio, payroll API/UI and
-evidence service. It waits for deployment readiness. On Windows it initializes
+evidence service. It waits for deployment readiness. On Windows and macOS it initializes
 and starts a Podman machine if needed. Install Podman, Kind, kubectl, native
 `podman-compose` and Python's PyYAML first (`python -m pip install PyYAML`).
 
@@ -98,6 +98,36 @@ The watcher engine must match the existing Kind provider. Kind documents
 [rootless requirements](https://kind.sigs.k8s.io/docs/user/rootless/), including
 cgroup v2 and systemd delegation on Linux. Ray Serve remains optional and
 requires Kubernetes GPU resources.
+
+### macOS setup (Apple Silicon and Intel)
+
+Install Podman using the [official macOS installer](https://podman.io/docs/installation)
+or Podman Desktop. With Homebrew installed, install the remaining tools:
+
+```bash
+brew install kind kubectl podman-compose python
+python3 -m venv .venv-deploy
+source .venv-deploy/bin/activate
+python -m pip install PyYAML
+python infra/deploy/platform.py up --engine podman
+```
+
+Run these commands from your local project checkout. Startup creates a rootful
+Podman machine with 4 CPUs, 8 GiB RAM and 50 GiB disk if none exists, or starts
+an existing single stopped machine. Existing machine connections and execution
+modes are preserved. Multiple stopped machines require selecting and starting
+the intended one first. [Podman uses a Linux VM on macOS](https://docs.podman.io/en/stable/markdown/podman-machine-init.1.html).
+
+The Kind node uses the architecture-specific image selected by its version tag;
+application images are built locally for that architecture. This supports Intel
+and Apple Silicon without using Linux amd64 tool binaries. Keep Ray Serve disabled
+on Mac; the optional model deployment requires an NVIDIA GPU in Kubernetes.
+
+If creation reports `bind: address already in use`, stop the old workload occupying
+5273, 5274 or 16443 before retrying. For an old Docker payroll Kind cluster,
+`docker stop payroll-agent-control-plane` releases its ports and preserves its data.
+Use `docker ps` to check Compose containers too; stop the old application stack
+without removing volumes. Do not delete the old Kind node to resolve a port conflict.
 
 ## Develop with automatic reload (Kind)
 

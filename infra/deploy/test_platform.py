@@ -251,11 +251,42 @@ class ProvisionTests(unittest.TestCase):
         create = next(i for i,c in enumerate(commands) if c[:3] == ['kind', 'create', 'cluster'])
         build = next(i for i,c in enumerate(commands) if c[:2] == ['podman', 'build'])
         load = next(i for i,c in enumerate(commands) if c[:3] == ['kind', 'load', 'image-archive'])
+        self.assertIn('docker.io/library/payroll-local-backend:latest', commands[build])
         self.assertLess(create, build)
         self.assertLess(build, load)
         self.assertEqual(commands[-1][-1], 'infra/deploy/kind/platform.json')
         self.assertTrue(all('private' not in ' '.join(c) for c in commands))
         self.assertTrue(all(c.kwargs['env']['KIND_EXPERIMENTAL_PROVIDER'] == 'podman' for c in run.call_args_list))
+
+
+class MachineTests(unittest.TestCase):
+    @patch.object(launcher.sys, 'platform', 'darwin')
+    @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(stdout='[]'))
+    def test_mac_initializes_rootful_machine_then_starts(self, run):
+        launcher.ensure_podman_machine({})
+        commands = [c.args[0] for c in run.call_args_list]
+        self.assertIn('--rootful', commands[1])
+        self.assertEqual(commands[2], ['podman', 'machine', 'start'])
+
+    @patch.object(launcher.sys, 'platform', 'darwin')
+    @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(stdout='[{"Name":"mac-vm","Running":false}]'))
+    def test_mac_reuses_stopped_machine(self, run):
+        launcher.ensure_podman_machine({})
+        self.assertEqual(run.call_args.args[0], ['podman', 'machine', 'start', 'mac-vm'])
+        self.assertEqual(run.call_count, 2)
+
+    @patch.object(launcher.sys, 'platform', 'darwin')
+    @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(stdout='[{"Name":"mac-vm","Running":true}]'))
+    def test_mac_running_machine_is_unchanged(self, run):
+        launcher.ensure_podman_machine({})
+        self.assertEqual(run.call_count, 1)
+
+    @patch.object(launcher.sys, 'platform', 'linux')
+    @patch.object(launcher.os, 'name', 'posix')
+    @patch.object(launcher.subprocess, 'run')
+    def test_linux_does_not_create_vm(self, run):
+        launcher.ensure_podman_machine({})
+        run.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
