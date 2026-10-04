@@ -1,4 +1,4 @@
-"""Config-driven startup. No cluster creation, data migration or volume deletion."""
+"""Config-driven startup, including first-time Podman Kind provisioning."""
 import argparse
 import json
 import os
@@ -6,6 +6,7 @@ from pathlib import Path
 import secrets
 import shutil
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICES = ['db', 'vector-db', 'redis', 'backend', 'ui', 'trinet-mock', 'trinet-ui', 'evidence-capture']
@@ -24,7 +25,7 @@ def read_config(path):
     return config
 
 def plan(config, action, engine='auto'):
-    target = 'Kubernetes (existing kubeconfig)' if config['kubernetes']['enabled'] else {
+    target = 'Kubernetes (reuse configured cluster; provision Podman Kind if missing)' if config['kubernetes']['enabled'] else {
         'auto': 'Compose (Docker when installed, otherwise Podman)',
         'docker': 'Docker Compose', 'podman': 'Podman Compose'}[engine]
     model = 'enabled' if config['rayServe']['enabled'] else 'disabled (no model download)'
@@ -85,6 +86,70 @@ def check_cluster(kube):
     if result.returncode != 0 or result.stdout.strip() != 'ok':
         raise ValueError(message)
 
+def provision_kind(kubeconfig, env, engine='podman'):
+    """Create or resume a dedicated Kind cluster, then deploy application resources."""
+    try:
+        import yaml
+    except ImportError:
+        raise ValueError('First-time Kind setup requires PyYAML: python -m pip install PyYAML.') from None
+    engine = select_engine(engine)
+    kind = shutil.which('kind')
+    bundled = ROOT / '.local-data/tools/kind.exe'
+    if not kind and bundled.is_file():
+        kind = str(bundled)
+    if not kind or not shutil.which('kubectl'):
+        raise ValueError('Install Kind and kubectl on PATH before first-time startup.')
+    env['KIND_EXPERIMENTAL_PROVIDER'] = engine
+    def run(command, **kwargs):
+        return subprocess.run(command, cwd=ROOT, env=env, check=True, **kwargs)
+    if engine == 'podman' and os.name == 'nt':
+        machines = json.loads(run(['podman', 'machine', 'list', '--format', 'json'],
+                                  capture_output=True, text=True).stdout)
+        if not machines:
+            run(['podman', 'machine', 'init', '--cpus', '4', '--memory', '8192', '--disk-size', '50'])
+            run(['podman', 'machine', 'start'])
+        elif len(machines) == 1 and not machines[0].get('Running'):
+            run(['podman', 'machine', 'start', machines[0]['Name']])
+    compose = check_compose(engine, env, 'build') + ['-f', 'infra/docker/docker-compose.yaml']
+    for path in ('.env', 'backend/.env'):
+        if (ROOT / path).exists():
+            compose += ['--env-file', path]
+    rendered = run(compose + ['config'], capture_output=True, text=True)
+    settings = yaml.safe_load(rendered.stdout)
+    cluster = 'payroll-agent'
+    clusters = run([kind, 'get', 'clusters'], capture_output=True, text=True).stdout.split()
+    kubeconfig.parent.mkdir(parents=True, exist_ok=True)
+    if cluster not in clusters:
+        run([kind, 'create', 'cluster', '--config', 'infra/deploy/kind/cluster.yaml',
+             '--kubeconfig', str(kubeconfig), '--wait', '180s'])
+    else:
+        run([kind, 'export', 'kubeconfig', '--name', cluster, '--kubeconfig', str(kubeconfig)])
+    kube = ['kubectl', '--kubeconfig', str(kubeconfig)]
+    check_cluster(kube)
+    built = [name for name in SERVICES if settings['services'][name].get('build')]
+    # Explicit tags match the manifest, independent of Compose provider naming.
+    for name in built:
+        image = f'payroll-local-{name}:latest'
+        build = [engine, 'build', '-f', 'infra/docker/Dockerfile', '--target', name, '-t', image]
+        if engine == 'podman':
+            build += ['--ignorefile', 'infra/docker/Dockerfile.dockerignore']
+        run(build + ['.'])
+        with tempfile.TemporaryDirectory(prefix='payroll-kind-') as temp:
+            archive = str(Path(temp) / 'image.tar')
+            run([engine, 'save', '--format', 'docker-archive', '--output', archive, image]
+                if engine == 'podman' else [engine, 'save', '--output', archive, image])
+            run([kind, 'load', 'image-archive', archive, '--name', cluster])
+    namespace = {'apiVersion': 'v1', 'kind': 'Namespace', 'metadata': {'name': 'payroll'}}
+    run(kube + ['apply', '-f', '-'], input=json.dumps(namespace).encode())
+    for name in ('db', 'vector-db', 'backend', 'trinet-mock'):
+        values = settings['services'][name].get('environment', {})
+        secret = {'apiVersion': 'v1', 'kind': 'Secret',
+                  'metadata': {'name': name + '-env', 'namespace': 'payroll'},
+                  'type': 'Opaque', 'stringData': {k: str(v) for k, v in values.items() if v is not None}}
+        run(kube + ['apply', '-f', '-'], input=json.dumps(secret).encode())
+    run(kube + ['apply', '-f', 'infra/deploy/kind/platform.json'])
+
+
 def execute(config, action, dry_run=False, engine='auto'):
     print(plan(config, action, engine), flush=True)
     if dry_run:
@@ -138,7 +203,9 @@ def execute(config, action, dry_run=False, engine='auto'):
         return
     kubeconfig = ROOT / config['kubernetes']['kubeconfig']
     if not kubeconfig.is_file():
-        raise ValueError('Kind is not provisioned. Follow the first-time setup in README; startup never creates a cluster.')
+        if action != 'up':
+            raise ValueError('Kind is not provisioned. Run platform.py up first.')
+        provision_kind(kubeconfig, env, 'podman' if engine == 'auto' else engine)
     kube = ['kubectl', '--kubeconfig', str(kubeconfig)]
     check_cluster(kube)
     if action == 'status':
@@ -147,8 +214,15 @@ def execute(config, action, dry_run=False, engine='auto'):
     if action == 'stop':
         run(kube + ['-n', 'payroll', 'scale', 'deployment'] + SERVICES + ['--replicas=0'])
     else:
-        # Require existing migrated/provisioned storage; never silently seed a new database.
-        run(kube + ['-n', 'payroll', 'get', 'deployment/backend'], stdout=subprocess.DEVNULL)
+        # Resume first-time provisioning if a previous build failed after cluster creation.
+        backend = subprocess.run(kube + ['-n', 'payroll', 'get', 'deployment/backend',
+                                        '--ignore-not-found', '-o', 'name'],
+                                 cwd=ROOT, env=env, check=True, capture_output=True, text=True)
+        if not backend.stdout.strip():
+            context = run(kube + ['config', 'current-context'], capture_output=True, text=True).stdout.strip()
+            if context != 'kind-payroll-agent':
+                raise ValueError('Automatic provisioning requires the kind-payroll-agent context.')
+            provision_kind(kubeconfig, env, 'podman' if engine == 'auto' else engine)
     if action == 'stop' or not use_ray:
         crd = run(kube + ['get','crd','rayservices.ray.io','--ignore-not-found=true','-o','name'], capture_output=True, text=True)
         if crd.stdout.strip():
@@ -186,7 +260,7 @@ def main():
     parser.add_argument('--config', type=Path, default=ROOT / 'infra/deploy/platform.json')
     parser.add_argument('--dry-run', action='store_true')
     parser.add_argument('--engine', choices=['auto', 'docker', 'podman'], default='auto',
-                        help='Compose engine; with Kubernetes, commands use the existing kubeconfig and never change its provider.')
+                        help='Compose/build engine; new Kubernetes clusters default to Podman. Existing kubeconfigs are reused.')
     args = parser.parse_args()
     try:
         execute(read_config(args.config), args.action, args.dry_run, args.engine)

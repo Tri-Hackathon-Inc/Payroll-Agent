@@ -83,13 +83,21 @@ class DeploymentTests(unittest.TestCase):
         launcher.execute(self.config, 'status')
         self.assertEqual(run.call_args.args[0][:2], ['docker','compose'])
 
-    @patch.object(launcher.subprocess, 'run')
-    def test_kind_on_requires_explicit_provisioning(self, run):
+    @patch.object(launcher, 'provision_kind', side_effect=ValueError('bootstrap invoked'))
+    def test_missing_kubeconfig_up_defaults_to_podman(self, provision):
+        self.config['kubernetes']['enabled'] = True
+        self.config['kubernetes']['kubeconfig'] = 'missing-kubeconfig-for-test'
+        with self.assertRaisesRegex(ValueError, 'bootstrap invoked'):
+            launcher.execute(self.config, 'up')
+        self.assertEqual(provision.call_args.args[2], 'podman')
+
+    @patch.object(launcher, 'provision_kind')
+    def test_missing_kubeconfig_status_never_creates_cluster(self, provision):
         self.config['kubernetes']['enabled'] = True
         self.config['kubernetes']['kubeconfig'] = 'missing-kubeconfig-for-test'
         with self.assertRaisesRegex(ValueError, 'not provisioned'):
-            launcher.execute(self.config, 'up')
-        run.assert_not_called()
+            launcher.execute(self.config, 'status')
+        provision.assert_not_called()
 
     @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=1, stdout=''))
     def test_unreachable_cluster_has_recovery_instructions(self, run):
@@ -220,6 +228,34 @@ class ComposeEngineTests(unittest.TestCase):
         launcher.execute(self.config, 'status', engine='podman')
         self.assertEqual(run.call_args.args[0][0], 'kubectl')
         self.assertEqual(run.call_args.args[0][-3:], ['get', 'pods', '-A'])
+
+
+class ProvisionTests(unittest.TestCase):
+    @patch.object(launcher, 'check_cluster')
+    @patch.object(launcher, 'check_compose', return_value=['podman', 'compose'])
+    @patch.object(launcher, 'select_engine', return_value='podman')
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    def test_create_build_load_secrets_and_apply_order(self, which, select, compose, check):
+        services = {name: {'environment': {'PASSWORD': 'private'}} for name in launcher.SERVICES}
+        services['backend']['build'] = {'target': 'backend'}
+        def result(command, **kwargs):
+            if command[:3] == ['podman', 'machine', 'list']:
+                return SimpleNamespace(stdout='[{"Name":"test","Running":true}]')
+            if command[-1] == 'config':
+                return SimpleNamespace(stdout=launcher.json.dumps({'services': services}))
+            return SimpleNamespace(stdout='', returncode=0)
+        with patch.object(launcher.subprocess, 'run', side_effect=result) as run, \
+             patch.object(Path, 'mkdir'), patch.object(Path, 'exists', return_value=False):
+            launcher.provision_kind(Path('test-kubeconfig'), {})
+        commands = [c.args[0] for c in run.call_args_list]
+        create = next(i for i,c in enumerate(commands) if c[:3] == ['kind', 'create', 'cluster'])
+        build = next(i for i,c in enumerate(commands) if c[:2] == ['podman', 'build'])
+        load = next(i for i,c in enumerate(commands) if c[:3] == ['kind', 'load', 'image-archive'])
+        self.assertLess(create, build)
+        self.assertLess(build, load)
+        self.assertEqual(commands[-1][-1], 'infra/deploy/kind/platform.json')
+        self.assertTrue(all('private' not in ' '.join(c) for c in commands))
+        self.assertTrue(all(c.kwargs['env']['KIND_EXPERIMENTAL_PROVIDER'] == 'podman' for c in run.call_args_list))
 
 if __name__ == '__main__':
     unittest.main()

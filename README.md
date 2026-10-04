@@ -26,7 +26,7 @@ For a standalone Docker/Podman deployment, set `kubernetes.enabled` to `false` i
 | Setting in `infra/deploy/platform.json` | Description |
 | --- | --- |
 | `kubernetes.enabled: false` | Run with Compose: Docker when installed, otherwise Podman. Use `--engine docker` or `--engine podman` to choose explicitly. |
-| `kubernetes.enabled: true` | Use an already provisioned Kind cluster. Follow first-time setup below before starting. |
+| `kubernetes.enabled: true` | Use Kubernetes; startup provisions a Podman-backed Kind cluster when the configured kubeconfig is missing. |
 | `rayServe.enabled: false` | Do not start or download local inference. Default. |
 | `rayServe.enabled: true` | Start separate Ray Serve/vLLM inference with Docker Compose or Kind. Requires GPU access and 35 GiB free; local inference remains unverified. Podman startup currently requires this setting to be `false`. |
 
@@ -62,43 +62,42 @@ Docker and Podman keep separate containers and named volumes. A stopped or unrea
 
 ## Kubernetes with Podman
 
-The platform launcher uses the configured kubeconfig for Kubernetes, including
-clusters whose Kind nodes run in Podman. Set `kubernetes.enabled=true` and point
-`kubernetes.kubeconfig` at that cluster in `infra/deploy/platform.json`. Then run:
+Run the full local platform with:
 
 ```powershell
-python infra/deploy/platform.py up --engine podman
-python infra/deploy/platform.py status --engine podman
-python infra/deploy/platform.py stop --engine podman
-python infra/deploy/dev.py --engine podman --once
+python infra/deploy/platform.py up
+```
+
+With the default configuration, this creates a Podman-backed Kind cluster when
+`.local-data/podman-kubeconfig` is missing, builds and loads application images,
+and deploys the databases, Redis, backend, Agent Studio, payroll API/UI and
+evidence service. It waits for deployment readiness. On Windows it initializes
+and starts a Podman machine if needed. Install Podman, Kind, kubectl, native
+`podman-compose` and Python's PyYAML first (`python -m pip install PyYAML`).
+
+Kind creates the Kubernetes node container in Podman; application pods run inside
+that node. Agent Studio is at <http://localhost:5273/ai_studio/> and the payroll
+UI is at <http://localhost:5274/>.
+
+```powershell
+python infra/deploy/platform.py up --dry-run
+python infra/deploy/platform.py status
+python infra/deploy/platform.py stop
 python infra/deploy/dev.py --engine podman
 ```
 
-For Kubernetes, `--engine` does not select or migrate the cluster: the kubeconfig
-selects it. For the watcher, it selects the build engine and Kind provider, which
-must match the existing cluster. Podman builds use native `podman-compose` as in
-the Compose setup below, then export Docker-format image archives into Kind
-before restarting deployments. Ray Serve retains the Kubernetes GPU checks;
-the Podman Compose restriction does not apply to Kubernetes.
+Existing configured clusters are reused. Stop scales services down and preserves
+storage. Failed first-time builds can be retried with `up`. Startup does not
+migrate data from Docker. The default Podman cluster uses ports 16443, 5273 and
+5274; stop conflicting Docker workloads before creating it. To continue using
+the previous Docker cluster, restore its kubeconfig path in `platform.json`.
+Use `--engine docker` to explicitly provision a new Docker-backed cluster.
 
-For a **new, empty** Podman-backed Kind cluster, install Kind, kubectl and Podman,
-start the Podman machine on Windows/macOS, and explicitly select its provider:
-
-```powershell
-$env:KIND_EXPERIMENTAL_PROVIDER = 'podman'
-kind create cluster --config infra/deploy/kind/cluster.yaml --kubeconfig .local-data/podman-kubeconfig
-```
-
-Use a separate cluster name and available host ports in a copy of the Kind config
-if the Docker cluster already exists. Provision application images, environment
-Secrets and the platform manifest before using normal startup; cluster creation
-alone does not deploy the application. Existing data requires an explicit
-migration. Keep the original kubeconfig until that migration is verified.
-
-Kind documents [Podman provider selection](https://kind.sigs.k8s.io/docs/user/quick-start/)
-and [rootless requirements](https://kind.sigs.k8s.io/docs/user/rootless/), including
-cgroup v2 and systemd delegation on Linux. Use the same Podman connection for
-cluster creation, image builds and watcher commands.
+The watcher engine must match the existing Kind provider. Kind documents
+[provider selection](https://kind.sigs.k8s.io/docs/user/quick-start/) and
+[rootless requirements](https://kind.sigs.k8s.io/docs/user/rootless/), including
+cgroup v2 and systemd delegation on Linux. Ray Serve remains optional and
+requires Kubernetes GPU resources.
 
 ## Develop with automatic reload (Kind)
 
