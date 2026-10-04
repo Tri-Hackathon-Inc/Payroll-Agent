@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Use the shared stack with the native Podman Compose provider on macOS.
+# Use the shared stack with the native Podman Compose provider.
 set -euo pipefail
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_dir"
 
 if ! command -v podman >/dev/null 2>&1; then
-  echo "Podman is missing. On macOS: brew install podman podman-compose" >&2
+  echo "Docker/Podman is missing. Install Podman and native podman-compose; see README. On macOS: brew install podman podman-compose" >&2
   exit 1
 fi
 if ! command -v podman-compose >/dev/null 2>&1; then
-  echo "The native Compose provider is missing. On macOS: brew install podman-compose" >&2
+  echo "Native podman-compose is missing from PATH. Install podman-compose 1.6.0 or newer; see README." >&2
   exit 1
 fi
 

@@ -2,11 +2,13 @@
 
 ## 1. Start the platform
 
-Run commands from the repository root. Requires Python and Docker Desktop; keep model credentials in `backend/.env`. The default configuration uses Docker Compose with Kubernetes and local Ray Serve disabled.
+Run commands from the repository root. Requires Python and either Docker with Compose or Podman with native `podman-compose` 1.6.0+. Keep model credentials in `backend/.env`.
+
+For a standalone Docker/Podman deployment, set `kubernetes.enabled` to `false` in `infra/deploy/platform.json`. The launcher prefers Docker when its executable is installed and automatically uses Podman when Docker is missing. With `kubernetes.enabled: true`, it uses the existing Kind cluster instead; engine fallback does not switch or migrate that cluster.
 
 | Step | Command / action |
 | --- | --- |
-| Start Docker Desktop. | `docker desktop start` |
+| Start your container engine. | Docker Desktop, or `podman machine start` on Windows/macOS after Podman setup below. |
 | Choose deployment options, if needed. | Edit `infra/deploy/platform.json` using the settings below. |
 | Preview what will start. | `python infra/deploy/platform.py up --dry-run` |
 | Start the platform. | `python infra/deploy/platform.py up` |
@@ -14,7 +16,7 @@ Run commands from the repository root. Requires Python and Docker Desktop; keep 
 
 ## 2. Open the application
 
-| Application | Docker Compose (default) | Kind (optional) |
+| Application | Docker / Podman Compose | Kind |
 | --- | --- | --- |
 | Agent Studio - create agents and configure access. | <http://localhost:5173/ai_studio/> | <http://localhost:5273/ai_studio/> |
 | Payroll - open payruns and employee panels. | <http://localhost:5174/trinet/> | <http://localhost:5274/trinet/> |
@@ -23,12 +25,14 @@ Run commands from the repository root. Requires Python and Docker Desktop; keep 
 
 | Setting in `infra/deploy/platform.json` | Description |
 | --- | --- |
-| `kubernetes.enabled: false` | Run the platform with Docker Compose. Default. |
+| `kubernetes.enabled: false` | Run with Compose: Docker when installed, otherwise Podman. Use `--engine docker` or `--engine podman` to choose explicitly. |
 | `kubernetes.enabled: true` | Use an already provisioned Kind cluster. Follow first-time setup below before starting. |
 | `rayServe.enabled: false` | Do not start or download local inference. Default. |
-| `rayServe.enabled: true` | Start separate Ray Serve/vLLM inference with Compose or Kind. Requires GPU access and 35 GiB free; local inference remains unverified. |
+| `rayServe.enabled: true` | Start separate Ray Serve/vLLM inference with Docker Compose or Kind. Requires GPU access and 35 GiB free; local inference remains unverified. Podman startup currently requires this setting to be `false`. |
 
 Stop the old deployment before changing targets. Switching the config does not move data or delete an existing cluster. Enable local inference only after its prerequisites are ready; saved agents retain their selected models.
+
+Docker and Podman keep separate containers and named volumes. A stopped or unreachable Docker engine produces an error rather than automatically selecting a different data store. To choose Podman while Docker is installed, pass `--engine podman` consistently to `up`, `status` and `stop`. Engine selection does not install tools, start a VM or migrate existing data.
 
 ## 4. Everyday commands
 
@@ -38,7 +42,11 @@ Stop the old deployment before changing targets. Switching the config does not m
 | Stop the selected deployment; keep data volumes. | `python infra/deploy/platform.py stop` |
 | Start again using the saved configuration. | `python infra/deploy/platform.py up` |
 | Use another configuration file. | `python infra/deploy/platform.py up --config path/to/platform.json` |
+| Explicitly use Podman (with Kubernetes disabled). | `python infra/deploy/platform.py up --engine podman` |
+| Check or stop the same Podman deployment. | `python infra/deploy/platform.py status --engine podman` / `python infra/deploy/platform.py stop --engine podman` |
+| Preview Podman startup without requiring installed tools. | `python infra/deploy/platform.py up --engine podman --dry-run` |
 | Read recent backend logs in Compose. | `docker compose -f infra/docker/docker-compose.yaml --env-file backend/.env logs --tail=100 backend` |
+| Read recent backend logs in Podman (Bash). | `bash infra/docker/podman.sh logs --tail=100 backend` |
 | Read recent backend logs in Kind. | `kubectl --kubeconfig .local-data/kind-kubeconfig -n payroll logs deployment/backend --tail=100` |
 | Check free disk space before enabling Ray Serve. | `python infra/deploy/kind/check_disk.py` |
 | Test deployment selection without starting services. | `python -m unittest discover -s infra/deploy -p test_platform.py` |
@@ -141,7 +149,7 @@ These commands bypass `infra/deploy/platform.json`. Use them for Compose mainten
 | Rebuild application containers after source changes. | `docker compose -f infra/docker/docker-compose.yaml --env-file backend/.env up --build --no-deps -d --wait backend ui trinet-mock trinet-ui evidence-capture` |
 | Reload backend environment settings. | `docker compose -f infra/docker/docker-compose.yaml --env-file backend/.env up --force-recreate --no-deps -d --wait backend` |
 | Validate Compose configuration without printing credentials. | `docker compose -f infra/docker/docker-compose.yaml --env-file backend/.env config --quiet` |
-| Use the Bash wrapper, which loads root and backend environment files. | `bash infra/docker/compose.sh ps --all` |
+| Use the Bash wrapper, which loads root and backend environment files and falls back to Podman if Docker is missing. | `bash infra/docker/compose.sh ps --all` |
 | Remove base Compose containers and network; retain data volumes. | `docker compose -f infra/docker/docker-compose.yaml --env-file backend/.env down` |
 
 </details>
@@ -149,26 +157,38 @@ These commands bypass `infra/deploy/platform.json`. Use them for Compose mainten
 <details>
 <summary>Use Podman instead of Docker</summary>
 
-Create a Podman VM on macOS once, if none exists. Use Docker or Podman, one at a time.
+Install [Podman](https://podman.io/docs/installation) or [Podman Desktop](https://podman-desktop.io/docs/installation), then install the **native `podman-compose` provider** on your PATH. The launcher pins this provider because it supplies Podman-specific build options, including the shared build ignore file. [Podman's Compose command delegates to an external provider](https://docs.podman.io/en/latest/markdown/podman-compose.1.html).
+
+Use `podman-compose` **1.6.0 or newer** for startup with health-check waiting; [`up --wait` was added in 1.6.0](https://github.com/containers/podman-compose/releases/tag/v1.6.0). For example, install it in your Python tool environment with `python -m pip install "podman-compose>=1.6.0"`, or use your OS package manager. Ensure its scripts directory is on PATH. On macOS, `brew install podman podman-compose` installs both tools; check the installed provider version.
+
+On **Windows or macOS**, create a Podman machine once if none exists, then start it. Use `podman machine list` to check first. Native Linux uses its local engine and normally does not need a VM.
 
 ```sh
+podman machine list
 podman machine init --cpus 4 --memory 8192 --disk-size 50
-```
-
-Start the Podman VM.
-
-```sh
 podman machine start
+podman info
+podman-compose --version
 ```
 
-Build and start the stack using Podman and `podman-compose`; loads both environment files when present.
+Set `kubernetes.enabled: false` and `rayServe.enabled: false` in `infra/deploy/platform.json`, then use the same cross-platform Python launcher (PowerShell or a Unix shell):
 
 ```sh
-bash infra/docker/podman.sh up --build -d
+python infra/deploy/platform.py up --engine podman --dry-run
+python infra/deploy/platform.py up --engine podman
+python infra/deploy/platform.py status --engine podman
+python infra/deploy/platform.py stop --engine podman
 ```
+
+When Docker is not installed, `--engine podman` is optional. Normal commands check the engine/provider before changing workloads; `--dry-run` does not probe the engine, write keys, start containers or download models. Startup waits for service health. Stop preserves volumes. Both `.env` and `backend/.env` are loaded when present, with the same application ports as Docker Compose.
+
+The Podman launcher runs the base application stack. The optional GPU Ray Serve deployment remains a Docker/Kind path; keep it disabled for Podman and use a configured managed or private model endpoint instead. For a model on the Podman host, configure its reachable endpoint, for example `http://host.containers.internal:11434/v1` for host Ollama.
+
+The Bash wrapper remains available for direct Compose operations; these bypass `platform.json` and do not manage Ray Serve. On Windows, run the wrapper from Git Bash or use the Python launcher above.
 
 | Description | Command |
 | --- | --- |
+| Build and start with Podman directly. | `bash infra/docker/podman.sh up --build -d --wait` |
 | Show Podman container status. | `bash infra/docker/podman.sh ps` |
 | Show recent Podman service logs. | `bash infra/docker/podman.sh logs --tail=100` |
 | Validate Podman Compose settings. | `bash infra/docker/podman.sh config --quiet` |

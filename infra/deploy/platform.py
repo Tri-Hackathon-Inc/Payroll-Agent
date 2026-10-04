@@ -23,10 +23,53 @@ def read_config(path):
         raise ValueError('kubernetes.kubeconfig must be a path.')
     return config
 
-def plan(config, action):
-    target = 'Kind' if config['kubernetes']['enabled'] else 'Docker Compose'
+def plan(config, action, engine='auto'):
+    target = 'Kind' if config['kubernetes']['enabled'] else {
+        'auto': 'Compose (Docker when installed, otherwise Podman)',
+        'docker': 'Docker Compose', 'podman': 'Podman Compose'}[engine]
     model = 'enabled' if config['rayServe']['enabled'] else 'disabled (no model download)'
     return f'{action}: {target}; Ray Serve: {model}'
+
+def select_engine(requested):
+    """Only a missing Docker executable triggers fallback, never a stopped daemon."""
+    if requested not in ('auto', 'docker', 'podman'):
+        raise ValueError('Engine must be auto, docker or podman.')
+    if requested == 'auto':
+        requested = 'docker' if shutil.which('docker') else 'podman'
+    if not shutil.which(requested):
+        raise ValueError(f'{requested.capitalize()} is not installed or not on PATH. '
+                         'Install Docker with Compose, or Podman with podman-compose. See README.')
+    return requested
+
+def check_compose(engine, env, action):
+    """Read-only checks run before keys, containers or model workloads change."""
+    command = [engine, 'compose']
+    if engine == 'podman':
+        provider = shutil.which('podman-compose')
+        if not provider:
+            raise ValueError('Podman requires the native podman-compose provider on PATH. '
+                             'Install podman-compose 1.6.0 or newer; see README.')
+        # Match podman.sh: Docker Compose cannot accept the native build flags.
+        env['PODMAN_COMPOSE_PROVIDER'] = provider
+        command += ['--in-pod=false',
+                    '--podman-build-args=--ignorefile=infra/docker/Dockerfile.dockerignore']
+    try:
+        ready = subprocess.run([engine, 'info'], cwd=ROOT, env=env,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15)
+        if ready.returncode != 0:
+            raise ValueError(f'{engine.capitalize()} is not ready. Start its engine '
+                             '(podman machine start on Windows/macOS for Podman). '
+                             'No containers were changed and no other engine was selected.')
+        # --wait is essential: older native providers return before health checks pass.
+        help_result = subprocess.run(command + (['up', '--help'] if action == 'up' else ['--help']),
+                                     cwd=ROOT, env=env, capture_output=True, text=True, timeout=15)
+    except subprocess.TimeoutExpired:
+        raise ValueError(f'{engine.capitalize()} preflight timed out. Check its engine and Compose provider.') from None
+    if help_result.returncode != 0 or (action == 'up' and '--wait' not in help_result.stdout.split()):
+        raise ValueError('A working Compose provider is required (with up --wait for startup). '
+                         'Install Docker Compose v2 or native podman-compose 1.6.0 or newer. '
+                         'Use --engine podman to explicitly select Podman; see README.')
+    return command
 
 def check_cluster(kube):
     """Fail promptly with recovery steps before changing any cluster workloads."""
@@ -42,8 +85,11 @@ def check_cluster(kube):
     if result.returncode != 0 or result.stdout.strip() != 'ok':
         raise ValueError(message)
 
-def execute(config, action, dry_run=False):
-    print(plan(config, action), flush=True)
+def execute(config, action, dry_run=False, engine='auto'):
+    if config['kubernetes']['enabled'] and engine != 'auto':
+        raise ValueError('--engine applies to Compose only. Set kubernetes.enabled=false to use '
+                         'Docker/Podman Compose; the existing Kind cluster is not switched or migrated.')
+    print(plan(config, action, engine), flush=True)
     if dry_run:
         return
     use_kube = config['kubernetes']['enabled']
@@ -53,6 +99,16 @@ def execute(config, action, dry_run=False):
         if shutil.disk_usage(ROOT).free < 35 * 1024**3:
             raise ValueError('Ray Serve startup requires at least 35 GiB free. Model download was not started.')
     env = os.environ.copy()
+    # Do not let the shell or an env file opt into model downloads.
+    env['COMPOSE_PROFILES'] = ''
+    command = None
+    if not use_kube:
+        engine = select_engine(engine)
+        print(f'Using {engine.capitalize()} Compose.', flush=True)
+        if engine == 'podman' and use_ray and action == 'up':
+            raise ValueError('Podman startup currently requires rayServe.enabled=false. '
+                             'Use a configured model endpoint, or Docker/Kind for optional Ray Serve.')
+        command = check_compose(engine, env, action)
     key = ''
     if action == 'up' and use_ray:
         path = ROOT / '.local-data/vllm-api-key'
@@ -67,18 +123,19 @@ def execute(config, action, dry_run=False):
     def run(command, **kwargs):
         return subprocess.run(command, cwd=ROOT, env=env, check=True, **kwargs)
     if not use_kube:
-        command = ['docker', 'compose', '-f', 'infra/docker/docker-compose.yaml', '-f', 'infra/docker/docker-compose.ray.yaml']
+        command += ['-f', 'infra/docker/docker-compose.yaml']
+        if engine == 'docker':
+            command += ['-f', 'infra/docker/docker-compose.ray.yaml']
         for path in ('.env', 'backend/.env'):
             if (ROOT / path).exists():
                 command += ['--env-file', path]
-        # Always explicitly select a profile; ambient COMPOSE_PROFILES cannot enable models.
-        env.pop('COMPOSE_PROFILES', None)
+        model_profile = ['--profile', 'local-model'] if engine == 'docker' else []
         if action == 'status':
-            run(command + ['--profile', 'local-model', 'ps', '-a'])
+            run(command + model_profile + ['ps', '-a'])
         elif action == 'stop':
-            run(command + ['--profile', 'local-model', 'stop'])
+            run(command + model_profile + ['stop'])
         else:
-            if not use_ray:
+            if not use_ray and engine == 'docker':
                 run(command + ['--profile', 'local-model', 'stop', 'model-gateway', 'ray-serve'])
             run(command + (['--profile', 'local-model'] if use_ray else []) + ['up', '-d', '--wait'])
         return
@@ -131,9 +188,11 @@ def main():
     parser.add_argument('action', choices=['up','stop','status'])
     parser.add_argument('--config', type=Path, default=ROOT / 'infra/deploy/platform.json')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--engine', choices=['auto', 'docker', 'podman'], default='auto',
+                        help='Compose engine: prefer installed Docker, otherwise Podman. Does not change Kind.')
     args = parser.parse_args()
     try:
-        execute(read_config(args.config), args.action, args.dry_run)
+        execute(read_config(args.config), args.action, args.dry_run, args.engine)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f'Platform command failed: {error}\n')
 

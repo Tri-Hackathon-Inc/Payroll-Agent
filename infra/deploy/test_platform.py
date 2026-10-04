@@ -15,6 +15,10 @@ class DeploymentTests(unittest.TestCase):
         # User configuration may legitimately enable either optional component.
         self.config = {'kubernetes': {'enabled': False, 'kubeconfig': '.local-data/kind-kubeconfig'},
                        'rayServe': {'enabled': False}}
+        # Deployment command tests are independent of installed CLI/daemon state.
+        self.addCleanup(patch.stopall)
+        patch.object(launcher.shutil, 'which', side_effect=lambda name: name).start()
+        patch.object(launcher, 'check_compose', return_value=['docker', 'compose']).start()
 
     def test_defaults_disable_both_optional_components(self):
         self.assertFalse(self.config['kubernetes']['enabled'])
@@ -32,13 +36,15 @@ class DeploymentTests(unittest.TestCase):
 
     @patch.object(launcher.subprocess, 'run')
     def test_all_four_modes_support_side_effect_free_preview(self, run):
-        with patch.object(launcher.shutil, 'disk_usage', side_effect=AssertionError('unexpected disk check')):
+        with patch.object(launcher.shutil, 'disk_usage', side_effect=AssertionError('unexpected disk check')), \
+             patch.object(launcher.shutil, 'which', side_effect=AssertionError('unexpected engine detection')):
             for kube in (False, True):
                 for ray in (False, True):
                     config = copy.deepcopy(self.config)
                     config['kubernetes']['enabled'] = kube
                     config['rayServe']['enabled'] = ray
                     launcher.execute(config, 'up', dry_run=True)
+            launcher.execute(self.config, 'up', dry_run=True, engine='podman')
         run.assert_not_called()
 
     @patch.object(launcher.subprocess, 'run')
@@ -99,6 +105,113 @@ class DeploymentTests(unittest.TestCase):
     def test_cluster_timeout_is_actionable(self, run):
         with self.assertRaisesRegex(ValueError, 'Docker Desktop'):
             launcher.check_cluster(['kubectl'])
+
+
+class ComposeEngineTests(unittest.TestCase):
+    def setUp(self):
+        self.config = {'kubernetes': {'enabled': False, 'kubeconfig': 'unused'},
+                       'rayServe': {'enabled': False}}
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    def test_auto_prefers_docker_and_explicit_podman_overrides(self, which):
+        self.assertEqual(launcher.select_engine('auto'), 'docker')
+        self.assertEqual(launcher.select_engine('podman'), 'podman')
+
+    @patch.object(launcher.shutil, 'which', return_value=None)
+    def test_missing_engines_give_setup_instructions(self, which):
+        with self.assertRaisesRegex(ValueError, 'Install Docker.*Podman'):
+            launcher.select_engine('auto')
+        with self.assertRaisesRegex(ValueError, 'Docker is not installed'):
+            launcher.select_engine('docker')
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: None if name == 'docker' else name)
+    @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='--wait --wait-timeout'))
+    def test_missing_docker_starts_podman_with_native_provider_and_env_files(self, run, which):
+        with patch.object(Path, 'exists', return_value=True), \
+             patch.dict(launcher.os.environ, {'COMPOSE_PROFILES': 'local-model',
+                                            'PODMAN_COMPOSE_PROVIDER': 'docker-compose'}):
+            launcher.execute(self.config, 'up')
+        command = run.call_args.args[0]
+        env = run.call_args.kwargs['env']
+        self.assertEqual(command[:2], ['podman', 'compose'])
+        self.assertIn('--in-pod=false', command)
+        self.assertIn('--podman-build-args=--ignorefile=infra/docker/Dockerfile.dockerignore', command)
+        self.assertEqual(command[-3:], ['up', '-d', '--wait'])
+        self.assertIn('backend/.env', command)
+        self.assertIn('.env', command)
+        self.assertNotIn('infra/docker/docker-compose.ray.yaml', command)
+        self.assertEqual(env['PODMAN_COMPOSE_PROVIDER'], 'podman-compose')
+        self.assertEqual(env['COMPOSE_PROFILES'], '')
+        self.assertEqual(env['VLLM_BASE_URL'], '')
+        self.assertEqual(env['VLLM_API_KEY'], '')
+        self.assertTrue(all(call.args[0][0] == 'podman' for call in run.call_args_list))
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='usage'))
+    def test_podman_stop_and_status_use_the_same_stack_without_deleting_volumes(self, run, which):
+        for action, tail in [('stop', ['stop']), ('status', ['ps', '-a'])]:
+            with self.subTest(action=action):
+                launcher.execute(self.config, action, engine='podman')
+                command = run.call_args.args[0]
+                self.assertEqual(command[:2], ['podman', 'compose'])
+                self.assertEqual(command[-len(tail):], tail)
+                self.assertNotIn('down', command)
+                self.assertNotIn('--volumes', command)
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    @patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=1))
+    def test_stopped_docker_does_not_switch_engines_or_mutate_workloads(self, run, which):
+        with self.assertRaisesRegex(ValueError, 'Docker is not ready'):
+            launcher.execute(self.config, 'up')
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_args.args[0], ['docker', 'info'])
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    @patch.object(launcher.subprocess, 'run', side_effect=[SimpleNamespace(returncode=0), SimpleNamespace(returncode=1, stdout='')])
+    def test_broken_docker_compose_does_not_fall_back(self, run, which):
+        with self.assertRaisesRegex(ValueError, 'working Compose provider'):
+            launcher.execute(self.config, 'up')
+        self.assertEqual([c.args[0] for c in run.call_args_list], [['docker', 'info'], ['docker', 'compose', 'up', '--help']])
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: None if name == 'podman-compose' else name)
+    @patch.object(launcher.subprocess, 'run')
+    def test_missing_native_provider_fails_before_any_command(self, run, which):
+        with self.assertRaisesRegex(ValueError, 'native podman-compose'):
+            launcher.execute(self.config, 'up', engine='podman')
+        run.assert_not_called()
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    @patch.object(launcher.subprocess, 'run', side_effect=[SimpleNamespace(returncode=0), SimpleNamespace(returncode=0, stdout='--wait-timeout')])
+    def test_old_podman_provider_is_rejected_before_startup(self, run, which):
+        with self.assertRaisesRegex(ValueError, '1.6.0'):
+            launcher.execute(self.config, 'up', engine='podman')
+        self.assertEqual(run.call_count, 2)
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    @patch.object(launcher.subprocess, 'run', side_effect=launcher.subprocess.TimeoutExpired('podman info', 15))
+    def test_engine_timeout_is_bounded_and_actionable(self, run, which):
+        with self.assertRaisesRegex(ValueError, 'Podman preflight timed out'):
+            launcher.execute(self.config, 'status', engine='podman')
+        self.assertEqual(run.call_args.kwargs['timeout'], 15)
+
+    @patch.object(launcher.shutil, 'which', side_effect=lambda name: name)
+    @patch.object(launcher.subprocess, 'run')
+    def test_podman_ray_rejected_before_secret_or_workload_changes(self, run, which):
+        self.config['rayServe']['enabled'] = True
+        with patch.object(launcher.shutil, 'disk_usage', return_value=SimpleNamespace(free=40*1024**3)), \
+             patch.object(Path, 'mkdir') as mkdir, patch.object(Path, 'write_text') as write:
+            with self.assertRaisesRegex(ValueError, 'rayServe.enabled=false'):
+                launcher.execute(self.config, 'up', engine='podman')
+        run.assert_not_called()
+        mkdir.assert_not_called()
+        write.assert_not_called()
+
+    @patch.object(launcher.subprocess, 'run')
+    def test_explicit_engine_cannot_silently_switch_kind(self, run):
+        self.config['kubernetes']['enabled'] = True
+        with self.assertRaisesRegex(ValueError, 'Compose only'):
+            launcher.execute(self.config, 'up', engine='podman')
+        run.assert_not_called()
 
 if __name__ == '__main__':
     unittest.main()
