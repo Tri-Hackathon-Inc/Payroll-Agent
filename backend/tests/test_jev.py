@@ -168,6 +168,22 @@ class JevAgentTests(TestCase):
                 llm.assert_called_once()
                 scorer.score.assert_called_once()
 
+    def test_paycheck_reopen_runs_fresh_decision_and_event_retry_is_deduplicated(self):
+        scorer = JevDecisionModel(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=response('NORMAL'))))
+        scorer.score = Mock(wraps=scorer.score)
+        with patch.dict(os.environ, TYPESAFE_API_KEY='test-only-key'), patch.dict(DECISION_MODELS, jev=lambda: scorer):
+            runtime = AgentFactory().load('payroll-services', str(self.saved.id))
+            context = context_fixture()
+            employee = context['current']['lines'][0]['employeeId']
+            event = {'type': 'paycheck.opened', 'employeeId': employee, 'changedAt': '2026-10-04T10:00:00Z'}
+            first = runtime.on_change(event, context)
+            retry = runtime.on_change(event, context)
+            reopened = runtime.on_change({**event, 'changedAt': '2026-10-04T10:01:00Z'}, context)
+        self.assertEqual(scorer.score.call_count, 2)
+        self.assertEqual(first['anomaly']['id'], retry['anomaly']['id'])
+        self.assertNotEqual(first['anomaly']['id'], reopened['anomaly']['id'])
+        self.assertEqual(reopened['scope'], employee)
+
     def test_records_recover_from_missing_key_without_reusing_failed_case(self):
         saved = Agent.objects.create(domain_id="jev-leaves", name="Leave decision", template_id="leaves", template_version=1,
             config={"domain": "Leaves", "model": "poc-demo", "anomaly": {"profile": "records"}}, model_config=self.saved.model_config)

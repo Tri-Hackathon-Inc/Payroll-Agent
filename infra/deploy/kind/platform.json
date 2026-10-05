@@ -472,6 +472,10 @@
                     "value": "vector-db"
                   },
                   {
+                    "name": "VECTOR_DB_PORT",
+                    "value": "5432"
+                  },
+                  {
                     "name": "TRINET_API_URL",
                     "value": "http://trinet-mock:4100/"
                   },

@@ -73,7 +73,7 @@ With the default configuration, this creates a Podman-backed Kind cluster when
 and deploys the databases, Redis, backend, Agent Studio, payroll API/UI and
 evidence service. It waits for deployment readiness. On Windows and macOS it initializes
 and starts a Podman machine if needed. Install Podman, Kind, kubectl, native
-`podman-compose` and Python's PyYAML first (`python -m pip install PyYAML`).
+`podman-compose` and Python's PyYAML first (`python -m pip install PyYAML python-dotenv`).
 
 Kind creates the Kubernetes node container in Podman; application pods run inside
 that node. Agent Studio is at <http://localhost:5273/ai_studio/> and the payroll
@@ -108,7 +108,7 @@ or Podman Desktop. With Homebrew installed, install the remaining tools:
 brew install kind kubectl podman-compose python
 python3 -m venv .venv-deploy
 source .venv-deploy/bin/activate
-python -m pip install PyYAML
+python -m pip install PyYAML python-dotenv
 python infra/deploy/platform.py up --engine podman
 ```
 
@@ -571,3 +571,9 @@ AD does not offer a separate Download Report action during Jev detection.
 These sequence diagrams describe logical requests, not one HTTP endpoint per
 arrow. They document the design rather than live runtime activity. A future live
 view would need correlated runtime events, authorization and redaction.
+
+
+Kubernetes startup refreshes model credential and endpoint settings from `.env`,
+then `backend/.env`, with shell variables taking precedence. It preserves other
+Secret entries and restarts the backend only when these settings change.
+After editing model credentials, run `python infra/deploy/platform.py up --engine podman`.

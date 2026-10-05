@@ -24,7 +24,7 @@ def case_data(case):
     from .paycheck import review_comparisons
     feedback = case.audit.filter(action__in=["CONFIRMED", "DISMISSED"]).order_by("-created_at").first()
     investigation = case.investigation
-    if investigation and case.entity_type == "payrun" and "paycheckComparisons" not in investigation:
+    if investigation and case.entity_type == "payrun":
         investigation = {**investigation, "paycheckComparisons": review_comparisons(
             case.snapshot["context"], case.snapshot["detection"])}
     return {
@@ -54,7 +54,7 @@ class AnomalyDetectionAgent(ConfiguredAgent):
         self.detector = detector or self.components.detector
         self.feature_store = feature_store if feature_store is not None else self.components.feature_store
 
-    def check(self, context, *, scope=None, employee_id=None, persist=True):
+    def check(self, context, *, scope=None, employee_id=None, persist=True, refresh_id=None):
         if "record" in context and context["record"].get("domainName") != self.definition["domain_name"]:
             raise RuntimeFailure("The source record belongs to a different domain.", 403)
         # employee_id is retained for existing payroll callers.
@@ -75,9 +75,11 @@ class AnomalyDetectionAgent(ConfiguredAgent):
         cache_key = cache_key if isinstance(cache_key, str) else None
         feature_key = digest([asdict(reference), context, employee_id, self.components.settings,
                               self.components.enricher.version, *([cache_key] if cache_key else [])])
+        check_key = digest([feature_key, refresh_id]) if refresh_id else feature_key
         if persist and cache_key:
+            lookup = {"snapshot__checkKey": check_key} if refresh_id else {"snapshot__featureKey": feature_key}
             previous = AnomalyCase.objects.filter(domain_id=self.definition["domain_name"], agent_id=self.definition["id"],
-                snapshot__featureKey=feature_key, snapshot__detection__analysis__decisionModelStatus="completed").first()
+                **lookup, snapshot__detection__analysis__decisionModelStatus="completed").first()
             if previous is not None:
                 return deepcopy(previous.snapshot["detection"]), previous
         features = self.feature_store.get(namespace, feature_key) if persist else None
@@ -93,21 +95,22 @@ class AnomalyDetectionAgent(ConfiguredAgent):
                      "decision": "NORMAL" if detection["decision"] == "NORMAL" else "REVIEW"}
         if not persist:
             return detection, None
-        identity = digest([namespace, asdict(reference), detection["id"], employee_id, feature_key])
+        identity = digest([namespace, asdict(reference), detection["id"], employee_id, check_key])
         case, _ = AnomalyCase.objects.get_or_create(id=identity, defaults={
             "domain_id": self.definition["domain_name"], "agent_id": self.definition["id"],
             "agent_name": self.definition["name"], "payrun_id": reference.identity, "entity_type": reference.kind,
             "payrun_version": int(version), "detector_version": detection["detectorVersion"],
             "decision": detection["decision"], "summary": detection["summary"],
             "snapshot": {"detection": detection, "context": context, "employeeId": employee_id, "scope": employee_id,
-                         "entity": asdict(reference), "components": self.components.settings, "featureKey": feature_key},
+                         "entity": asdict(reference), "components": self.components.settings, "featureKey": feature_key, "checkKey": check_key},
             "review_status": "pending" if detection["decision"] != "NORMAL" else "not_required",
         })
         return detection, case
 
     def on_change(self, event, context):
         scope = event.get("employeeId") if event.get("type") == "paycheck.opened" else None
-        detection, case = self.check(context, scope=scope)
+        refresh_id = event.get("changedAt") if event.get("type") in ("paycheck.opened", "payrun.loaded") else None
+        detection, case = self.check(context, scope=scope, refresh_id=refresh_id)
         evidence, findings = detection["analysis"], detection["findings"]
         return {
             "type": "checked", "domainName": self.definition["domain_name"],

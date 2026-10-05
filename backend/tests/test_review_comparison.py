@@ -42,3 +42,22 @@ class ReviewComparisonTests(unittest.TestCase):
         for line in [current, *[run['lines'][0] for run in self.context['history']]]:
             line['net'] = round(line['gross'] - sum(line['taxes'].values()) - sum(line['deductions'].values()), 2)
         self.assertTrue(review_comparisons(self.context, self.detection())[0]['reconciled'])
+
+    def test_bonus_increase_is_explicit_and_not_double_counted_in_reconciliation(self):
+        current = self.context['current']['lines'][0]
+        old = deepcopy(current)
+        old['earnings']['bonus'] = 0
+        current['earnings']['bonus'] = 100000
+        current['gross'] = old['gross'] + 100000
+        for line in (current, old):
+            line['net'] = round(line['gross'] - sum(line['taxes'].values()) - sum(line['deductions'].values()), 2)
+        for run in self.context['history']:
+            run['lines'] = [deepcopy(old)]
+        result = review_comparisons(self.context, self.detection())[0]
+        bonus = next(row for row in result['rows'] if row['key'] == 'bonus')
+        self.assertEqual((bonus['previous'], bonus['current'], bonus['delta']), (0, 100000, 100000))
+        self.assertTrue(result['reconciled'])
+        self.context['history'] = []
+        bonus = next(row for row in review_comparisons(self.context, self.detection())[0]['rows'] if row['key'] == 'bonus')
+        self.assertIsNone(bonus['previous'])
+        self.assertIsNone(bonus['delta'])

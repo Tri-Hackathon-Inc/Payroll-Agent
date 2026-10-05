@@ -288,5 +288,31 @@ class MachineTests(unittest.TestCase):
         launcher.ensure_podman_machine({})
         run.assert_not_called()
 
+
+class ModelEnvironmentTests(unittest.TestCase):
+    def test_sync_preserves_secret_and_restarts_only_for_changes(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'backend/templates/Model_config').mkdir(parents=True)
+            (root / 'backend/templates/Model_config/test.json').write_text('{"credential_env":"HF_TOKEN"}')
+            (root / 'backend/.env').write_text('HF_TOKEN=file-key\nJEV_PROVIDER=openrouter\n')
+            existing = {'apiVersion': 'v1', 'kind': 'Secret',
+                        'metadata': {'name': 'backend-env', 'namespace': 'payroll'},
+                        'data': {'MYSQL_PASSWORD': 'preserved'}}
+            with patch.object(launcher, 'ROOT', root), patch.object(launcher.subprocess, 'run') as run:
+                run.return_value = SimpleNamespace(stdout=launcher.json.dumps(existing))
+                launcher.sync_model_credentials(['kubectl'], {'HF_TOKEN': 'shell-key'})
+                applied = launcher.json.loads(run.call_args_list[1].kwargs['input'])
+                self.assertEqual(applied['data']['MYSQL_PASSWORD'], 'preserved')
+                self.assertEqual(launcher.base64.b64decode(applied['data']['HF_TOKEN']), b'shell-key')
+                self.assertEqual(launcher.base64.b64decode(applied['data']['JEV_PROVIDER']), b'openrouter')
+                self.assertIn('restart', run.call_args_list[2].args[0])
+                self.assertTrue(all('shell-key' not in ' '.join(c.args[0]) for c in run.call_args_list))
+                run.reset_mock()
+                run.return_value = SimpleNamespace(stdout=launcher.json.dumps(applied))
+                launcher.sync_model_credentials(['kubectl'], {'HF_TOKEN': 'shell-key'})
+                self.assertEqual(run.call_count, 1)
+
 if __name__ == '__main__':
     unittest.main()

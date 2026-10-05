@@ -1460,3 +1460,11 @@ with version, line and employee IDs. Invalid/stale saves emit no event.
 Alerts-enabled saved AD agents with payroll Read access consume those events.
 Source delivery is asynchronous and best effort; backend acceptance starts durable
 processing. Restoring agents/access does not migrate payroll history or incidents.
+
+
+Monitored payrun/paycheck reads use their source `changedAt` as a check request
+identity. Reopening the same paycheck reruns the decision model even when payroll
+version and feature values are unchanged. Re-delivery of that same read event
+reuses its completed result. Feature enrichment remains reusable independently
+of the check identity. The employee UI resets prior employee checks on open and
+waits for the new employee-scoped result.

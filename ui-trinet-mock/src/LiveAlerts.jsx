@@ -151,9 +151,12 @@ export function useLiveAlerts(domainName, payrunId, version) {
     } finally { requests.current.delete(item.id) }
   }
 
+  const beginEmployeeCheck = employeeId => {
+    setCases(current => current.filter(item => item.scope !== employeeId))
+  }
   const dismiss = key => setAlerts(current => current.filter(item => item.key !== key))
   return { alerts: alerts.filter(item => item.scope === scope), cases: cases.filter(item => item.domainName === domainName && item.payrunId === payrunId && item.decision !== 'NORMAL'),
-    checks: cases, connected, scan, dismiss, review, feedback, snapshot: snapshot?.scope === scope ? snapshot : null }
+    checks: cases, connected, scan, beginEmployeeCheck, dismiss, review, feedback, snapshot: snapshot?.scope === scope ? snapshot : null }
 }
 
 function affectedEmployees(item) {
@@ -217,9 +220,9 @@ function ReviewCase({ item, onReview, onFeedback }) {
     </ol>}
     {investigating && <div className="tn-ad-working" role="status"><span className="spinner-border spinner-border-sm me-2" />Investigating flagged findings…</div>}
     {investigation?.paycheckComparisons?.length > 0 && <PaycheckComparison comparisons={investigation.paycheckComparisons} />}
-    {investigation ? <div className="tn-review-investigation">
-      <div className="fw-semibold">{partial ? 'Partial conclusion — more review needed' : investigation.modelStatus === 'completed' ? 'Investigation conclusion' : 'No investigation conclusion yet'}</div>
-      <p className="mb-1">{investigation.modelStatus === 'completed' || partial ? (investigation.summary.length > 320 ? investigation.summary.slice(0, 317) + '…' : investigation.summary) : 'Investigation incomplete. Review the flagged employees below.'}</p>
+    {investigation ? investigation.modelStatus !== 'completed' && <div className="tn-review-investigation">
+      <div className="fw-semibold">{partial ? 'Partial conclusion — more review needed' : 'No investigation conclusion yet'}</div>
+      <p className="mb-1">{partial ? (investigation.summary.length > 320 ? investigation.summary.slice(0, 317) + '…' : investigation.summary) : 'Investigation incomplete. Review the flagged employees below.'}</p>
       {investigation.reason && item.reviewStatus !== 'failed' && <p className="small text-muted mb-1">{investigation.reason}</p>}
     </div> : !dismissed && !investigating && <p className="mb-1">{employees.length ? `${employees.length} employee${employees.length === 1 ? '' : 's'} flagged. Select Review to investigate.` : 'Payroll checks need review.'}</p>}
     {!dismissed && employees.length > 0 && <ul className="tn-ad-people" aria-label="Employees needing review">{employees.map(employee => <li key={employee.id}><span className="tn-ad-avatar" aria-hidden="true">{employee.name.split(' ').map(part => part[0]).slice(0, 2).join('')}</span><div><strong>{employee.name}</strong><span>{employee.issues}</span></div><i className="bi bi-flag" aria-hidden="true" /></li>)}</ul>}
@@ -299,14 +302,15 @@ function Alert({ alert, onDismiss }) {
   </div>
 }
 
-export default function LiveAlerts({ alerts, cases, onDismiss, onReview, onFeedback }) {
+export default function LiveAlerts({ alerts, cases, onDismiss, onReview, onFeedback, statusMessage }) {
   const [minimized, setMinimized] = useState(false)
-  if (!alerts.length && !cases.length) return null
+  if (!alerts.length && !cases.length && !statusMessage) return null
   return <section className="tn-live-alerts tn-ad-panel" aria-label="Anomaly Detection agent" aria-live="polite">
     <div className="tn-ad-panel-head"><div className="tn-ad-brand"><span className="tn-ad-mark"><i className="bi bi-shield-check" aria-hidden="true" /></span><div><h2>Anomaly Detection</h2><span>Payroll checks & investigation {minimized && `· ${cases.length} review case(s)`}</span></div></div>
       <button type="button" className="tn-ad-collapse" aria-label={minimized ? 'Expand AD agent' : 'Minimize AD agent'} title={minimized ? 'Expand AD agent' : 'Minimize AD agent'} aria-expanded={!minimized} onClick={() => setMinimized(value => !value)}><i className={`bi ${minimized ? 'bi-chevron-down' : 'bi-dash-lg'}`} aria-hidden="true" /></button>
     </div>
     <div hidden={minimized}>
+    {statusMessage && <p className="tn-ad-status small text-muted" role="status">{statusMessage}</p>}
     {cases.map(item => <ReviewCase key={item.id} item={item} onReview={onReview} onFeedback={onFeedback} />)}
     {alerts.map((alert) => <Alert key={alert.key} alert={alert} onDismiss={() => onDismiss(alert.key)} />)}
     </div>

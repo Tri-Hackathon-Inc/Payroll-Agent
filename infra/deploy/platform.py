@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import sys
+import base64
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVICES = ['db', 'vector-db', 'redis', 'backend', 'ui', 'trinet-mock', 'trinet-ui', 'evidence-capture']
@@ -163,6 +164,38 @@ def provision_kind(kubeconfig, env, engine='podman'):
     run(kube + ['apply', '-f', 'infra/deploy/kind/platform.json'])
 
 
+def sync_model_credentials(kube, env):
+    """Refresh model credentials without replacing other application Secret entries."""
+    from dotenv import dotenv_values
+    values = {}
+    for name in ('.env', 'backend/.env'):
+        path = ROOT / name
+        if path.is_file():
+            values.update(dotenv_values(path))
+    values.update(env)
+    keys = {'JEV_PROVIDER', 'JEV_MODEL', 'JEV_TIMEOUT_SECONDS', 'TYPESAFE_API_KEY'}
+    for path in (ROOT / 'backend/templates/Model_config').glob('*.json'):
+        model = json.loads(path.read_text(encoding='utf-8'))
+        keys.update(model.get(field) for field in ('credential_env', 'endpoint_env') if model.get(field))
+    updates = {key: base64.b64encode(str(values[key] or '').encode()).decode()
+               for key in keys if key in values}
+    if not updates:
+        return
+    def run(command, **kwargs):
+        return subprocess.run(command, cwd=ROOT, env=env, check=True, **kwargs)
+    result = run(kube + ['-n', 'payroll', 'get', 'secret', 'backend-env', '-o', 'json'],
+                 capture_output=True, text=True)
+    secret = json.loads(result.stdout)
+    data = secret.setdefault('data', {})
+    if all(data.get(key) == value for key, value in updates.items()):
+        return
+    data.update(updates)
+    secret['metadata'] = {'name': 'backend-env', 'namespace': 'payroll'}
+    run(kube + ['apply', '-f', '-'], input=json.dumps(secret).encode(), stdout=subprocess.DEVNULL)
+    run(kube + ['-n', 'payroll', 'rollout', 'restart', 'deployment/backend'])
+    print('Updated backend model environment; credential values were not printed.', flush=True)
+
+
 def execute(config, action, dry_run=False, engine='auto'):
     print(plan(config, action, engine), flush=True)
     if dry_run:
@@ -254,6 +287,7 @@ def execute(config, action, dry_run=False, engine='auto'):
         secret = {'apiVersion':'v1','kind':'Secret','metadata':{'name':'vllm-auth','namespace':'agent-models'},'stringData':{'api-key':key}}
         run(kube + ['apply', '-f', '-'], input=json.dumps(secret).encode())
         run(kube + ['apply', '-f', 'infra/deploy/ray/serving.yaml'])
+    sync_model_credentials(kube, env)
     # Key goes over stdin, never a process argument or a printed command.
     patch = {'spec':{'template':{'spec':{'containers':[{'name':'backend','env':[
         {'name':'VLLM_BASE_URL','value':env['VLLM_BASE_URL']}, {'name':'VLLM_API_KEY','value':key}]}]}}}}

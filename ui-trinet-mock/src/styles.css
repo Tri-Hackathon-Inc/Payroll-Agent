@@ -256,3 +256,6 @@ button { cursor: pointer; }
 .tn-pay-explanation small, .tn-pay-source { font-size: 11px; color: #52677c; }
 .tn-pay-source { margin: 8px 0 0; }
 @media (max-width: 560px) { .tn-pay-periods { grid-template-columns: 1fr; } }
+
+.tn-ad-status { margin: 0; padding: 0 20px 16px; }
+.tn-drawer .tn-ad-status { padding: 0 14px 14px; }

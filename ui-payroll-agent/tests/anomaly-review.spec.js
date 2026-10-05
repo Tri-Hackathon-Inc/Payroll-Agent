@@ -383,3 +383,30 @@ test('a failed investigation shows its actual reason and retains calculated find
   await expect(card.getByRole('button', { name: 'Review', exact: true })).toBeEnabled()
   expect(reviews).toEqual([])
 })
+
+
+test('employee edit keeps AD visible while checking and after a normal result', async ({ page }) => {
+  const { run, item } = await payrollPage(page)
+  await page.route('**/agent-studio/graphql', route => route.fulfill({ json: { data: {
+    listDomains: [{ name: 'payroll-services', label: 'Payroll', domain: 'Payroll' }],
+    getServiceAgentRegistry: [], agentHealth: { items: [{ templateId: 'anomaly-detection', status: 'live' }] },
+  } } }))
+  await page.route('**/anomalies?**', route => route.fulfill({ json: { items: [] } }))
+  await page.goto(`/trinet/?domain=payroll-services&payrun=${run.id}`)
+  await page.getByRole('button', { name: run.lines[0].name, exact: true }).click()
+  const drawer = page.getByRole('complementary', { name: 'Edit employee pay' })
+  const panel = drawer.getByRole('region', { name: 'Anomaly Detection agent' })
+  await expect(panel).toBeVisible()
+  await expect(panel.getByRole('heading', { name: 'Anomaly Detection', exact: true })).toBeVisible()
+  await expect(panel.getByRole('status')).toContainText('Checking this employee')
+  await page.evaluate(item => window.payrollStreams.at(-1).emit({
+    type: 'checked', domainName: item.domainName, payrunId: item.payrunId, version: item.version,
+    anomaly: { ...item, decision: 'NORMAL', scope: item.findings[0].employeeId, findings: [] },
+  }), item)
+  await expect(panel).toBeVisible()
+  await expect(panel.getByRole('status')).toContainText('No review findings for this employee')
+  await expect(panel.getByRole('button', { name: 'Review', exact: true })).toHaveCount(0)
+  await drawer.getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: run.lines[0].name, exact: true }).click()
+  await expect(panel.getByRole('status')).toContainText('Checking this employee')
+})

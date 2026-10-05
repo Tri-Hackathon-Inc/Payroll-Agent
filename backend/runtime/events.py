@@ -119,7 +119,8 @@ def process(event):
         agent = AnomalyDetectionAgent({**definition, "domain_name": name})
         if event.get("type"):
             broadcast({"type": "scanning", "domainName": name, "payrunId": event["payrunId"],
-                       "version": context["current"]["version"], "monitor": {"id": definition["id"], "name": definition["name"]}})
+                       "version": context["current"]["version"],
+                       "scope": event.get("employeeId") if event.get("type") == "paycheck.opened" else None, "monitor": {"id": definition["id"], "name": definition["name"]}})
         result = agent.on_change(event, context)
         broadcast(result)
         record(name, definition, "Real-time payroll change check", event,

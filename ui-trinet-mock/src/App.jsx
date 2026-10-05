@@ -99,7 +99,9 @@ export default function App() {
   async function openPaycheck(id) {
     if (!domain || !payrunId) return
     const request = ++paycheckRequest.current
-    setAdEmployee(detail?.lines.find(line => line.lineId === id)?.employeeId || null)
+    const employeeId = detail?.lines.find(line => line.lineId === id)?.employeeId || null
+    if (employeeId) live.beginEmployeeCheck(employeeId)
+    setAdEmployee(employeeId)
     setLineId(null)
     setNotice('Loading latest paycheck…')
     try {
@@ -173,7 +175,8 @@ export default function App() {
   const scanReason = currentHealth?.error ? 'Agent connectivity could not be checked. Retrying automatically.' : adHealth.find(item => item.status !== 'live')?.reason
   const scopedCases = live.cases.filter(item => (item.scope || null) === adEmployee && item.version === run?.version)
   const employeeChecked = live.checks.some(item => item.domainName === domain?.name && item.payrunId === run?.id && item.scope === adEmployee && item.version === run?.version)
-  const adPanel = <LiveAlerts key={`${run?.id}:${adEmployee || 'payrun'}`} alerts={live.alerts.filter(item => item.type === 'error')} cases={scopedCases} onDismiss={live.dismiss} onReview={live.review} onFeedback={live.feedback} />
+  const adPanel = <LiveAlerts key={`${run?.id}:${adEmployee || 'payrun'}`} alerts={live.alerts.filter(item => item.type === 'error')} cases={scopedCases} onDismiss={live.dismiss} onReview={live.review} onFeedback={live.feedback}
+    statusMessage={adEmployee ? scanBlocked ? scanReason : employeeChecked ? scopedCases.length ? 'Latest paycheck checked. Review the findings below.' : 'Latest paycheck checked. No review findings for this employee.' : 'Checking this employee?s latest paycheck?' : undefined} />
   // A change saved elsewhere (another reviewer, an integration) shows up here with its alert.
   const latestVersion = [...live.alerts, ...live.cases].reduce((highest, alert) => Math.max(highest, alert.version || 0), live.snapshot?.version || 0)
   useEffect(() => {
@@ -215,7 +218,7 @@ export default function App() {
       {assistantAvailable && <button type="button" className="tn-link" onClick={() => setAssistantOpen(value => !value)}>{assistantOpen ? 'Minimize employee chat' : 'Open employee chat'}</button>}
       {latestVersion > run.version && employeeDirty && <p role="status">Payroll changed elsewhere. Reload the latest data before continuing; your unsaved edits are still shown.</p>}
       {adPanel}
-      {!scopedCases.length && <p className="small text-muted" role="status">{scanBlocked ? scanReason : employeeChecked ? 'No review findings for this employee.' : 'Checking this employee’s latest paycheck…'}</p>}
+
     </EmployeeDrawer>}
     {assistantAvailable && <AgentUiTemplate key={`${domain.name}:${run.id}`} domain={domain} run={run} open={assistantOpen}
       employeeId={assistantEmployeeId}

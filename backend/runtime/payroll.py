@@ -148,7 +148,11 @@ def payrun_findings(current, history):
     return findings
 
 
-ROWS = [("gross", "Gross pay", "earning", ["gross"]), ("federal", "Federal tax", "withholding", ["taxes.federal"]),
+ROWS = [("gross", "Gross pay", "earning", ["gross"]),
+        ("regular", "Regular wages", "earning", ["earnings.regular"]),
+        ("overtime", "Overtime", "earning", ["earnings.overtime"]),
+        ("bonus", "Bonus", "earning", ["earnings.bonus"]),
+        ("reimbursement", "Reimbursement", "earning", ["earnings.reimbursement"]), ("federal", "Federal tax", "withholding", ["taxes.federal"]),
         ("state", "State tax", "withholding", ["taxes.state"]), ("fica", "FICA", "withholding", ["taxes.socialSecurity", "taxes.medicare"]),
         ("health", "Health benefits", "withholding", ["deductions.health"]), ("retirement401k", "401(k)", "withholding", ["deductions.retirement401k"]),
         ("garnishment", "Garnishment", "withholding", ["deductions.garnishment"]), ("net", "Net pay", "net", ["net"])]
@@ -171,7 +175,7 @@ def pay_comparison(context, evidence):
         return {"payrunId": run["id"], **{k: run.get(k) for k in ("payDate", "periodStart", "periodEnd")}} if run else None
 
     def reconciles(side):
-        return all(row[side] is not None for row in rows) and rounded(rows[0][side] - sum(row[side] for row in rows if row["kind"] == "withholding")) == rows[-1][side]
+        return all(row[side] is not None for row in rows if row["key"] in ("gross", "net") or row["kind"] == "withholding") and rounded(rows[0][side] - sum(row[side] for row in rows if row["kind"] == "withholding")) == rows[-1][side]
 
     return {"employeeId": employee["employeeId"], "employeeName": employee["name"], "currency": current["currency"], "current": period(current), "previous": period(previous),
             "rows": rows, "netChange": rows[-1]["delta"], "reconciled": bool(previous and reconciles("current") and reconciles("previous")),
