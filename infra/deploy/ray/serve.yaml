@@ -1,0 +1,23 @@
+http_options:
+  host: 0.0.0.0
+  port: 8000
+applications:
+  - name: local-slm
+    route_prefix: /
+    import_path: ray.serve.llm:build_openai_app
+    args:
+      llm_configs:
+        - model_loading_config:
+            model_id: agent-slm
+            model_source: Qwen/Qwen2.5-0.5B-Instruct
+          deployment_config:
+            autoscaling_config:
+              min_replicas: 1
+              max_replicas: 1
+          engine_kwargs:
+            dtype: half
+            max_model_len: 2048
+            max_num_seqs: 1
+            gpu_memory_utilization: 0.70
+            enforce_eager: true
+            disable_log_stats: true

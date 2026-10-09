@@ -1,0 +1,18 @@
+{
+  "id": "local-open-source",
+  "name": "Your local open-source model",
+  "provider": "openai-compatible",
+  "model_id": "REPLACE_WITH_YOUR_MODEL_ID",
+  "enabled": false,
+  "endpoint_env": "LOCAL_MODEL_BASE_URL",
+  "credential_env": "LOCAL_MODEL_API_KEY",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 1024
+  },
+  "details": {
+    "license": "open-source",
+    "vendor": "Self-hosted",
+    "description": "Any OpenAI-compatible endpoint you run yourself. Disabled until configured."
+  }
+}

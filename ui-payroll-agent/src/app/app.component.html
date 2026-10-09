@@ -1,0 +1,45 @@
+@if (standalone) { <main class="chat-app-shell"><app-chat-window [domainName]="chatDomain" /></main> }
+@else {
+  <div class="app-shell d-flex"><aside class="app-sidebar studio-sticky d-flex flex-column flex-shrink-0 p-3">
+    <div class="d-flex gap-2 mb-3"><span class="sidebar-mark"><i aria-hidden="true" class="bi bi-stars"></i></span><div><span class="text-white fw-bold text-uppercase sidebar-brand">Agent Studio</span><div class="sidebar-subtitle">Payroll AI Platform</div></div></div><hr class="sidebar-divider">
+    <nav aria-label="Agent Studio">@for (group of nav; track group.label) { <div class="mb-3"><div class="sidebar-group-label px-2 mb-2">{{group.label}}</div><ul class="nav nav-pills flex-column gap-1">@for (item of group.items; track item.key) { <li class="nav-item"><button type="button" class="nav-link sidebar-link d-flex align-items-center gap-2 w-100 text-start" [class.active]="view === item.key" [attr.aria-current]="view === item.key ? 'page' : null" (click)="navigate(item.key)"><i aria-hidden="true" [class]="'bi ' + item.icon"></i><span>{{item.label}}</span></button></li> }</ul></div> }</nav>
+    <div class="mt-auto"><hr class="sidebar-divider">
+      @if (viewer) { <div class="sidebar-access small">
+        @if (viewer.authMode === 'open') { <span>Open access · everyone is admin</span> }
+        @else { <div class="d-flex justify-content-between"><span>{{viewer.role === 'admin' ? 'Admin' : 'User'}}</span>@if (viewer.role === 'admin') { <button class="btn btn-link btn-sm sidebar-access-link" [disabled]="accessBusy" (click)="access(true)">Sign out</button> } @else { <button class="btn btn-link btn-sm sidebar-access-link" [attr.aria-expanded]="loginOpen" (click)="loginOpen = !loginOpen">Admin sign in</button> }</div>
+          @if (loginOpen && viewer.role !== 'admin') { <form (ngSubmit)="access()"><label for="admin-key" class="visually-hidden">Admin key</label><input id="admin-key" name="key" type="password" class="form-control form-control-sm" autocomplete="current-password" [(ngModel)]="adminKey" required><button class="btn btn-light btn-sm mt-2" type="submit" [disabled]="accessBusy || !adminKey">{{accessBusy ? 'Signing in…' : 'Sign in'}}</button></form> }
+        }
+        @if (accessError) { <p role="alert" class="text-warning">{{accessError}}</p> }
+      </div> }
+      <a class="nav-link sidebar-link" [href]="api.trinet(domain?.name)" target="_blank" rel="noreferrer">TriNet Payruns ↗</a>
+    </div>
+  </aside><main class="studio-page flex-grow-1 min-vw-0 p-4 p-xl-5">
+    <header class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4"><div><h1 class="h3 fw-bold" (click)="editing = ''">Agent Studio</h1><p class="text-muted">Create an AI agent for a service and domain.</p></div>@if (showDomain) { <div class="d-flex align-items-center gap-2"><label for="domain" class="fw-semibold">Domain</label><select id="domain" class="form-select" [ngModel]="domain!.name" (ngModelChange)="chooseDomain($event)">@for (d of availableDomains; track d.name) { <option [value]="d.name">{{d.label}}</option> }</select></div> }</header>
+    @if (notice) { <div role="status" class="alert alert-success d-flex justify-content-between">{{notice}}<button class="btn-close" aria-label="Dismiss" (click)="notice = ''"></button></div> }
+    @if (!viewer || loading) { <p role="status">Loading Agent Studio…</p> }
+    @else if (error) { <div role="alert" class="alert alert-danger">Could not load Agent Studio: {{error}} <button class="btn btn-link" (click)="load()">Retry</button></div> }
+    @else if (view === 'agents' || view === 'mine') { <app-my-agents [domains]="domains" [viewer]="viewer" [readOnly]="view === 'mine'" (create)="openService()" (changed)="loadAgents()" /> }
+    @else if (view === 'access' && domain) { <app-access-control [domain]="domain" /> }
+    @else if (view === 'models') { <app-catalog mode="models" [templates]="templates" /> }
+    @else if (view === 'studio') {
+      @if (!service || !domain) { <section aria-labelledby="services-heading"><h2 id="services-heading" class="h5 fw-bold">Choose a service</h2><p class="text-muted">Pick the service your agent will work in.</p><div class="row row-cols-1 row-cols-sm-2 row-cols-xl-3 g-3">
+        @for (item of categories; track item.category) { <div class="col"><button class="card border-0 shadow-sm template-card service-card accent-neutral h-100 w-100 text-start" [disabled]="!item.count" (click)="openService(item.category)"><span class="card-body d-flex flex-column w-100"><span class="template-icon mb-3"><i aria-hidden="true" [class]="'bi ' + item.icon"></i></span><strong class="h6">{{item.category}}</strong><span class="text-muted">{{item.description}}</span><span class="small mt-3">{{item.count ? item.count + ' templates →' : 'Coming soon'}}</span></span></button></div> }
+      </div></section> }
+      @else if (editing) { <div id="configure" class="studio-section" aria-label="Configure agent"><button type="button" class="btn btn-link ps-0 mb-3" (click)="editing = ''">Back to templates</button><app-agent-editor [domain]="domain" [templateId]="editing" [viewer]="viewer" (saved)="saved($event)" (cancel)="editing = ''" /></div> }
+      @else { <section class="studio-section"><button class="btn btn-link ps-0" (click)="openService()">← All services</button><h2 class="h5 fw-bold">{{service}} templates</h2><p class="text-muted">Pick a template and configure your agent below.</p><div class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3">
+        @for (template of visibleTemplates; track template.id) { <div class="col"><div class="card h-100 border-0 shadow-sm template-card accent-neutral" [class.border-dark]="editing === template.id"><div class="card-body d-flex flex-column"><span class="template-icon mb-3"><i aria-hidden="true" class="bi bi-stars"></i></span><h3 class="h6 fw-bold">{{template.name}}</h3><span class="small text-muted">Version {{template.version}}</span><p class="text-muted flex-grow-1">{{template.description}}</p><button class="btn btn-dark" [attr.aria-pressed]="editing === template.id" (click)="configure(template.id)">Use Template</button></div></div></div> }
+      </div></section> }
+    }
+    @else if (domain) {
+      @if (agentsError) { <div role="alert" class="alert alert-danger">{{agentsError}} <button class="btn btn-link" (click)="loadAgents()">Retry</button></div> }
+      @else if (agentsLoading) { <p role="status">Loading agents…</p> }
+      @else { @switch (view) {
+        @case ('tools') { <app-catalog mode="tools" [domain]="domain" [templates]="templates" [agents]="agents" /> }
+        @case ('agent-tools') { <app-customer-tools [domain]="domain" [templates]="templates" [agents]="agents" [viewer]="viewer" (changed)="loadAgents()" /> }
+        @case ('evaluation') { <app-evaluation [domain]="domain" [agents]="agents" (browse)="openService(domain.domain)" /> }
+        @case ('metrics') { <app-metrics [domain]="domain" [agents]="agents" /> }
+        @case ('usage') { <app-metrics [domain]="domain" [agents]="agents" /> }
+      } }
+    } @else { <p>No domains are available yet. Ask your administrator to create one.</p> }
+  </main></div>
+}

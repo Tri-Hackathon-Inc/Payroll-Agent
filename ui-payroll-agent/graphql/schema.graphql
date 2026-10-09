@@ -1,0 +1,114 @@
+scalar JSON
+
+  type ModelConfig {
+    id: ID!
+    name: String!
+    provider: String!
+    modelId: String!
+    enabled: Boolean!
+    endpointEnv: String!
+    credentialEnv: String!
+    parameters: JSON!
+    details: JSON!
+  }
+
+  type Service {
+    operations: JSON!
+    id: ID!
+    name: String!
+    domain: String!
+    enabled: Boolean!
+    baseUrlEnv: String!
+    method: String!
+    path: String!
+  }
+
+  type Template {
+    id: ID!
+    name: String!
+    description: String!
+    version: Int!
+    config: JSON!
+    modelConfig: ModelConfig!
+    service: Service!
+    attachedServices: [Service!]!
+    modelOptions: [ModelConfig!]!
+    serviceOptions: [Service!]!
+  }
+
+  type Domain { name: String!, label: String!, domain: String! }
+  type Agent {
+    id: ID!
+    name: String!
+    domainName: String!
+    templateId: String!
+    templateVersion: Int!
+    config: JSON!
+    createdAt: String!
+    updatedAt: String!
+    modelConfig: JSON!
+  }
+  input CreateAgentInput {
+    agentGroupIds: [ID!]
+    roleGroupIds: [ID!]
+    apiPermissions: JSON
+    contextSourceIds: [ID!]
+    domainName: String!
+    templateId: String!
+    name: String!
+    config: JSON!
+  }
+  input UpdateAgentInput {
+    agentGroupIds: [ID!]
+    roleGroupIds: [ID!]
+    apiPermissions: JSON
+    contextSourceIds: [ID!]
+    id: ID!
+    domainName: String!
+    name: String!
+    config: JSON!
+  }
+  input ChatMessageInput { role: String!, content: String! }
+  input ChatAgentInput {
+    agentId: ID!
+    domainName: String!
+    message: String!
+  history: [ChatMessageInput!]
+    sessionId: String
+    requestId: String
+    confirmation: JSON
+    context: JSON
+  }
+  type ChatReply { agentId: ID!, modelId: String!, output: String!, demo: Boolean!, session: JSON, retrieval: JSON, analysis: JSON, status: String, questionMapping: JSON, mappedQuestion: JSON }
+  type Viewer {
+    role: String!
+    features: [String!]!
+    authMode: String!
+    allowedModels: [String!]
+    allowedTools: [String!]
+  }
+  input RateAnswerInput {
+    domainName: String!
+    interactionId: ID!
+    rating: String!
+  }
+  type Mutation {
+    manageAgentAccess(input: JSON!): JSON!
+    chatAgent(input: ChatAgentInput!): ChatReply!
+    rateAnswer(input: RateAnswerInput!): ID!
+    createAgent(input: CreateAgentInput!): Agent!
+    updateAgent(input: UpdateAgentInput!): Agent!
+    deleteAgent(id: ID!, domainName: String!): Boolean!
+  }
+  type Query {
+    agentAccess(domainName: String!): JSON!
+    listTemplates(serviceName: String!): [Template!]!
+    getTemplate(id: ID!): Template!
+    listDomains: [Domain!]!
+    getDomainAgentsTemplates(domainName: String!): [Template!]!
+    getServiceAgentRegistry(serviceName: String, domainName: String): [Agent!]!
+    agentMetrics(domainName: String!, agentId: ID, sinceHours: Int): JSON!
+    agentPipeline(domainName: String!, agentId: ID!, anomalyId: ID): JSON!
+    agentHealth(domainName: String!, agentId: ID): JSON!
+    viewer: Viewer!
+  }

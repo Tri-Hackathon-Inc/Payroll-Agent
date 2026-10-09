@@ -1,0 +1,27 @@
+{
+  "id": "ollama-local",
+  "name": "Local model (Ollama)",
+  "provider": "openai-compatible",
+  "model_id": "llama3.2:3b",
+  "enabled": true,
+  "endpoint_env": "OLLAMA_BASE_URL",
+  "credential_env": "",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 1024
+  },
+  "details": {
+    "license": "open-source",
+    "vendor": "Self-hosted \u00b7 Ollama",
+    "description": "Runs on your own machine through Ollama: no key, no limits, and no data leaves the laptop. Small models are weaker at payroll reasoning; change model_id to any model you have pulled.",
+    "strengths": [
+      "Unlimited",
+      "Private",
+      "Offline"
+    ],
+    "best_for": [
+      "General Query",
+      "Summarizer"
+    ]
+  }
+}

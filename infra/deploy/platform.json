@@ -1,0 +1,9 @@
+{
+  "kubernetes": {
+    "enabled": true,
+    "kubeconfig": ".local-data/podman-kubeconfig"
+  },
+  "rayServe": {
+    "enabled": false
+  }
+}

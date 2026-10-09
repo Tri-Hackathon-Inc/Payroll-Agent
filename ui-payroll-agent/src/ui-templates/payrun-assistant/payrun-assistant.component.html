@@ -1,0 +1,44 @@
+<aside class="tn-copilot" [class.has-answer]="!!lastAgentMessage" tabindex="0" aria-label="Payroll assistant">
+  <header class="tn-copilot-head">
+    <span class="tn-copilot-mark" aria-hidden="true"><i class="bi bi-stars"></i></span>
+    <div class="flex-grow-1 min-w-0"><h2 class="tn-copilot-title">Payroll Assistant</h2><div class="tn-copilot-context text-truncate">{{host?.payrun?.id}} · {{host?.domain?.label}}</div></div>
+    <button type="button" class="tn-icon-btn" (click)="emit('close')" aria-label="Minimize chat" title="Minimize chat"><i class="bi bi-dash-lg" aria-hidden="true"></i></button>
+  </header>
+  @if (!host) { <p class="tn-copilot-note" role="status">Waiting for payrun context from the host page.</p> }
+  @else if (loadError) { <div class="tn-copilot-note"><p class="text-danger" role="alert">Could not load agents from Agent Studio: {{loadError}}</p><button class="btn btn-outline-secondary btn-sm" (click)="loadAgents()">Retry loading agents</button></div> }
+  @else if (loading) { <p class="tn-copilot-note" role="status">Loading agents…</p> }
+  @else if (!agent) { <p class="tn-copilot-note">No General Query agent is attached to the payrun page yet. Create one from the General Query template in <a [href]="studioUrl" target="_blank" rel="noreferrer">Agent Studio</a>, then reopen this panel.</p> }
+  @else {
+    <div class="tn-copilot-agent">
+      <label class="visually-hidden" for="tn-agent">Agent</label><i class="bi bi-robot" aria-hidden="true"></i>
+      <select id="tn-agent" class="form-select form-select-sm" [disabled]="busy" [(ngModel)]="agentId" (ngModelChange)="agentChanged()">
+        @for (item of agents; track item.id) { <option [value]="item.id">{{item.name}}</option> }
+      </select>
+    </div>
+    <div class="px-3 pb-2">
+      <div class="d-flex align-items-center justify-content-between gap-2 my-2"><label class="form-label small fw-semibold mb-0" for="tn-employee">Employee scope</label><button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="busy" (click)="newChat()">New chat</button></div>
+      <select id="tn-employee" class="form-select form-select-sm mb-2" [disabled]="busy" [ngModel]="host.employeeId" (ngModelChange)="selectEmployee($event)">
+        <option value="">All employees</option>
+        @for (item of host.payrun.employees; track item.employeeId) { <option [value]="item.employeeId">{{item.name}} ({{item.employeeId}})</option> }
+      </select>
+      <p class="small text-muted mb-0" role="status">@if (employee) { Reviewing {{employee.name}} ({{employee.employeeId}}) only. } @else { Reviewing all employees in this payrun. Select an employee for an individual review. }</p>
+    </div>
+    <div #thread class="tn-copilot-thread" aria-live="polite">
+      @if (!visibleMessages.length) { <div class="tn-copilot-empty"><p class="fw-semibold mb-1">Ask about {{employee ? employee.name + "'s paycheck" : 'this payrun'}}</p><p class="small text-muted mb-0">Answers use current payroll data and the latest available Jev check or investigation.</p></div> }
+      @for (item of visibleMessages; track item.id) {
+        @if (item.role === 'user' || item.role === 'agent') {
+          <div class="tn-copilot-message" [class.user]="item.role === 'user'" [class.agent]="item.role === 'agent'">
+            <div class="tn-copilot-bubble">{{item.text}}</div>
+          </div>
+        }
+      }
+      @if (sending) { <p role="status" class="small text-muted">Checking the latest context?</p> }
+    </div>
+    @if (error) { <p class="tn-copilot-error" role="alert">{{error}}</p> }
+    <form class="tn-copilot-compose" [class.keep-open]="!!question || !!error" (ngSubmit)="ask(question)">
+      <fieldset [disabled]="busy">
+        <div class="tn-copilot-input"><input [(ngModel)]="question" name="question" [placeholder]="'Ask ' + agent.name + '?'" [attr.aria-label]="'Ask ' + agent.name"><button type="submit" [disabled]="!question.trim() || busy" aria-label="Send"><i class="bi bi-send" aria-hidden="true"></i></button></div>
+      </fieldset>
+    </form>
+  }
+</aside>

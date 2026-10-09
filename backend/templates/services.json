@@ -1,0 +1,147 @@
+[
+  {
+    "id": "payrun",
+    "name": "Payrun service",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "PAYRUN_API_BASE_URL",
+    "method": "GET",
+    "path": "/payruns",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/payruns",
+        "access": "R"
+      },
+      {
+        "method": "POST",
+        "path": "/payruns",
+        "access": "W",
+        "description": "Write permission only; agent payroll writes are not implemented."
+      },
+      {
+        "method": "POST",
+        "path": "/graphql",
+        "access": "R",
+        "description": "Read-only GraphQL payroll queries."
+      },
+      {
+        "method": "PUT",
+        "path": "/payruns/{payrunId}/paychecks/{lineId}",
+        "access": "W"
+      }
+    ]
+  },
+  {
+    "id": "payrun-history",
+    "name": "Payrun history",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "PAYRUN_API_BASE_URL",
+    "method": "GET",
+    "path": "/payruns/history",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/payruns/history",
+        "access": "R"
+      }
+    ]
+  },
+  {
+    "id": "employee-details",
+    "name": "Employee details",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "EMPLOYEE_API_BASE_URL",
+    "method": "GET",
+    "path": "/employees/{employee_id}/payrun",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/employees/{employee_id}/payrun",
+        "access": "R"
+      }
+    ]
+  },
+  {
+    "id": "diagnostics",
+    "name": "Service diagnostics",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "DIAGNOSTICS_API_BASE_URL",
+    "method": "GET",
+    "path": "/diagnostics/logs",
+    "operations": [
+      {
+        "method": "GET",
+        "path": "/diagnostics/logs",
+        "access": "R"
+      }
+    ]
+  },
+  {
+    "id": "slack-webhook",
+    "name": "Slack alert webhook",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "SLACK_WEBHOOK_BASE_URL",
+    "method": "POST",
+    "path": "/services/payroll-alerts",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/services/payroll-alerts",
+        "access": "W"
+      }
+    ]
+  },
+  {
+    "id": "email-notification",
+    "name": "Email notification",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "EMAIL_API_BASE_URL",
+    "method": "POST",
+    "path": "/notifications/email",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/notifications/email",
+        "access": "W"
+      }
+    ]
+  },
+  {
+    "id": "alert-manager",
+    "name": "On-call alerting",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "ALERTING_API_BASE_URL",
+    "method": "POST",
+    "path": "/alerts",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/alerts",
+        "access": "W"
+      }
+    ]
+  },
+  {
+    "id": "opensearch-sink",
+    "name": "OpenSearch event sink",
+    "domain": "Payroll",
+    "enabled": true,
+    "base_url_env": "OPENSEARCH_BASE_URL",
+    "method": "POST",
+    "path": "/agent-events/_doc",
+    "operations": [
+      {
+        "method": "POST",
+        "path": "/agent-events/_doc",
+        "access": "W"
+      }
+    ]
+  }
+]

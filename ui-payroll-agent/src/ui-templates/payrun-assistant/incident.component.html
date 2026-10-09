@@ -1,0 +1,18 @@
+<div class="tn-incident" [attr.aria-label]="'Incident ' + incident.id">
+  <div class="tn-incident-head"><span class="tn-incident-severity" [class.critical]="incident.severity === 'critical'" [class.warning]="incident.severity === 'warning'" [class.info]="incident.severity !== 'critical' && incident.severity !== 'warning'">{{incident.severity}}</span><span class="tn-incident-id">{{incident.id}}</span></div>
+  <div class="tn-incident-title">{{incident.title}}</div>
+  <div class="tn-incident-meta">{{agentName}} · {{incident.totalAtRisk | currency}} at risk · written by {{incident.writtenBy === 'evidence' ? 'evidence only' : incident.writtenBy}}</div>
+  <ul class="tn-incident-evidence">@for (item of incident.evidence; track item.id) { <li><span class="tn-incident-ev">{{item.id}}</span><span class="flex-grow-1"><strong>{{item.name}}</strong> · {{item.finding}}@if (item.amountAtRisk != null) { · {{item.amountAtRisk | currency}} }
+    @if (item.screenshots?.length) { <span class="tn-incident-shots">@for (shot of item.screenshots; track $index) { <button type="button" (click)="view(shot, item.id + ' ' + item.name, screenshot)" [title]="shot.label" [attr.aria-label]="'View screenshot: ' + item.id + ' ' + item.name + ', ' + shot.label"><img [src]="shot.dataUrl" alt=""></button> }</span> }
+  </span></li> }</ul>
+  <div class="tn-incident-note">@if (incident.screenshots?.taken) { {{incident.screenshots!.taken}} screenshots captured by the headless browser (read-only) } @else { No screenshots: {{incident.screenshots?.error || 'none captured.'}} }</div>
+  <div class="tn-incident-email" [class.sent]="incident.email?.status === 'sent'" [class.not-sent]="incident.email?.status !== 'sent'">@if (incident.email?.status === 'sent') { Emailed to {{incident.email!.to}} } @else { Email not sent ({{incident.email?.to}}): {{incident.email?.reason}} }</div>
+  @if (incident.slack && incident.slack.status !== 'off') { <div class="tn-incident-email" [class.sent]="incident.slack.status === 'sent'" [class.not-sent]="incident.slack.status !== 'sent'">{{incident.slack.status === 'sent' ? 'Posted to Slack' : 'Slack not sent: ' + incident.slack.reason}}</div> }
+  @if (incident.modelError) { <div class="tn-incident-note">Model unavailable, report built from evidence: {{incident.modelError}}</div> }
+  <div class="tn-incident-buttons"><button type="button" (click)="showReport = !showReport" [attr.aria-expanded]="showReport">{{showReport ? 'Hide report' : 'View report'}}</button><button type="button" (click)="download()">Download report</button></div>
+  @if (showReport) { <pre class="tn-incident-report">{{report}}</pre> }
+  <dialog #screenshot class="tn-shot-dialog" [attr.aria-label]="'Screenshot: ' + (viewing?.title || '')" (cancel)="$event.preventDefault(); $event.stopPropagation(); close(screenshot)" (keydown.escape)="$event.stopPropagation()">
+    <button type="button" class="btn btn-light btn-sm mb-2" (click)="close(screenshot)">Close screenshot</button>
+    @if (viewing) { <figure><img [src]="viewing.dataUrl" [alt]="viewing.title + ': ' + viewing.label"><figcaption>{{viewing.title}} · {{viewing.label}}</figcaption></figure> }
+  </dialog>
+</div>

@@ -1,0 +1,45 @@
+{
+  "id": "summarizer",
+  "name": "Summarizer",
+  "version": 1,
+  "description": "Produce a structured employee or payrun summary.",
+  "models": [
+    "poc-demo",
+    "qwen-2-5-72b",
+    "bedrock-claude",
+    "groq-qwen-3-8-27b",
+    "groq-gpt-oss-120b",
+    "gemini-flash-lite",
+    "openrouter-qwen-3-8-27b",
+    "ollama-local",
+    "vllm-slm"
+  ],
+  "config": {
+    "description": "Produce a structured employee or payrun summary.",
+    "instructions": "Summarize the supplied payroll data, highlighting totals, changes, and unresolved items.",
+    "questions": [
+      "Summarize this payrun.",
+      "What changed since the last payrun?",
+      "What should I check before approving this payrun?"
+    ],
+    "domain": "Payroll",
+    "model": "poc-demo",
+    "service": "payrun",
+    "page": "payrun",
+    "attached_services": [
+      "employee-details"
+    ],
+    "created_by": "poc-user",
+    "roles": [],
+    "capabilities": {
+      "alerts": {
+        "enabled": false,
+        "severity": "warning"
+      },
+      "webhooks": {
+        "enabled": false,
+        "url": ""
+      }
+    }
+  }
+}

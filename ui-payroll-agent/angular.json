@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "newProjectRoot": "projects",
+  "projects": {
+    "studio": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": "dist",
+            "index": ".angular/index.html",
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "polyfills": [
+              "zone.js"
+            ],
+            "assets": [
+              { "glob": "**/*", "input": "public", "output": "/" },
+              { "glob": "**/*", "input": ".angular/runtime", "output": "ui-templates" }
+            ],
+            "styles": [
+              "node_modules/bootstrap/dist/css/bootstrap.min.css",
+              "node_modules/bootstrap-icons/font/bootstrap-icons.css",
+              "src/index.css",
+              "src/App.css"
+            ]
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true,
+              "extractLicenses": false
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "allowedHosts": ["ui"]
+          },
+          "configurations": {
+            "development": {
+              "buildTarget": "studio:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    },
+    "agent-runtime": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src/ui-templates",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": { "base": ".angular/runtime", "browser": "payrun-assistant" },
+            "index": "src/ui-templates/payrun-assistant/index.html",
+            "browser": "src/ui-templates/payrun-assistant/main.ts",
+            "tsConfig": "tsconfig.runtime.json",
+            "baseHref": "./",
+            "polyfills": ["zone.js"],
+            "styles": [
+              "node_modules/bootstrap/dist/css/bootstrap.min.css",
+              "node_modules/bootstrap-icons/font/bootstrap-icons.css",
+              "src/ui-templates/payrun-assistant/styles.css"
+            ],
+            "outputHashing": "all"
+          }
+        }
+      }
+    }
+  },
+  "cli": {
+    "analytics": false
+  }
+}

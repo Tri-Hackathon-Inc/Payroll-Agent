@@ -1,0 +1,17 @@
+{
+  "id": "poc-demo",
+  "name": "POC demo model (configuration only)",
+  "provider": "demo",
+  "model_id": "demo/no-runtime",
+  "enabled": true,
+  "endpoint_env": "",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 1024
+  },
+  "details": {
+    "license": "demo",
+    "vendor": "Agent Studio",
+    "description": "Configuration-only placeholder. Agents save settings but no model is called."
+  }
+}

@@ -1,0 +1,19 @@
+:host { display: block; }
+.editor-section { background: #fff; border: 1px solid #dfe5ee; border-radius: 14px; padding: 24px; margin-bottom: 24px; scroll-margin-top: 24px; }
+.editor-heading { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 24px; }
+.editor-heading h4 { font-size: 1.15rem; font-weight: 650; margin: 0 0 5px; }
+.editor-heading p { color: #596579; margin: 0; font-size: .9rem; }
+.editor-step { background: #e9effa; color: #254873; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; font-weight: 700; }
+.form-label { font-weight: 600; }
+textarea { line-height: 1.6; }
+.editor-optional { border-top: 1px solid #dfe5ee; padding-top: 16px; }
+summary { cursor: pointer; font-weight: 600; }
+.editor-summary { position: sticky; top: 24px; background: #fff; border: 1px solid #dfe5ee; border-radius: 14px; padding: 20px; }
+.editor-nav { display: grid; gap: 8px; }
+.editor-nav button { border: 0; border-radius: 8px; background: transparent; text-align: left; padding: 10px 6px; color: #34445b; font-size: .875rem; display: flex; gap: 10px; align-items: center; }
+.editor-nav button:hover, .editor-nav button:focus-visible { background: #edf2fa; }
+.editor-nav span { color: #596579; }
+.editor-actions { position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 12px; background: #fff; padding: 16px 20px; border: 1px solid #dfe5ee; border-radius: 12px; box-shadow: 0 4px 20px #1b30451a; }
+.table th { font-size: .8rem; color: #596579; }
+.table td { padding-top: 12px; padding-bottom: 12px; vertical-align: middle; }
+@media (max-width: 991px) { .editor-summary { position: static; } .editor-section { padding: 18px; } .editor-actions { bottom: 0; } }

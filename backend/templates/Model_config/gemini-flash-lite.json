@@ -1,0 +1,29 @@
+{
+  "id": "gemini-flash-lite",
+  "name": "Gemini 3.5 Flash-Lite (Google, free)",
+  "provider": "openai-compatible",
+  "model_id": "gemini-3.5-flash-lite",
+  "enabled": true,
+  "endpoint_env": "GEMINI_BASE_URL",
+  "credential_env": "GEMINI_API_KEY",
+  "parameters": {
+    "temperature": 0,
+    "max_tokens": 4096,
+    "reasoning_effort": "low"
+  },
+  "details": {
+    "license": "commercial",
+    "vendor": "Google",
+    "description": "Google's fast Flash-Lite model through the Gemini API free tier (key from Google AI Studio). Chosen over the larger Flash models, which are often overloaded on the free tier. Free-tier prompts may be used to improve Google's products, so use mock data only.",
+    "strengths": [
+      "Long documents",
+      "Summaries",
+      "Fast responses"
+    ],
+    "best_for": [
+      "Summarizer",
+      "General Query",
+      "Incident Report"
+    ]
+  }
+}

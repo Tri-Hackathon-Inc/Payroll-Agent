@@ -1,0 +1,111 @@
+@if (loadError) { <div class="alert alert-danger" role="alert">{{loadError}} <button class="btn btn-link" (click)="load()">Retry</button><button class="btn btn-link" (click)="cancel.emit()">Back</button></div> }
+@else if (config && template) {
+  <div class="row g-4 agent-editor-layout"><div class="col-lg-9"><div class="editor-main"><div>
+    <h3 class="h4 fw-bold">{{agent ? 'Edit ' + agent.name : 'Configure ' + template.name}}</h3><p class="text-muted">Set up your agent in four steps. {{domain.label}} · {{domain.domain}}</p>
+    @if (archived) { <p class="alert alert-warning">The source template is no longer available. You can edit the saved configuration.</p> }
+    <form (ngSubmit)="submit()" #form="ngForm">
+      @if (error) { <div class="alert alert-danger" role="alert">{{error}}</div> }
+      <fieldset [disabled]="saving">
+        <section id="agent-basics" class="editor-section" aria-labelledby="basics-heading">
+          <div class="editor-heading"><span class="editor-step">1</span><div><h4 id="basics-heading">Agent details</h4><p>Give your agent a name and explain what it helps people do.</p></div></div>
+        <div class="mb-3"><label for="agent-name" class="form-label">Agent name</label><input id="agent-name" name="name" class="form-control" [(ngModel)]="name" maxlength="150" required></div>
+        <div class="mb-3"><label for="description" class="form-label">Description</label><textarea id="description" name="description" class="form-control" [(ngModel)]="config.description" rows="3" maxlength="10000" required></textarea></div>
+        </section>
+        <section id="agent-behavior" class="editor-section" aria-labelledby="behavior-heading">
+          <div class="editor-heading"><span class="editor-step">2</span><div><h4 id="behavior-heading">Instructions and models</h4><p>Define how the agent should respond, then choose its models.</p></div></div>
+        <div class="mb-3"><label for="instructions" class="form-label">Instructions</label><textarea id="instructions" name="instructions" class="form-control" [(ngModel)]="config.instructions" rows="6" maxlength="10000" required></textarea></div>
+        <app-model-picker [models]="template.modelOptions" [(value)]="config.model" />
+        @if (isAnomaly) {
+          <div class="mb-3"><label for="decision-model" class="form-label">Decision model</label>
+            <select id="decision-model" name="decisionModel" class="form-select" [ngModel]="decisionModel" (ngModelChange)="setDecisionModel($event)">
+              <option value="jev">Jev (TypeSafe AI)</option><option value="none">None — rules and statistics only</option>
+              @if (decisionModel !== 'jev' && decisionModel !== 'none') { <option [value]="decisionModel">{{decisionModel}} (saved selection)</option> }
+            </select><p class="form-text">Jev evaluates generated features before Review and requires backend API access. The model above handles the investigation after Review.</p>
+          </div>
+        }
+        <details class="editor-optional"><summary>Starting questions <span class="text-muted fw-normal">(optional)</span></summary><div class="pt-3">
+          @for (question of config.questions; track $index; let i = $index) { <div class="d-flex gap-2 mb-2"><input class="form-control" [name]="'question-' + i" [attr.aria-label]="'Starting question ' + (i + 1)" [(ngModel)]="config.questions[i]" maxlength="1000"><button type="button" class="btn btn-outline-secondary" [attr.aria-label]="'Remove question ' + (i + 1)" (click)="config.questions.splice(i, 1)">Remove</button></div> }
+          <button type="button" class="btn btn-link" [disabled]="config.questions.length >= 50" (click)="config.questions.push('')">Add question</button>
+        </div></details>
+        </section>
+        <section id="agent-app" class="editor-section" aria-label="App attachment">
+          <div class="editor-heading"><span class="editor-step">3</span><div><h4>App attachment</h4><p>Choose where people can use this agent.</p></div></div>
+          <p class="text-muted small">Choose the application that will display this agent. Payrun makes it available beside payroll reviews and individual employee paychecks.</p>
+          <label for="app-attachment" class="form-label">App</label>
+          <select id="app-attachment" name="appAttachment" class="form-select" [ngModel]="attachedApp" (ngModelChange)="setApp($event)">
+            <option value="">No app UI attachment</option>
+            @if(payrunAvailable){<option value="payrun">Payrun app</option>}
+            @if(attachedApp === 'custom'){<option value="custom">{{config.page}} (saved attachment)</option>}
+          </select>
+          @if(attachedApp === 'payrun'){
+            <div class="border rounded p-3 mt-3 bg-light"><i class="bi bi-layout-sidebar-inset me-2" aria-hidden="true"></i><strong>Payrun app UI</strong><p class="small mb-0 mt-1">This agent will be attached to the payrun page and employee paycheck panel when saved.</p></div>
+          }
+          <p class="form-text mb-0">App attachment controls where the agent appears. Choose its backend data access below.</p>
+        </section>
+        <section id="agent-access" class="editor-section" aria-label="Agent permissions">
+          <div class="editor-heading"><span class="editor-step">4</span><div><h4>Data and permissions</h4><p>Choose the APIs, roles and agent context this agent can access.</p></div></div>
+          @if (canManageAccess) {
+            @if(accessError){<p class="alert alert-warning">{{accessError}} <button type="button" class="btn btn-link" (click)="loadAccess()">Retry permissions</button></p>}
+            @else if(!accessState){<p role="status">Loading permissions...</p>}
+          } @else {<p>An administrator manages these permissions.</p>}
+          @if(missingPayrollReads.length){
+            <div class="alert alert-warning" role="status"><strong>Payroll API access is incomplete.</strong><p class="mb-2">Missing Read access: {{missingPayrollReads.join(', ')}}. Assign a role below or allow the required reads. Incident handoffs can use shared agent context.</p>
+              @if(canManageAccess){<button type="button" class="btn btn-outline-dark btn-sm" (click)="allowPayrollReads()">Allow required payroll Read access</button>}
+            </div>
+          }
+          <p class="text-muted small">App APIs connect to the selected application backend. External APIs connect to other registered services, such as notifications and diagnostics. You can select permissions in both lists.</p>
+          <label for="api-source" class="form-label">Backend API source</label>
+          <select id="api-source" name="apiSource" class="form-select mb-3" [(ngModel)]="apiSource"><option value="payrun">Payrun app backend APIs</option><option value="external">External APIs</option></select>
+          <fieldset><legend class="h6">Available APIs and permissions</legend>
+            <p class="form-text">Select Read or Write to attach a backend API and allow that access. Payroll checks need Read on payrun, payrun history, and employee details (paycheck). Payrun totals include the summary.</p>
+            <div class="table-responsive"><table class="table table-sm"><thead><tr><th>API</th><th>Method</th><th>Allow</th><th>Access through roles / groups</th></tr></thead><tbody>
+              @for(operation of apiPermissions; track operation.service + operation.method + operation.path){<tr><td>{{operation.name}}<small class="d-block text-muted">{{operation.path}}</small>@if(operation.description){<small class="d-block text-muted">{{operation.description}}</small>}</td><td>{{operation.method}}</td><td><label><input type="checkbox" class="form-check-input me-1" [disabled]="!canManageAccess || !accessState" [checked]="hasDirect(operation.service,operation.access)" (change)="setDirect(operation.service,operation,$any($event.target).checked)" [attr.aria-label]="(operation.access === 'R' ? 'Read API ' : 'Write API ') + operation.service">{{operation.access === 'R' ? 'Read' : 'Write'}}</label></td><td>{{grantedBy(operation.service,operation)}}</td></tr>}
+            </tbody></table></div>
+            @if(!apiPermissions.length){<p class="text-muted">No APIs are configured for this source.</p>}
+          </fieldset>
+          @if(canManageAccess && accessState){
+            <fieldset class="border-top pt-3 mb-3"><legend class="h6">Assign roles</legend>
+              <p class="form-text">Choose a role to grant its API access.</p>
+              @for(role of accessState.roleGroups;track role.id){
+                <div class="border rounded bg-white p-3 mb-2"><label><input type="checkbox" class="form-check-input me-2" [checked]="roleIds.includes(role.id)" (change)="toggleRole(role.id,$any($event.target).checked)" [attr.aria-label]="'Assign role ' + role.name"><strong>{{role.name}}</strong></label><small class="d-block text-muted mt-1">{{roleSummary(role.id)}}</small></div>
+              } @empty {<p class="text-muted">No roles yet. Create a role in Access control, then assign it here.</p>}
+            </fieldset>
+          }
+          @if(canManageAccess && accessState){
+            <details class="editor-optional mb-3"><summary>Access groups <span class="text-muted fw-normal">(optional &middot; {{groupIds.length}} selected)</span></summary><div class="pt-3">
+              <p class="form-text">Join a group to inherit its roles. This adds to the permissions selected above.</p>
+              @for(group of accessState.agentGroups;track group.id){
+                <div class="border rounded p-2 mb-2"><label><input type="checkbox" class="form-check-input me-2" [checked]="groupIds.includes(group.id)" (change)="toggleGroup(group.id,$any($event.target).checked)">{{group.name}}</label><small class="d-block text-muted mt-1">Roles: {{groupRoles(group.id)}}</small></div>
+              } @empty {<p class="small text-muted">No groups available. Manage groups in Access control.</p>}
+            </div></details>
+          }
+          <fieldset class="border-top pt-3"><legend class="h6">Read context from other agents</legend>
+            @if(contextOptions.length){<p class="form-text">Allow this agent to read another agent's findings or reports.</p>}
+            @for(source of contextOptions;track source.id){<label class="d-block mb-2"><input type="checkbox" class="form-check-input me-2" [disabled]="!canManageAccess || !accessState" [checked]="contextSources.includes(source.id)" (change)="toggleContext(source.id,$any($event.target).checked)" [attr.aria-label]="'Read context from ' + source.name">Read context from <strong>{{source.name}}</strong></label>}
+            @empty {<p class="small text-muted">No other agents are available yet. You can add access here after creating them.</p>}
+          </fieldset>
+          <details class="border-top pt-3 mb-3"><summary>Advanced API routing</summary>
+            <label for="service" class="form-label mt-2">Primary backend API</label><select id="service" name="service" class="form-select" [(ngModel)]="config.service" required>
+              @if(savedService){<option [value]="config.service">{{config.service}} (saved selection)</option>}
+              @for(item of services;track item.id){<option [value]="item.id">{{item.name}}</option>}
+            </select>
+            <p class="form-text">Additional attachments do not grant permissions by themselves.</p>
+            @for(item of attachments;track item.id){<label class="d-block"><input type="checkbox" class="form-check-input me-2" [checked]="config.attached_services.includes(item.id)" (change)="toggle(item.id,$any($event.target).checked)">{{item.name}}</label>}
+          </details>
+          <p class="form-text mb-0">Permissions are applied when you save the agent.</p>
+        </section>
+        <div class="editor-actions"><span class="small text-muted me-auto">Changes apply when you save.</span><button type="button" class="btn btn-outline-secondary" (click)="cancel.emit()">Cancel</button><button type="submit" class="btn btn-dark" [disabled]="form.invalid || saving">{{saving ? 'Saving…' : agent ? 'Save changes' : 'Create agent'}}</button></div>
+      </fieldset>
+    </form>
+  </div></div></div><aside class="col-lg-3"><div class="editor-summary">
+    <h2 class="h6 text-uppercase text-muted">Agent setup</h2>
+    <nav aria-label="Agent setup sections" class="editor-nav">
+      <button type="button" (click)="goToSection('agent-basics')"><span>1</span>Agent details</button>
+      <button type="button" (click)="goToSection('agent-behavior')"><span>2</span>Instructions and models</button>
+      <button type="button" (click)="goToSection('agent-app')"><span>3</span>App attachment</button>
+      <button type="button" (click)="goToSection('agent-access')"><span>4</span>Data and permissions</button>
+    </nav>
+    <hr><h3 class="h6">{{name || template.name}}</h3>
+    <dl class="small mb-0"><dt>App</dt><dd>{{attachedApp === 'payrun' ? 'Payrun app' : config.page || 'No app attached'}}</dd><dt>Roles selected</dt><dd>{{roleIds.length}} direct / {{groupIds.length}} groups</dd><dt>Shared context</dt><dd>{{contextSources.length}} agents</dd><dt>Template</dt><dd>{{template.name}} &middot; v{{agent?.templateVersion || template.version}}</dd></dl>
+  </div></aside></div>
+} @else { <p role="status">Loading template configuration...</p> }

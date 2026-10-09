@@ -1,0 +1,45 @@
+{
+  "id": "llama-3-3-70b",
+  "name": "Llama 3.3 · 70B",
+  "provider": "huggingface",
+  "model_id": "meta-llama/Llama-3.3-70B-Instruct",
+  "enabled": true,
+  "endpoint_env": "HF_INFERENCE_BASE_URL",
+  "credential_env": "HF_TOKEN",
+  "parameters": {
+    "temperature": 0.2,
+    "max_tokens": 4096
+  },
+  "details": {
+    "license": "open-source",
+    "vendor": "Meta",
+    "context_window": "128K tokens",
+    "description": "Meta's 70B open-source model (successor to Llama 3.1 70B). Excellent at reasoning and tool use, making it well-suited for agentic payroll workflows.",
+    "strengths": [
+      "Tool calling",
+      "Reasoning",
+      "Code generation"
+    ],
+    "best_for": [
+      "Anomaly Detection",
+      "General Query"
+    ],
+    "benchmarks": [
+      {
+        "name": "MMLU-Pro",
+        "score": 68.9,
+        "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+      },
+      {
+        "name": "HumanEval",
+        "score": 88.4,
+        "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+      },
+      {
+        "name": "MATH",
+        "score": 77.0,
+        "source": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct"
+      }
+    ]
+  }
+}

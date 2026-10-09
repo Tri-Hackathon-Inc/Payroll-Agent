@@ -1,0 +1,237 @@
+name: payroll-local
+
+services:
+  redis:
+    image: docker.io/library/redis:8-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  vector-db:
+    image: docker.io/pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: payroll_vectors
+      POSTGRES_USER: payroll_vector
+      POSTGRES_PASSWORD: ${VECTOR_DB_PASSWORD:-payroll-vector-local-development}
+    volumes:
+      - vector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payroll_vector -d payroll_vectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  db:
+    image: docker.io/library/mysql:8.4
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-payroll}
+      MYSQL_USER: ${MYSQL_USER:-payroll}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-payroll-local-development}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-payroll-root-local-development}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_PASSWORD mysql -h 127.0.0.1 -u $$MYSQL_USER -D $$MYSQL_DATABASE -e 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: backend
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-payroll}
+      MYSQL_USER: ${MYSQL_USER:-payroll}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-payroll-local-development}
+      GRPC_ADDRESS: 127.0.0.1:50051
+      HOST: 0.0.0.0
+      PORT: "4000"
+      NODE_ENV: development
+      # Agent model calls (server-side only). Set HF_TOKEN in the root .env; never commit it.
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_INFERENCE_BASE_URL: ${HF_INFERENCE_BASE_URL:-}
+      # Free-tier providers (OpenAI-compatible). A model is usable once its key is set in .env.
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_BASE_URL: ${GROQ_BASE_URL:-https://api.groq.com/openai/v1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      AD_HF_FALLBACK: ${AD_HF_FALLBACK:-true}
+      AD_HF_BACKUP_MODEL: ${AD_HF_BACKUP_MODEL:-Qwen/Qwen3-235B-A22B-Instruct-2507}
+      # Local Ollama on the host, e.g. http://host.docker.internal:11434/v1 (no key needed).
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-}
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-}
+      VLLM_API_KEY: ${VLLM_API_KEY:-}
+      MODEL_TIMEOUT_MS: ${MODEL_TIMEOUT_MS:-60000}
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_PROVIDER: ${JEV_PROVIDER:-typesafe}
+      JEV_MODEL: ${JEV_MODEL:-}
+      JEV_TIMEOUT_SECONDS: ${JEV_TIMEOUT_SECONDS:-3}
+      REDIS_URL: redis://redis:6379
+      VECTOR_DB_HOST: vector-db
+      VECTOR_DB_NAME: payroll_vectors
+      VECTOR_DB_USER: payroll_vector
+      VECTOR_DB_PASSWORD: ${VECTOR_DB_PASSWORD:-payroll-vector-local-development}
+      CHAT_SESSION_TTL_SECONDS: ${CHAT_SESSION_TTL_SECONDS:-1800}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      RAG_INTENT_MODEL_ID: ${RAG_INTENT_MODEL_ID:-Qwen/Qwen2.5-72B-Instruct}
+      RAG_TOP_K: ${RAG_TOP_K:-6}
+      RAG_HISTORY_LIMIT: ${RAG_HISTORY_LIMIT:-100}
+      EMBEDDING_CACHE_DIR: /models
+      # Payroll data the webhook loads as context when an agent is asked on a payrun.
+      TRINET_API_URL: http://trinet-mock:4100/
+      # Incident reports (agent-to-agent handoff) are emailed through this endpoint when set.
+      EMAIL_API_BASE_URL: ${EMAIL_API_BASE_URL:-}
+      INCIDENT_EMAIL_TO: ${INCIDENT_EMAIL_TO:-payroll-team@example.com}
+      # Slack incoming-webhook URL for incident alerts (secret; used when the Slack tool is attached).
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      # Employee names are masked before model calls unless this is "false".
+      PII_MASKING: ${PII_MASKING:-true}
+      # Headless-browser screenshots of each finding, attached to incident evidence.
+      EVIDENCE_CAPTURE_URL: http://evidence-capture:4300
+      INCIDENT_ARTIFACT_ROOT: /incident-artifacts
+      # Real-time anomaly detection: shared secret required on POST /events/payroll when set.
+      PAYROLL_EVENTS_TOKEN: ${PAYROLL_EVENTS_TOKEN:-}
+      # Admin vs user views: admins sign in with this key (unset = open Studio, everyone admin).
+      STUDIO_ADMIN_KEY: ${STUDIO_ADMIN_KEY:-}
+      ADMIN_FEATURES: ${ADMIN_FEATURES:-all}
+      USER_FEATURES: ${USER_FEATURES:-}
+      CUSTOMER_MODELS: ${CUSTOMER_MODELS:-}
+      CUSTOMER_TOOLS: ${CUSTOMER_TOOLS:-}
+    volumes:
+      - embedding_cache:/models
+      - ../../.local-data/incidents:/incident-artifacts
+    ports:
+      - "127.0.0.1:4000:4000"
+      - "127.0.0.1:50051:50051"
+    depends_on:
+      redis:
+        condition: service_healthy
+      vector-db:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ listDomains { name } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: ui
+    environment:
+      GRAPHQL_MODE: backend
+      API_PROXY_TARGET: http://backend:4000
+      STUDIO_BASE_PATH: ${STUDIO_BASE_PATH:-/ai_studio/}
+      TRINET_MOCK_URL: http://localhost:5174/trinet/
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173${STUDIO_BASE_PATH:-/ai_studio/}', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  # --- Temporary TriNet mock: stands in for the real TriNet UI and payroll API until the
+  # agent is embedded in TriNet. Uses Agent Studio's API and runtime UI templates.
+  trinet-mock:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: trinet-mock
+    environment:
+      DATABASE_PATH: /data/trinet_mock.sqlite3
+      # Report each saved pay-line change to Agent Studio's real-time monitor.
+      PAYROLL_EVENTS_URL: ${PAYROLL_EVENTS_URL:-http://backend:4000/events/payroll}
+      PAYROLL_EVENTS_TOKEN: ${PAYROLL_EVENTS_TOKEN:-}
+    volumes:
+      - trinet_data:/data
+    ports:
+      - "127.0.0.1:4100:4100"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4100/', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({query:'{ payruns { id } }'}), signal:AbortSignal.timeout(4000)}).then(async r => {const body = await r.json(); if (!r.ok || body.errors || !body.data) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  trinet-ui:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: trinet-ui
+    environment:
+      TRINET_API_TARGET: http://trinet-mock:4100
+      AGENT_STUDIO_TARGET: http://ui:5173${STUDIO_BASE_PATH:-/ai_studio/}
+    ports:
+      - "127.0.0.1:5174:5174"
+    depends_on:
+      trinet-mock:
+        condition: service_healthy
+      ui:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5174/trinet/', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # Headless browser (Playwright) that opens the payroll UI read-only and screenshots each
+  # incident finding: the employee's pay rows and their Edit Employee Pay drawer.
+  evidence-capture:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile
+      target: evidence-capture
+    environment:
+      TRINET_UI_URL: http://trinet-ui:5174/trinet/
+    depends_on:
+      trinet-ui:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4300/health', {signal:AbortSignal.timeout(4000)}).then(r => {if (!r.ok) process.exit(1)}).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  trinet_data:
+  vector_data:
+  embedding_cache:

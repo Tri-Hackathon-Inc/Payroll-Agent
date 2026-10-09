@@ -1,0 +1,32 @@
+@if (mode === 'models') {
+  <div class="d-flex justify-content-between flex-wrap gap-3 mb-3"><div><h2 class="h4 fw-bold">Model Library</h2><p class="text-muted">Models agents can use. Pick one per agent when configuring a template.</p></div>
+    <div class="btn-group btn-group-sm align-self-start" role="group" aria-label="Filter models">@for (item of filters; track item.key) { <button class="btn" [class.btn-dark]="filter === item.key" [class.btn-outline-secondary]="filter !== item.key" [attr.aria-pressed]="filter === item.key" (click)="filter = item.key">{{item.label}} {{count(item.key)}}</button> }</div>
+  </div>
+  <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-3">
+    @for (model of visibleModels; track model.id) { <div class="col"><div class="card h-100 border-0 shadow-sm model-card model-card-compact"><div class="card-body p-3">
+      <h3 class="h6 fw-bold">{{model.name}} <span class="badge text-bg-light">{{model.details.license === 'demo' ? 'Demo' : model.details.license === 'open-source' ? 'Open source' : 'Commercial'}}</span></h3><div class="small text-muted">{{model.details.vendor || model.provider}} · {{model.details.context_window}}</div><p class="small text-muted">{{model.details.description}}</p>
+      @for (b of model.details.benchmarks || []; track b.name) { <span class="badge model-strength-chip">{{b.name}} {{b.score}}</span> }
+      @for (source of sources(model); track source) { <a class="small ms-1" [href]="source" target="_blank" rel="noreferrer">Source</a> }
+      @if (!model.details.benchmarks?.length) { <p class="small text-muted">No published score recorded</p> }
+      <div class="mt-2">@for (strength of model.details.strengths || []; track strength) { <span class="badge model-strength-chip me-1">{{strength}}</span> }</div>
+      <div class="small border-top mt-3 pt-2"><code>{{model.modelId}}</code> · {{model.templates.length}} templates</div>
+    </div></div></div> } @empty { <p>No models match this filter.</p> }
+  </div>
+} @else {
+  <h2 class="h4 fw-bold">Tools &amp; APIs</h2><p class="text-muted">Data sources and actions available to {{domain.label}} agents. Select a tool for details.</p>
+  @for (group of ['data', 'action']; track group) {
+    <section class="mb-4" [attr.aria-label]="group === 'data' ? 'Data sources' : 'Actions'"><h3 class="h6">{{group === 'data' ? 'Data sources' : 'Actions'}}</h3><ul class="row row-cols-1 row-cols-sm-2 row-cols-xl-4 g-3 list-unstyled">
+      @for (tool of tools; track tool.id) { @if (info(tool).group === group) {
+        <li class="col"><button class="card border-0 shadow-sm tool-card h-100 w-100 text-start" aria-haspopup="dialog" (click)="open(tool)"><span class="card-body p-3">
+          <span class="tool-status mb-2" [class]="'tool-status tool-status-' + info(tool).status">{{status(tool)}}</span><strong class="d-block">{{tool.name}}</strong><span class="small text-muted d-block">{{info(tool).description}}</span><span class="small mt-3 d-block">{{usage(tool)}}</span><span class="small mt-3 d-block">Details →</span>
+        </span></button></li>
+      } }
+    </ul></section>
+  }
+  @if (!tools.length) { <p>No tools are defined for this domain yet.</p> }
+  <dialog #dialog class="tool-dialog" aria-labelledby="tool-dialog-title" (close)="selected = null" (click)="$event.target === dialog && close()">
+    @if (selected) { <div class="tool-dialog-body"><button class="btn-close float-end" aria-label="Close" (click)="close()"></button><h3 id="tool-dialog-title" class="h5">{{selected.name}}</h3><p>{{status(selected)}}</p><p>{{info(selected).description}}</p>
+      <dl class="tool-dialog-facts"><dt>How agents reach it</dt><dd>{{info(selected).via || selected.method + ' {' + selected.baseUrlEnv + '}' + selected.path}}</dd><dt>Primary API of</dt><dd>{{selected.primaryIn.join(', ') || 'No template'}}</dd><dt>Attached in</dt><dd>{{selected.attachedIn.join(', ') || 'No template'}}</dd><dt>Agents in {{domain.label}}</dt><dd>{{using(selected)}}</dd><dt>Catalog entry</dt><dd><code>{{selected.id}}</code> · {{selected.method}} {{selected.path}}</dd></dl>
+    </div> }
+  </dialog>
+}

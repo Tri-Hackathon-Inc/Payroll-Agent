@@ -1,0 +1,42 @@
+# Optional standalone GPU model container. Combine with docker-compose.yaml.
+services:
+  backend:
+    environment:
+      VLLM_BASE_URL: http://vllm-slm:8000/v1
+      VLLM_API_KEY: ${VLLM_API_KEY:?Set VLLM_API_KEY before starting local inference}
+  vllm-slm:
+    image: vllm/vllm-openai:v0.10.2
+    command:
+      - --model
+      - Qwen/Qwen2.5-0.5B-Instruct
+      - --served-model-name
+      - agent-slm
+      - --dtype
+      - half
+      - --max-model-len
+      - "2048"
+      - --max-num-seqs
+      - "1"
+      - --gpu-memory-utilization
+      - "0.75"
+      - --enforce-eager
+      - --disable-log-requests
+    environment:
+      VLLM_API_KEY: ${VLLM_API_KEY:?Set VLLM_API_KEY before starting local inference}
+      VLLM_NO_USAGE_STATS: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    gpus: all
+    shm_size: 1gb
+    volumes:
+      - vllm_model_cache:/root/.cache/huggingface
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      start_period: 10m
+      retries: 20
+    restart: unless-stopped
+volumes:
+  vllm_model_cache:

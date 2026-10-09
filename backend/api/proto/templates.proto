@@ -1,0 +1,112 @@
+syntax = "proto3";
+package ai_studio_agents;
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+service ai_studio {
+  rpc CommunicateAgents(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ExecuteAgent(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc GetViewer(google.protobuf.Empty) returns (google.protobuf.Struct);
+  rpc Authenticate(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc PublishPayrollEvent(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc PreviewPayrollChange(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ListAnomalies(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ReviewAnomaly(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc RecordAnomalyFeedback(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc WatchPayrollEvents(google.protobuf.Struct) returns (stream google.protobuf.Struct);
+  rpc ListTemplates(ServiceName) returns (TemplateList);
+  rpc GetTemplate(TemplateId) returns (Template);
+  rpc ListDomains(google.protobuf.Empty) returns (DomainList);
+  rpc GetDomainAgentsTemplates(DomainName) returns (TemplateList);
+  rpc GetServiceAgentRegistry(ServiceAgentRegistryRequest) returns (AgentList);
+  rpc CreateAgent(CreateAgentRequest) returns (Agent);
+  rpc UpdateAgent(UpdateAgentRequest) returns (Agent);
+  rpc DeleteAgent(DeleteAgentRequest) returns (google.protobuf.Empty);
+  rpc ChatAgent(ChatAgentRequest) returns (ChatAgentResponse);
+  rpc RecordInteraction(RecordInteractionRequest) returns (InteractionRef);
+  rpc RateInteraction(RateInteractionRequest) returns (InteractionRef);
+  rpc GetAgentMetrics(AgentMetricsRequest) returns (AgentMetrics);
+  rpc GetAgentPipeline(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc GetAgentAccess(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc ManageAgentAccess(google.protobuf.Struct) returns (google.protobuf.Struct);
+  rpc GetAgentHealth(google.protobuf.Struct) returns (google.protobuf.Struct);
+}
+message TemplateId { string id = 1; }
+message ServiceName { string service_name = 1; }
+message Template {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  uint32 version = 4;
+  google.protobuf.Struct config = 5;
+  google.protobuf.Struct model_config = 6;
+  google.protobuf.Struct service = 7;
+  repeated google.protobuf.Struct attached_services = 8;
+  repeated google.protobuf.Struct model_options = 9;
+  repeated google.protobuf.Struct service_options = 10;
+}
+message TemplateList { repeated Template templates = 1; }
+message DomainName { string domain_name = 1; }
+message Domain { string name = 1; string label = 2; string domain = 3; }
+message DomainList { repeated Domain domains = 1; }
+message Agent {
+  string id = 1;
+  string name = 2;
+  string domain_name = 3;
+  string template_id = 4;
+  uint32 template_version = 5;
+  google.protobuf.Struct config = 6;
+  string created_at = 7;
+  string updated_at = 8;
+  google.protobuf.Struct model_config = 9;
+}
+message AgentList { repeated Agent agents = 1; }
+message CreateAgentRequest {
+  string domain_name = 1;
+  string template_id = 2;
+  string name = 3;
+  google.protobuf.Struct config = 4;
+  google.protobuf.Struct access = 5;
+}
+message UpdateAgentRequest {
+  string id = 1;
+  string domain_name = 2;
+  string name = 3;
+  google.protobuf.Struct config = 4;
+  google.protobuf.Struct access = 5;
+}
+
+message DeleteAgentRequest { string id = 1; string domain_name = 2; }
+message ServiceAgentRegistryRequest { string service_name = 1; string domain_name = 2; }
+message ChatMessage { string role = 1; string content = 2; }
+message ChatAgentRequest {
+  string agent_id = 1;
+  string domain_name = 2;
+  string message = 3;
+  repeated ChatMessage history = 4;
+}
+message ChatAgentResponse {
+  string agent_id = 1;
+  string model_id = 2;
+  string output = 3;
+  bool demo = 4;
+}
+
+// Admin metrics: one record per answered question (see agents/metrics.py).
+message RecordInteractionRequest {
+  string domain_name = 1;
+  string agent_id = 2;
+  google.protobuf.Struct data = 3;
+}
+message InteractionRef { string id = 1; }
+message RateInteractionRequest {
+  string domain_name = 1;
+  string interaction_id = 2;
+  string rating = 3;
+}
+message AgentMetricsRequest {
+  string domain_name = 1;
+  string agent_id = 2;
+  uint32 since_hours = 3;
+}
+message AgentMetrics { google.protobuf.Struct metrics = 1; }

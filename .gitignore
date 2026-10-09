@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.angular/
+out-tsc/
+.env
+
+__pycache__/
+
+.venv/
+.local-data/

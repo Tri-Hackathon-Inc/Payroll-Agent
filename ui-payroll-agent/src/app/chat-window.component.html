@@ -1,0 +1,19 @@
+<section class="chat-workspace"><header class="chat-header"><div><p class="eyebrow">{{domain?.label || 'Select a domain'}} · Connected workspace</p><h1>Talk to your agents</h1><p class="chat-subtitle">Choose a specialist and ask a question.</p></div>@if (selected) { <button class="btn btn-outline-secondary" [disabled]="sending" (click)="newChat()">New chat</button> }</header>
+  <div class="chat-panel"><div class="chat-thread" aria-live="polite">
+    @if (!messages.length) { <div class="chat-empty-state"><h2>{{domain && !agents.length ? 'No agents are available yet' : 'Start a conversation'}}</h2><p>Type <kbd>&#64;</kbd> to pick an agent, then choose a suggested question or write your own.</p></div> }
+    @for (item of messages; track $index) { <div [class]="'chat-message ' + item.role"><span class="agent-avatar avatar-blue">{{item.role === 'user' ? 'You' : initials(item.agent)}}</span><div><div class="message-author">{{item.role === 'user' ? 'You' : item.agent.name}}</div><div class="message-bubble" style="white-space: pre-wrap">{{item.text}}</div></div></div> }
+    @if (sending) { <p role="status">Waiting for a response…</p> }
+  </div><div class="chat-composer-wrap">
+    @if (selected) { <div class="selected-agent-bar"><strong>{{selected.name}}</strong><button class="agent-clear" [disabled]="sending" [attr.aria-label]="'Remove ' + selected.name" (click)="selected = null">×</button></div>
+      <div class="question-pills" [attr.aria-label]="selected.name + ' suggested questions'">@for (question of selected.config.questions; track $index) { <button class="question-pill" (click)="message = question">{{question}}</button> }</div>
+    }
+    <form class="chat-composer" (ngSubmit)="send()"><div class="composer-main"><input #composer name="message" [ngModel]="message" (ngModelChange)="typed($event)" [placeholder]="selected ? 'Message ' + selected.name + '…' : 'Type @ to choose a domain and agent…'" aria-label="Message an agent" [disabled]="sending"><button class="send-button" type="submit" aria-label="Send message" [disabled]="!message.trim() || !selected || sending">↑</button></div><div class="composer-hint"><button type="button" class="btn btn-link btn-sm" [disabled]="sending" (click)="openPicker()">&#64; choose an agent</button></div></form>
+    @if (error) { <p role="alert" class="webhook-error">{{error}}</p> }
+    @if (pickerOpen) { <div #picker class="agent-picker" role="listbox" [attr.aria-label]="stage === 'domains' ? 'Available domains' : 'Available agents'"><div class="picker-title">{{stage === 'domains' ? 'Choose a domain' : 'Choose an agent · ' + domain?.label}}</div>@if (stage === 'agents') { <button class="picker-back" (click)="stage = 'domains'">Change domain</button> }
+      @if (pickerError) { <p role="alert">{{pickerError}}</p> } @else if (loading) { <p role="status">Loading…</p> } @else { <div class="agent-picker-grid">
+        @if (stage === 'domains') { @for (item of domains; track item.name) { <button role="option" class="agent-option" [attr.aria-selected]="domain?.name === item.name" (click)="loadAgents(item)"><strong>{{item.label}}</strong><small>{{item.domain}}</small></button> } }
+        @else { @for (agent of agents; track agent.id) { <button role="option" class="agent-option" [attr.aria-selected]="selected?.id === agent.id" (click)="select(agent)"><span class="agent-avatar avatar-blue">{{initials(agent)}}</span><span><strong>{{agent.name}}</strong><small>{{agent.config.description}}</small></span></button> } @empty { <p>This domain has no configured agents yet.</p> } }
+      </div> }
+    </div> }
+  </div></div>
+</section>

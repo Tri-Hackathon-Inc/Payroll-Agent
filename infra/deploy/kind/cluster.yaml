@@ -1,0 +1,16 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: payroll-agent
+networking:
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 16443
+nodes:
+  - role: control-plane
+    image: docker.io/kindest/node:v1.34.3
+    extraPortMappings:
+      - containerPort: 30173
+        hostPort: 5273
+        listenAddress: "127.0.0.1"
+      - containerPort: 30174
+        hostPort: 5274
+        listenAddress: "127.0.0.1"

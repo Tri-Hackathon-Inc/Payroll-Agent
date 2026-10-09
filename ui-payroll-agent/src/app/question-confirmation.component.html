@@ -1,0 +1,16 @@
+<section class="card border-primary my-3 mx-3" aria-label="Confirm matched question">
+  <div class="card-body">
+    <h3 class="h6">Confirm the question</h3>
+    <p class="small mb-2">Your query: <strong>{{mapping.originalQuery}}</strong></p>
+    <p class="small text-muted">These are the closest predefined questions. Choose the one you mean before the agent searches paycheck history and generates an answer.</p>
+    <fieldset [disabled]="busy"><legend class="visually-hidden">Matched questions</legend>
+      @for (candidate of mapping.candidates; track candidate.id) {
+        <label class="d-flex align-items-start gap-2 border rounded p-2 mb-2 small">
+          <input type="radio" class="form-check-input flex-shrink-0" [name]="'mapping-' + mapping.id" [value]="candidate.id" [(ngModel)]="selected">
+          <span>{{candidate.text}}</span>
+        </label>
+      }
+    </fieldset>
+    <div class="d-flex gap-2 flex-wrap mt-3"><button type="button" class="btn btn-primary btn-sm" [disabled]="busy || !selected" (click)="confirm.emit(selected)">{{busy ? 'Retrieving and answering…' : 'Confirm and answer'}}</button><button type="button" class="btn btn-outline-secondary btn-sm" [disabled]="busy" (click)="revise.emit()">Rephrase query</button></div>
+  </div>
+</section>
