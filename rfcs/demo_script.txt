@@ -1,0 +1,73 @@
+FIVE-MINUTE PRESENTATION
+Person A -> Demo presenter -> Person A
+
+0:00-2:00 — PERSON A: INTRODUCE THE PROJECT
+
+“AI Studio is a platform for building agents around business workflows. We’re demonstrating it through Payroll, where understanding a paycheck change can involve detecting an issue, investigating it, documenting the findings, and answering follow-up questions.
+
+Instead of building each agent separately, we use a template-driven approach through an agent factory. A template defines the agent’s starting behavior and configuration. We then choose its model, give it access to the APIs it needs, and explicitly configure which other agents can provide context.
+
+This gives us two ways to supply information: an agent can read authorized source data, or it can consume context produced by another agent. Those permissions let us connect agents into a workflow while controlling what each one can access.
+
+Once created, we make the agents available within the Payroll service, so users can work with them alongside the payroll records.
+
+Our demonstration follows three connected capabilities.
+
+First, Anomaly Detection uses Jev to check paycheck data across the payrun. When a user chooses Review, the agent runs an LLM investigation to produce a brief explanation grounded in the available evidence.
+
+Next, the Incident Report agent uses context from Anomaly Detection to create and store a report.
+
+Finally, the Chat agent can use permitted context from both agents to answer follow-up questions.
+
+As you watch the demo, look for the common foundation: templates create the agents, permissions connect them to information, and shared context connects their work.”
+
+
+2:00-4:00 — DEMO PRESENTER: SHOW CREATION AND THE CONNECTED WORKFLOW
+
+Preparation: Prepare the creation form and an existing payrun with completed checks beforehand. Use saved investigation and report results if live processing takes too long.
+
+Demo time 0:00-0:20
+SHOW: Choose a template in agent creation.
+SAY: “Agent creation starts with a template. The agent factory uses this template and our configuration to create a registered agent.”
+
+Demo time 0:20-0:40
+SHOW: Instructions, model, API permissions, and agent-context permissions.
+SAY: “We configure its behavior and model, grant access to the required APIs, and select which agents can supply context. Direct data access and agent context are explicit choices.”
+
+Demo time 0:40-0:50
+SHOW: Create the agent and show its Payroll attachment.
+SAY: “After creation, we make the agent available in the Payroll service, alongside the business workflow.”
+
+Demo time 0:50-1:10
+SHOW: Payroll payrun and AD results.
+SAY: “The Anomaly Detection agent uses Jev to check paycheck data across the payrun. These results identify payments that need attention.”
+
+Demo time 1:10-1:25
+SHOW: Click Review; show an investigation result.
+SAY: “Review is a separate user action. It invokes the LLM investigation and produces a brief explanation supported by the collected evidence.”
+
+Demo time 1:25-1:40
+SHOW: Incident Report handoff and stored report.
+SAY: “The Incident Report agent receives the permitted AD context, creates a report, and stores it for later review.”
+
+Demo time 1:40-2:00
+SHOW: Chat agent with both context sources.
+SAY: “The Chat agent has access to context from both agents. We can ask: ‘What did the investigation find, and what was documented in the incident report?’”
+
+End the demo with:
+“Those are separate agents, created through the same factory and connected through explicit access and context permissions.”
+
+
+4:00-5:00 — PERSON A: TIE THE DEMO BACK TO THE PPT
+
+“What we just saw brings the platform story together.
+
+The template-driven agent factory made agent creation repeatable. We configured each agent’s purpose, model, and access using the same foundation.
+
+The access controls connected agents to the information they needed—both business APIs and context from other agents.
+
+Inside Payroll, those pieces became a connected workflow: Jev detected paycheck anomalies, an explicit Review action triggered the LLM investigation, and the Incident Report agent turned that investigation context into a stored report. Chat then provided a way to ask follow-up questions using context from both agents.
+
+This connects back to the presentation’s three themes: create agents faster, control their access to data, and choose where inference runs.
+
+Payroll is our reference implementation. Extending to another domain requires its own integrations and policies, while reusing the agent factory, templates, permissions, and context-sharing foundation.”
