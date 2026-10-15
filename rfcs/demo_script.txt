@@ -3,23 +3,19 @@ Person A -> Demo presenter -> Person A
 
 0:00-2:00 — PERSON A: INTRODUCE THE PROJECT
 
-“AI Studio is a platform for building agents around business workflows. We’re demonstrating it through Payroll, where understanding a paycheck change can involve detecting an issue, investigating it, documenting the findings, and answering follow-up questions.
+“Every payroll cycle comes with an important responsibility: pay people accurately and on time. When a paycheck changes unexpectedly, payroll teams need to understand what changed, whether it is expected, and what needs attention before the payrun moves forward.
 
-Instead of building each agent separately, we use a template-driven approach through an agent factory. A template defines the agent’s starting behavior and configuration. We then choose its model, give it access to the APIs it needs, and explicitly configure which other agents can provide context.
+Today, that work can involve comparing records, investigating differences, documenting findings, and answering the same follow-up questions across multiple people. Each handoff can mean gathering the information again and explaining the background again.
 
-This gives us two ways to supply information: an agent can read authorized source data, or it can consume context produced by another agent. Those permissions let us connect agents into a workflow while controlling what each one can access.
+AI Studio brings assistance into that workflow. The aim is to help payroll teams focus their attention, understand unusual payments, and carry the findings forward into a report and subsequent conversations.
 
-Once created, we make the agents available within the Payroll service, so users can work with them alongside the payroll records.
+Think of a payroll specialist reviewing a payrun. They can see which paychecks need attention, request an investigation, and review a brief explanation based on the available evidence. When an issue needs documenting, they can create a report from that investigation. If a colleague has another question, the chat assistant can use the existing findings and report as context.
 
-Our demonstration follows three connected capabilities.
+The intended business value is less repeated information gathering, more consistent review and documentation, and easier access to the reasoning behind a flagged payment. The payroll specialist remains responsible for deciding whether a change is expected and what action to take.
 
-First, Anomaly Detection uses Jev to check paycheck data across the payrun. When a user chooses Review, the agent runs an LLM investigation to produce a brief explanation grounded in the available evidence.
+For the organization, this also creates a reusable foundation. We start with Payroll, then apply the same approach to other workflows, with their own data connections and policies. Access controls, PII handling, and the choice of private or managed models support those different requirements.
 
-Next, the Incident Report agent uses context from Anomaly Detection to create and store a report.
-
-Finally, the Chat agent can use permitted context from both agents to answer follow-up questions.
-
-As you watch the demo, look for the common foundation: templates create the agents, permissions connect them to information, and shared context connects their work.”
+In the next two minutes, we’ll show how these assistants are created and made available within Payroll, then follow the journey from identifying an unusual paycheck to investigating it, documenting it, and asking a follow-up question.”
 
 
 2:00-4:00 — DEMO PRESENTER: SHOW CREATION AND THE CONNECTED WORKFLOW
